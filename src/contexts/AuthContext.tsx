@@ -17,7 +17,7 @@ interface AuthContextType {
   isLoggedIn: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ error?: string }>;
-  register: (email: string, password: string, name: string, role: "learner" | "mentor") => Promise<{ error?: string }>;
+  register: (email: string, password: string, name: string, role: "learner" | "mentor") => Promise<{ error?: string; needsEmailConfirmation?: boolean }>;
   loginWithGoogle: () => Promise<{ error?: string }>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
@@ -84,22 +84,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const normalizedEmail = email.trim().toLowerCase();
+    const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if (error) return { error: error.message };
     return {};
   };
 
   const register = async (email: string, password: string, name: string, role: "learner" | "mentor") => {
-    const { error } = await supabase.auth.signUp({
-      email,
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
       password,
       options: {
-        data: { full_name: name, role },
+        data: { full_name: name.trim(), role },
         emailRedirectTo: window.location.origin,
       },
     });
+
     if (error) return { error: error.message };
-    return {};
+    return { needsEmailConfirmation: !data.session };
   };
 
   const loginWithGoogle = async () => {
