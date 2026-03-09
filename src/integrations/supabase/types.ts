@@ -21,6 +21,7 @@ export type Database = {
           created_at: string
           email: string | null
           id: string
+          is_blocked: boolean
           name: string | null
           phone: string | null
           role: string
@@ -33,6 +34,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          is_blocked?: boolean
           name?: string | null
           phone?: string | null
           role?: string
@@ -45,6 +47,7 @@ export type Database = {
           created_at?: string
           email?: string | null
           id?: string
+          is_blocked?: boolean
           name?: string | null
           phone?: string | null
           role?: string
