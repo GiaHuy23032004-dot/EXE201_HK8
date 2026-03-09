@@ -141,13 +141,103 @@ export default function AdminDashboard() {
         </div>
 
         <Tabs defaultValue="mentors">
-          <TabsList className="mb-6">
+          <TabsList className="mb-6 flex-wrap h-auto gap-1">
+            <TabsTrigger value="users" onClick={fetchUsers}>Người dùng</TabsTrigger>
             <TabsTrigger value="mentors">Duyệt Mentor ({mentors.length})</TabsTrigger>
             <TabsTrigger value="courses">Duyệt khóa học ({courses.length})</TabsTrigger>
             <TabsTrigger value="reported">Báo cáo ({reportedListings.length})</TabsTrigger>
             <TabsTrigger value="promoted">Tin quảng cáo</TabsTrigger>
             <TabsTrigger value="transactions">Giao dịch</TabsTrigger>
           </TabsList>
+
+          {/* User Management Tab */}
+          <TabsContent value="users">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="relative flex-1 max-w-sm">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Tìm theo tên hoặc email..."
+                  className="pl-10"
+                  value={userSearch}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                />
+              </div>
+              <Button variant="outline" onClick={fetchUsers} disabled={userLoading} className="rounded-xl">
+                {userLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Tải danh sách"}
+              </Button>
+            </div>
+
+            {userLoading ? (
+              <div className="flex items-center justify-center py-16">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : userList.length === 0 ? (
+              <div className="flex flex-col items-center py-16 text-center">
+                <Users className="h-12 w-12 text-muted mb-3" />
+                <p className="text-muted-foreground text-sm">Bấm "Tải danh sách" để xem người dùng</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {userList
+                  .filter((u) =>
+                    !userSearch ||
+                    (u.name || "").toLowerCase().includes(userSearch.toLowerCase()) ||
+                    (u.email || "").toLowerCase().includes(userSearch.toLowerCase())
+                  )
+                  .map((u) => {
+                    const isAdminUser = u.roles.includes("admin");
+                    return (
+                      <div key={u.user_id} className={`flex items-center gap-3 rounded-2xl border bg-card p-4 shadow-card ${u.is_blocked ? "opacity-60" : ""}`}>
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl gradient-primary text-primary-foreground text-sm font-bold">
+                          {(u.name || u.email || "?")[0].toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-semibold text-card-foreground text-sm truncate">{u.name || "Không có tên"}</p>
+                            {isAdminUser && <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]"><Crown className="mr-1 h-2.5 w-2.5" />Admin</Badge>}
+                            {u.is_blocked && <Badge className="bg-muted text-muted-foreground border-0 text-[10px]">Đã khóa</Badge>}
+                            <Badge variant="outline" className="text-[10px]">{u.role}</Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button
+                            size="sm"
+                            variant={u.is_blocked ? "default" : "outline"}
+                            className={`rounded-lg h-8 text-xs ${u.is_blocked ? "gradient-primary border-0 text-primary-foreground" : "text-destructive hover:text-destructive"}`}
+                            disabled={actionLoading === u.user_id + "_block"}
+                            onClick={() => handleToggleBlock(u.user_id, u.is_blocked)}
+                          >
+                            {actionLoading === u.user_id + "_block" ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : u.is_blocked ? (
+                              <><UserCheck className="mr-1 h-3 w-3" />Mở khóa</>
+                            ) : (
+                              <><UserX className="mr-1 h-3 w-3" />Khóa</>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={`rounded-lg h-8 text-xs ${isAdminUser ? "text-destructive hover:text-destructive" : ""}`}
+                            disabled={actionLoading === u.user_id + "_role"}
+                            onClick={() => handleAssignAdmin(u.user_id, isAdminUser)}
+                          >
+                            {actionLoading === u.user_id + "_role" ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : isAdminUser ? (
+                              <><Crown className="mr-1 h-3 w-3" />Thu hồi Admin</>
+                            ) : (
+                              <><Crown className="mr-1 h-3 w-3" />Cấp Admin</>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            )}
+          </TabsContent>
 
           <TabsContent value="mentors" className="space-y-3">
             {mentors.map((m) => (
