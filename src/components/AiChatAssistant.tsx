@@ -113,7 +113,7 @@ export function AiChatAssistant() {
             animate={{ scale: 1 }}
             exit={{ scale: 0 }}
             onClick={() => setOpen(true)}
-            className="fixed bottom-6 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full gradient-primary text-primary-foreground shadow-elevated hover:shadow-glow transition-shadow"
+            className="fixed bottom-6 left-6 z-50 flex h-14 w-14 items-center justify-center rounded-full gradient-primary text-primary-foreground shadow-elevated hover:shadow-glow transition-shadow"
           >
             <MessageCircle className="h-6 w-6" />
             <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
