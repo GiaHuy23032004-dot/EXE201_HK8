@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import { Search, Menu, X, User, Bell, BookOpen } from "lucide-react";
+import { Search, Menu, X, User, Bell } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+import logoImg from "@/assets/logo.png";
 
 const navLinks = [
   { label: "Trang chủ", path: "/" },
@@ -19,12 +20,7 @@ export function Navbar() {
     <nav className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur-lg">
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary">
-            <BookOpen className="h-5 w-5 text-primary-foreground" />
-          </div>
-          <span className="text-xl font-bold text-foreground">
-            Edu<span className="text-gradient">Market</span>
-          </span>
+          <img src={logoImg} alt="EduMarket" className="h-9 w-auto" />
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">

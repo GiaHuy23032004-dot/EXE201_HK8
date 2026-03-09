@@ -1,5 +1,5 @@
-import { BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
+import logoImg from "@/assets/logo.png";
 
 export function Footer() {
   return (
@@ -8,10 +8,7 @@ export function Footer() {
         <div className="grid gap-8 md:grid-cols-4">
           <div>
             <Link to="/" className="flex items-center gap-2 mb-4">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
-                <BookOpen className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <span className="text-lg font-bold">EduMarket</span>
+              <img src={logoImg} alt="EduMarket" className="h-8 w-auto" />
             </Link>
             <p className="text-sm text-muted-foreground">
               Nền tảng kết nối người học và người dạy. Tìm kiếm khóa học phù hợp gần bạn.

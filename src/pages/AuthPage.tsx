@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { BookOpen, Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff } from "lucide-react";
+import logoImg from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,12 +22,9 @@ export default function AuthPage() {
           animate={{ opacity: 1, x: 0 }}
           className="max-w-md px-12 text-primary-foreground"
         >
-          <Link to="/" className="mb-8 flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-foreground/20">
-              <BookOpen className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <span className="text-2xl font-bold">EduMarket</span>
-          </Link>
+           <Link to="/" className="mb-8 flex items-center gap-2">
+              <img src={logoImg} alt="EduMarket" className="h-10 w-auto brightness-0 invert" />
+           </Link>
           <h2 className="mb-4 text-3xl font-bold">Marketplace kết nối người học & người dạy</h2>
           <p className="text-primary-foreground/80">
             Tham gia cộng đồng hơn 50,000 người học và 2,500 mentor chất lượng trên khắp Việt Nam.
@@ -52,10 +50,7 @@ export default function AuthPage() {
           className="w-full max-w-md"
         >
           <Link to="/" className="mb-6 flex items-center gap-2 lg:hidden">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary">
-              <BookOpen className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold">EduMarket</span>
+            <img src={logoImg} alt="EduMarket" className="h-9 w-auto" />
           </Link>
 
           <Tabs defaultValue="login" className="w-full">
