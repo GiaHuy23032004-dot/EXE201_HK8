@@ -4,6 +4,16 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
+import AuthPage from "./pages/AuthPage";
+import SearchPage from "./pages/SearchPage";
+import MapPage from "./pages/MapPage";
+import CourseDetailPage from "./pages/CourseDetailPage";
+import BookingPage from "./pages/BookingPage";
+import LearnerDashboard from "./pages/LearnerDashboard";
+import MentorDashboard from "./pages/MentorDashboard";
+import MentorProfilePage from "./pages/MentorProfilePage";
+import CreateCoursePage from "./pages/CreateCoursePage";
+import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -16,7 +26,16 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/auth" element={<AuthPage />} />
+          <Route path="/search" element={<SearchPage />} />
+          <Route path="/map" element={<MapPage />} />
+          <Route path="/course/:id" element={<CourseDetailPage />} />
+          <Route path="/booking/:id" element={<BookingPage />} />
+          <Route path="/learner/dashboard" element={<LearnerDashboard />} />
+          <Route path="/mentor/dashboard" element={<MentorDashboard />} />
+          <Route path="/mentor/create-course" element={<CreateCoursePage />} />
+          <Route path="/mentor/:id" element={<MentorProfilePage />} />
+          <Route path="/admin" element={<AdminDashboard />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
