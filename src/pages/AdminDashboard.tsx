@@ -1,10 +1,13 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { mockCourses, mockMentors } from "@/data/mockData";
-import { Users, BookOpen, DollarSign, TrendingUp, Shield, AlertTriangle, Check, X, Eye, BarChart3, Flag, Megaphone } from "lucide-react";
+import { Users, BookOpen, DollarSign, TrendingUp, Shield, AlertTriangle, Check, X, Eye, BarChart3, Flag, Megaphone, UserX, UserCheck, Crown, Loader2, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { Input } from "@/components/ui/input";
 
 const pendingMentors = [
   { id: "m1", name: "Hoàng Minh", email: "hoang@mail.com", specialty: "Piano", date: "08/03/2026" },
