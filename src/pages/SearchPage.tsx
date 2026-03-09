@@ -1,13 +1,14 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { CourseCard } from "@/components/marketplace/CourseCard";
 import { mockCourses, categories } from "@/data/mockData";
-import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List } from "lucide-react";
+import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List, Sparkles, Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -17,6 +18,56 @@ export default function SearchPage() {
   const [priceRange, setPriceRange] = useState([0, 1000000]);
   const [distance, setDistance] = useState(5);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiPanel, setShowAiPanel] = useState(false);
+
+  // Read query from URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get("q");
+    if (q) setQuery(q);
+  }, []);
+
+  // AI search suggestions with debounce
+  const fetchAiSuggestions = useCallback(async (searchQuery: string) => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setAiSuggestions([]);
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-search", {
+        body: { query: searchQuery, type: "search" },
+      });
+      if (!error && data?.suggestions) {
+        try {
+          // Clean markdown code blocks if present
+          let raw = data.suggestions;
+          if (typeof raw === "string") {
+            raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              setAiSuggestions(parsed.map((s: any) => s.title || s).slice(0, 5));
+              setShowAiPanel(true);
+            }
+          }
+        } catch {
+          setAiSuggestions([]);
+        }
+      }
+    } catch {
+      // Silently fail AI suggestions
+    }
+    setAiLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      fetchAiSuggestions(query);
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [query, fetchAiSuggestions]);
 
   const filtered = mockCourses.filter((c) => {
     if (selectedCategory && c.category !== selectedCategory) return false;
@@ -29,23 +80,60 @@ export default function SearchPage() {
   return (
     <MainLayout>
       {/* Search bar */}
-      <div className="sticky top-16 z-40 border-b bg-card/95 backdrop-blur-lg">
+      <div className="sticky top-16 z-40 border-b glass">
         <div className="container flex items-center gap-2 py-3">
-          <div className="flex flex-1 items-center gap-2 rounded-xl border bg-background px-3">
-            <Search className="h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              placeholder="Tìm kiếm khóa học..."
-              className="flex-1 bg-transparent py-2.5 text-sm outline-none placeholder:text-muted-foreground"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            {query && (
-              <button onClick={() => setQuery("")} className="text-muted-foreground hover:text-foreground">
-                <X className="h-4 w-4" />
-              </button>
-            )}
+          <div className="relative flex-1">
+            <div className="flex items-center gap-2 rounded-xl border bg-background px-3 transition-all focus-within:border-primary focus-within:shadow-glow/30">
+              <Search className="h-4 w-4 text-primary" />
+              <input
+                type="text"
+                placeholder="Tìm kiếm khóa học..."
+                className="flex-1 bg-transparent py-2.5 text-sm outline-none placeholder:text-muted-foreground"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              {aiLoading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+              {query && !aiLoading && (
+                <button onClick={() => { setQuery(""); setAiSuggestions([]); }} className="text-muted-foreground hover:text-foreground">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+
+            {/* AI Suggestions panel */}
+            <AnimatePresence>
+              {showAiPanel && aiSuggestions.length > 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border bg-card p-2 shadow-elevated"
+                >
+                  <div className="mb-2 flex items-center gap-1.5 px-2 text-xs text-muted-foreground">
+                    <Brain className="h-3.5 w-3.5 text-primary" />
+                    <span className="font-medium">AI gợi ý</span>
+                  </div>
+                  {aiSuggestions.map((s, i) => (
+                    <button
+                      key={i}
+                      onClick={() => { setQuery(s); setShowAiPanel(false); }}
+                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-accent transition-colors"
+                    >
+                      <Sparkles className="h-3 w-3 text-primary/60" />
+                      {s}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setShowAiPanel(false)}
+                    className="mt-1 w-full rounded-lg px-3 py-1.5 text-center text-xs text-muted-foreground hover:bg-muted transition-colors"
+                  >
+                    Đóng
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
+
           <Button
             variant={showFilters ? "default" : "outline"}
             size="sm"
@@ -67,8 +155,8 @@ export default function SearchPage() {
         <div className="container flex gap-2 overflow-x-auto pb-3 scrollbar-hide">
           <button
             onClick={() => setSelectedCategory(null)}
-            className={`whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
-              !selectedCategory ? "gradient-primary text-primary-foreground" : "border bg-card text-muted-foreground hover:border-primary"
+            className={`whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-medium transition-all ${
+              !selectedCategory ? "gradient-primary text-primary-foreground shadow-sm" : "border bg-card text-muted-foreground hover:border-primary"
             }`}
           >
             Tất cả
@@ -77,8 +165,8 @@ export default function SearchPage() {
             <button
               key={cat.slug}
               onClick={() => setSelectedCategory(selectedCategory === cat.slug ? null : cat.slug)}
-              className={`whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-medium transition-colors ${
-                selectedCategory === cat.slug ? "gradient-primary text-primary-foreground" : "border bg-card text-muted-foreground hover:border-primary"
+              className={`whitespace-nowrap rounded-full px-4 py-1.5 text-xs font-medium transition-all ${
+                selectedCategory === cat.slug ? "gradient-primary text-primary-foreground shadow-sm" : "border bg-card text-muted-foreground hover:border-primary"
               }`}
             >
               {cat.label}
@@ -94,7 +182,7 @@ export default function SearchPage() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-b bg-muted/30"
+            className="overflow-hidden border-b bg-muted/20"
           >
             <div className="container grid gap-6 py-6 md:grid-cols-3">
               <div>
@@ -104,8 +192,8 @@ export default function SearchPage() {
                     <button
                       key={f}
                       onClick={() => setFormat(f)}
-                      className={`rounded-lg border px-4 py-2 text-xs font-medium transition-colors ${
-                        format === f ? "border-primary bg-accent text-accent-foreground" : "bg-card text-muted-foreground"
+                      className={`rounded-lg border px-4 py-2 text-xs font-medium transition-all ${
+                        format === f ? "border-primary bg-accent text-accent-foreground shadow-sm" : "bg-card text-muted-foreground hover:border-primary/30"
                       }`}
                     >
                       {f === "all" ? "Tất cả" : f === "online" ? "Online" : "Offline"}
@@ -133,18 +221,18 @@ export default function SearchPage() {
         <div className="mb-6 flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
             <span className="font-semibold text-foreground">{filtered.length}</span> kết quả
-            {query && <> cho "<span className="text-primary">{query}</span>"</>}
+            {query && <> cho "<span className="text-primary font-medium">{query}</span>"</>}
           </p>
           <div className="flex items-center gap-1 rounded-lg border p-0.5">
             <button
               onClick={() => setViewMode("grid")}
-              className={`rounded-md p-1.5 ${viewMode === "grid" ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
+              className={`rounded-md p-1.5 transition-colors ${viewMode === "grid" ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
             >
               <LayoutGrid className="h-4 w-4" />
             </button>
             <button
               onClick={() => setViewMode("list")}
-              className={`rounded-md p-1.5 ${viewMode === "list" ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
+              className={`rounded-md p-1.5 transition-colors ${viewMode === "list" ? "bg-accent text-accent-foreground" : "text-muted-foreground"}`}
             >
               <List className="h-4 w-4" />
             </button>
@@ -159,7 +247,9 @@ export default function SearchPage() {
 
         {filtered.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Search className="mb-4 h-12 w-12 text-muted" />
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
+              <Search className="h-8 w-8 text-muted-foreground" />
+            </div>
             <p className="text-lg font-semibold text-foreground">Không tìm thấy kết quả</p>
             <p className="text-sm text-muted-foreground">Thử thay đổi từ khóa hoặc bộ lọc</p>
           </div>
