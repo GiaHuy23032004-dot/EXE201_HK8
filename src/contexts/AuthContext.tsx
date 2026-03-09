@@ -9,6 +9,7 @@ export interface UserProfile {
   role: "learner" | "mentor";
   phone?: string;
   bio?: string;
+  isBlocked?: boolean;
 }
 
 interface AuthContextType {
