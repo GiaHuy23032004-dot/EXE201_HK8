@@ -47,6 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         role: (data.role as "learner" | "mentor") || "learner",
         phone: data.phone || undefined,
         bio: data.bio || undefined,
+        isBlocked: data.is_blocked ?? false,
       });
     } else {
       // Fallback if profile not yet created
