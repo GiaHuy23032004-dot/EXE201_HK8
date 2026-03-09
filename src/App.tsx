@@ -5,8 +5,10 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AiChatAssistant } from "@/components/AiChatAssistant";
+import { AdminGuard } from "@/components/AdminGuard";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
+import AdminLoginPage from "./pages/AdminLoginPage";
 import SearchPage from "./pages/SearchPage";
 import MapPage from "./pages/MapPage";
 import CourseDetailPage from "./pages/CourseDetailPage";
@@ -32,6 +34,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/admin/login" element={<AdminLoginPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/map" element={<MapPage />} />
             <Route path="/course/:id" element={<CourseDetailPage />} />
@@ -40,7 +43,7 @@ const App = () => (
             <Route path="/mentor/dashboard" element={<MentorDashboard />} />
             <Route path="/mentor/create-course" element={<CreateCoursePage />} />
             <Route path="/mentor/:id" element={<MentorProfilePage />} />
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin" element={<AdminGuard><AdminDashboard /></AdminGuard>} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
