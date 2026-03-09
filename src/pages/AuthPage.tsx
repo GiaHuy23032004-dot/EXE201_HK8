@@ -29,10 +29,13 @@ export default function AuthPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const result = await login(loginEmail, loginPassword);
+    const result = await login(loginEmail.trim().toLowerCase(), loginPassword);
     setLoading(false);
     if (result.error) {
-      toast({ title: "Lỗi đăng nhập", description: result.error, variant: "destructive" });
+      const message = result.error.toLowerCase().includes("invalid login credentials")
+        ? "Email hoặc mật khẩu chưa đúng. Nếu bạn vừa đăng ký, vui lòng xác nhận email trước rồi đăng nhập lại."
+        : result.error;
+      toast({ title: "Lỗi đăng nhập", description: message, variant: "destructive" });
     } else {
       toast({ title: "Đăng nhập thành công!", description: "Chào mừng bạn trở lại." });
       navigate("/");
@@ -46,12 +49,18 @@ export default function AuthPage() {
       return;
     }
     setLoading(true);
-    const result = await register(regEmail, regPassword, regName, role);
+    const result = await register(regEmail.trim().toLowerCase(), regPassword, regName.trim(), role);
     setLoading(false);
     if (result.error) {
       toast({ title: "Lỗi đăng ký", description: result.error, variant: "destructive" });
+    } else if (result.needsEmailConfirmation) {
+      toast({
+        title: "Đăng ký thành công!",
+        description: "Mình đã gửi email xác nhận. Bạn xác nhận email xong rồi đăng nhập nhé.",
+      });
     } else {
-      toast({ title: "Đăng ký thành công!", description: "Vui lòng kiểm tra email để xác nhận tài khoản." });
+      toast({ title: "Đăng ký thành công!", description: "Tài khoản đã sẵn sàng, bạn có thể đăng nhập ngay." });
+      navigate("/");
     }
   };
 
