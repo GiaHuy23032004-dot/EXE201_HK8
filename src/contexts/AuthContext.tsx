@@ -87,8 +87,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const normalizedEmail = email.trim().toLowerCase();
-    const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+    const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
     if (error) return { error: error.message };
+
+    const userId = data.user?.id;
+    if (userId) {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("is_blocked")
+        .eq("user_id", userId)
+        .single();
+
+      if (profile?.is_blocked) {
+        await supabase.auth.signOut();
+        return { error: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên." };
+      }
+    }
+
     return {};
   };
 
