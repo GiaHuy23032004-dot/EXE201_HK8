@@ -43,7 +43,7 @@ const App = () => (
             <Route path="/mentor/dashboard" element={<MentorDashboard />} />
             <Route path="/mentor/create-course" element={<CreateCoursePage />} />
             <Route path="/mentor/:id" element={<MentorProfilePage />} />
-            <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/admin" element={<AdminGuard><AdminDashboard /></AdminGuard>} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
