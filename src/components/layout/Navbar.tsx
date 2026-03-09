@@ -28,8 +28,8 @@ export function Navbar() {
   const navigate = useNavigate();
   const { user, isLoggedIn, logout } = useAuth();
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/");
   };
 

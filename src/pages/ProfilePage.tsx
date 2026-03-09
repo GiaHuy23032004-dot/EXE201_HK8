@@ -26,8 +26,8 @@ export default function ProfilePage() {
 
   const initials = user?.name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
 
-  const handleSave = () => {
-    updateProfile({ name, phone, bio });
+  const handleSave = async () => {
+    await updateProfile({ name, phone, bio });
     toast({ title: "Đã cập nhật hồ sơ", description: "Thông tin cá nhân đã được lưu." });
   };
 
