@@ -41,8 +41,14 @@ export function Footer() {
             </div>
           </div>
         </div>
-        <div className="mt-8 border-t pt-6 text-center text-sm text-muted-foreground">
-          © 2026 EduMarket. Tất cả quyền được bảo lưu.
+        <div className="mt-8 border-t pt-6 flex items-center justify-between text-sm text-muted-foreground flex-wrap gap-3">
+          <span>© 2026 EduMarket. Tất cả quyền được bảo lưu.</span>
+          <Link to="/admin/login" className="flex items-center gap-1 text-xs opacity-50 hover:opacity-100 hover:text-primary transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+            Admin
+          </Link>
         </div>
       </div>
     </footer>
