@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
+import { AiChatAssistant } from "@/components/AiChatAssistant";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
 import SearchPage from "./pages/SearchPage";
@@ -44,6 +45,7 @@ const App = () => (
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <AiChatAssistant />
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>
