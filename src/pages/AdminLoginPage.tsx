@@ -138,7 +138,7 @@ export default function AdminLoginPage() {
                     <Input
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
-                      placeholder="admin@edumarket.vn"
+                      placeholder="your@email.com"
                       className="pl-10"
                       required
                       type="email"
