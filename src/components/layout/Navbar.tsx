@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, Bell, LogOut, Settings, User, BookOpen, ChevronDown } from "lucide-react";
+import { Menu, X, Bell, LogOut, Settings, User, BookOpen, ChevronDown, Shield, GraduationCap, Mic2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -14,19 +14,14 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import logoImg from "@/assets/logo.png";
 import { useAuth } from "@/contexts/AuthContext";
-
-const navLinks = [
-  { label: "Trang chủ", path: "/" },
-  { label: "Tìm kiếm", path: "/search" },
-  { label: "Bản đồ", path: "/map" },
-  { label: "Dạy học", path: "/mentor/dashboard" },
-];
+import { useAdminRole } from "@/hooks/use-admin-role";
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isLoggedIn, logout } = useAuth();
+  const { isAdmin } = useAdminRole();
 
   const handleLogout = async () => {
     await logout();
@@ -40,6 +35,16 @@ export function Navbar() {
     .join("")
     .toUpperCase();
 
+  const dashboardPath = user?.role === "mentor" ? "/mentor/dashboard" : "/learner/dashboard";
+  const dashboardLabel = user?.role === "mentor" ? "Quản lý dạy học" : "Trang học viên";
+  const DashboardIcon = user?.role === "mentor" ? Mic2 : GraduationCap;
+
+  const baseLinks = [
+    { label: "Trang chủ", path: "/" },
+    { label: "Tìm kiếm", path: "/search" },
+    { label: "Bản đồ", path: "/map" },
+  ];
+
   return (
     <nav className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur-lg">
       <div className="container flex h-16 items-center justify-between">
@@ -48,7 +53,7 @@ export function Navbar() {
         </Link>
 
         <div className="hidden items-center gap-1 md:flex">
-          {navLinks.map((link) => (
+          {baseLinks.map((link) => (
             <Link
               key={link.path}
               to={link.path}
@@ -61,6 +66,19 @@ export function Navbar() {
               {link.label}
             </Link>
           ))}
+          {isAdmin && (
+            <Link
+              to="/admin"
+              className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
+                location.pathname.startsWith("/admin")
+                  ? "bg-destructive/10 text-destructive"
+                  : "text-destructive/70 hover:bg-destructive/10 hover:text-destructive"
+              }`}
+            >
+              <Shield className="h-3.5 w-3.5" />
+              Admin
+            </Link>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -91,6 +109,9 @@ export function Navbar() {
                     <div className="flex flex-col">
                       <span className="font-medium">{user?.name}</span>
                       <span className="text-xs text-muted-foreground">{user?.email}</span>
+                      <span className="mt-0.5 text-[10px] font-medium text-primary capitalize">
+                        {user?.role === "mentor" ? "👨‍🏫 Mentor" : "🎓 Học viên"}
+                      </span>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
@@ -98,10 +119,16 @@ export function Navbar() {
                     <User className="mr-2 h-4 w-4" />
                     Hồ sơ cá nhân
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate(user?.role === "mentor" ? "/mentor/dashboard" : "/learner/dashboard")}>
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    Dashboard
+                  <DropdownMenuItem onClick={() => navigate(dashboardPath)}>
+                    <DashboardIcon className="mr-2 h-4 w-4" />
+                    {dashboardLabel}
                   </DropdownMenuItem>
+                  {isAdmin && (
+                    <DropdownMenuItem onClick={() => navigate("/admin")} className="text-destructive focus:text-destructive">
+                      <Shield className="mr-2 h-4 w-4" />
+                      Admin Panel
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuItem onClick={() => navigate("/settings")}>
                     <Settings className="mr-2 h-4 w-4" />
                     Cài đặt
@@ -116,9 +143,6 @@ export function Navbar() {
             </>
           ) : (
             <>
-              <Button variant="ghost" size="icon" className="text-muted-foreground">
-                <Bell className="h-5 w-5" />
-              </Button>
               <Link to="/auth">
                 <Button variant="default" size="sm" className="gradient-primary border-0 text-primary-foreground">
                   <User className="mr-2 h-4 w-4" />
@@ -147,7 +171,7 @@ export function Navbar() {
             className="overflow-hidden border-t bg-card md:hidden"
           >
             <div className="container flex flex-col gap-1 py-3">
-              {navLinks.map((link) => (
+              {baseLinks.map((link) => (
                 <Link
                   key={link.path}
                   to={link.path}
@@ -163,6 +187,14 @@ export function Navbar() {
               ))}
               {isLoggedIn && (
                 <>
+                  <Link to={dashboardPath} onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
+                    <DashboardIcon className="h-4 w-4" />{dashboardLabel}
+                  </Link>
+                  {isAdmin && (
+                    <Link to="/admin" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-destructive hover:bg-muted">
+                      <Shield className="h-4 w-4" />Admin Panel
+                    </Link>
+                  )}
                   <Link to="/profile" onClick={() => setMobileOpen(false)} className="rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
                     Hồ sơ cá nhân
                   </Link>
