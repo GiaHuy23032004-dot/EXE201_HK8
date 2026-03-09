@@ -33,12 +33,44 @@ export default function HomePage() {
   const featured = mockCourses.filter((c) => c.promoted);
   const nearby = mockCourses.filter((c) => c.format === "offline");
   const [aiRecommendations, setAiRecommendations] = useState(mockCourses.slice(0, 4));
+  const [aiLoading, setAiLoading] = useState(false);
 
-  // Simulate AI-based shuffling
-  useEffect(() => {
-    const shuffled = [...mockCourses].sort(() => Math.random() - 0.5).slice(0, 4);
-    setAiRecommendations(shuffled);
+  const fetchAiRecommendations = useCallback(async () => {
+    setAiLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-search", {
+        body: { query: "Gợi ý 4 khóa học phổ biến nhất cho người mới bắt đầu tại Việt Nam", type: "recommend" },
+      });
+      if (!error && data?.suggestions) {
+        let raw = data.suggestions;
+        if (typeof raw === "string") {
+          raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            // Map AI suggestions to existing mock courses by matching categories
+            const mapped = parsed.map((s: any) => {
+              const match = mockCourses.find(
+                (c) => c.category === s.category || c.title.toLowerCase().includes(s.title?.toLowerCase()?.split(" ")[0] || "")
+              );
+              return match || mockCourses[Math.floor(Math.random() * mockCourses.length)];
+            });
+            // Remove duplicates
+            const unique = [...new Map(mapped.map((c: any) => [c.id, c])).values()];
+            setAiRecommendations(unique.slice(0, 4));
+          }
+        }
+      }
+    } catch {
+      // Fallback to random
+      const shuffled = [...mockCourses].sort(() => Math.random() - 0.5).slice(0, 4);
+      setAiRecommendations(shuffled);
+    }
+    setAiLoading(false);
   }, []);
+
+  useEffect(() => {
+    fetchAiRecommendations();
+  }, [fetchAiRecommendations]);
 
   return (
     <MainLayout>
