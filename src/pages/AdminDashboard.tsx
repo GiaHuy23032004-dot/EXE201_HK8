@@ -29,9 +29,86 @@ const promotedListings = [
   { id: "p2", title: "Lập trình Web Fullstack", mentor: "Đức Anh", fee: 15000, days: 3, status: "expired" },
 ];
 
+type UserRecord = {
+  user_id: string;
+  name: string | null;
+  email: string | null;
+  role: string;
+  created_at: string;
+  is_blocked: boolean;
+  roles: string[];
+};
+
 export default function AdminDashboard() {
   const [mentors, setMentors] = useState(pendingMentors);
   const [courses, setCourses] = useState(pendingCourses);
+  const [userList, setUserList] = useState<UserRecord[]>([]);
+  const [userSearch, setUserSearch] = useState("");
+  const [userLoading, setUserLoading] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const { toast } = useToast();
+
+  const fetchUsers = useCallback(async () => {
+    setUserLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-users", {
+        body: { action: "list" },
+      });
+      if (!error && data?.users) {
+        setUserList(data.users);
+      } else {
+        toast({ title: "Lỗi", description: "Không thể tải danh sách người dùng.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Lỗi", description: "Không thể kết nối server.", variant: "destructive" });
+    }
+    setUserLoading(false);
+  }, []);
+
+  const handleToggleBlock = async (userId: string, currentlyBlocked: boolean) => {
+    setActionLoading(userId + "_block");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-users", {
+        body: { action: "toggle-block", targetUserId: userId },
+      });
+      if (!error && data?.success) {
+        setUserList((prev) =>
+          prev.map((u) => (u.user_id === userId ? { ...u, is_blocked: data.is_blocked } : u))
+        );
+        toast({ title: data.is_blocked ? "Đã khóa tài khoản" : "Đã mở khóa tài khoản" });
+      } else {
+        toast({ title: "Lỗi", description: "Không thể thực hiện thao tác.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Lỗi", description: "Có lỗi xảy ra.", variant: "destructive" });
+    }
+    setActionLoading(null);
+  };
+
+  const handleAssignAdmin = async (userId: string, hasAdmin: boolean) => {
+    setActionLoading(userId + "_role");
+    const action = hasAdmin ? "remove-role" : "assign-role";
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-users", {
+        body: { action, targetUserId: userId, role: "admin" },
+      });
+      if (!error && data?.success) {
+        setUserList((prev) =>
+          prev.map((u) => {
+            if (u.user_id !== userId) return u;
+            const roles = hasAdmin ? u.roles.filter((r) => r !== "admin") : [...u.roles, "admin"];
+            return { ...u, roles };
+          })
+        );
+        toast({ title: hasAdmin ? "Đã thu hồi quyền Admin" : "Đã cấp quyền Admin" });
+      } else {
+        toast({ title: "Lỗi", description: "Không thể thay đổi quyền.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Lỗi", description: "Có lỗi xảy ra.", variant: "destructive" });
+    }
+    setActionLoading(null);
+  };
 
   return (
     <MainLayout>
