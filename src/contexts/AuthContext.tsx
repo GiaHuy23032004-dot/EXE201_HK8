@@ -90,16 +90,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const register = async (email: string, password: string, name: string, role: "learner" | "mentor") => {
-    const { error } = await supabase.auth.signUp({
-      email,
+    const normalizedEmail = email.trim().toLowerCase();
+    const { data, error } = await supabase.auth.signUp({
+      email: normalizedEmail,
       password,
       options: {
-        data: { full_name: name, role },
+        data: { full_name: name.trim(), role },
         emailRedirectTo: window.location.origin,
       },
     });
+
     if (error) return { error: error.message };
-    return {};
+    return { needsEmailConfirmation: !data.session };
   };
 
   const loginWithGoogle = async () => {
