@@ -103,16 +103,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithGoogle = async () => {
-    try {
-      const { lovable } = await import("@/integrations/lovable");
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: window.location.origin,
-      });
-      if (result.error) return { error: String(result.error) };
-      return {};
-    } catch (e) {
-      return { error: e instanceof Error ? e.message : "Google login failed" };
-    }
+    // Demo mode: mock Google login with fake account
+    setSession({ user: { id: "mock-google-user" } } as any);
+    const mockUser: UserProfile = {
+      name: "Nguyễn Văn A",
+      email: "nguyenvana@gmail.com",
+      avatar: "https://lh3.googleusercontent.com/a/default-user=s96-c",
+      role: "learner",
+    };
+    setUser(mockUser);
+    return {};
   };
 
   const logout = async () => {
