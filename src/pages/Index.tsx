@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
+import { supabase } from "@/integrations/supabase/client";
 import { SearchHero } from "@/components/marketplace/SearchHero";
 import { CourseCard } from "@/components/marketplace/CourseCard";
 import { MentorCard } from "@/components/marketplace/MentorCard";
