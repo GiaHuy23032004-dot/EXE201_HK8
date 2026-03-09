@@ -61,6 +61,9 @@ export default function AuthPage() {
     setLoading(false);
     if (result.error) {
       toast({ title: "Lỗi đăng nhập Google", description: result.error, variant: "destructive" });
+    } else {
+      toast({ title: "Đăng nhập thành công!", description: "Chào mừng bạn trở lại." });
+      navigate("/");
     }
   };
 
