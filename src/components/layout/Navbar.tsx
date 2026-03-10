@@ -46,7 +46,7 @@ export function Navbar() {
   ];
 
   return (
-    <nav className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur-lg">
+    <nav className="sticky top-0 z-50 border-b bg-background backdrop-blur-lg">
       <div className="container flex h-16 items-center justify-between">
         <Link to="/" className="flex items-center gap-2">
           <img src={logoImg} alt="EduMarket" className="h-9 w-auto" />
@@ -168,7 +168,7 @@ export function Navbar() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-t bg-card md:hidden"
+            className="overflow-hidden border-t bg-background md:hidden"
           >
             <div className="container flex flex-col gap-1 py-3">
               {baseLinks.map((link) => (
