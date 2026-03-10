@@ -168,7 +168,7 @@ export function Navbar() {
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden border-t bg-card md:hidden"
+            className="overflow-hidden border-t bg-background md:hidden"
           >
             <div className="container flex flex-col gap-1 py-3">
               {baseLinks.map((link) => (
