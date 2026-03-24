@@ -77,7 +77,7 @@ export default function HomePage() {
       <SearchHero />
 
       {/* Stats */}
-      <section className="relative border-b bg-background py-10">
+      <section className="relative border-b bg-white py-10">
         <div className="container grid grid-cols-2 gap-6 md:grid-cols-4">
           {stats.map((s, i) => (
             <motion.div
@@ -97,7 +97,7 @@ export default function HomePage() {
       </section>
 
       {/* Categories */}
-      <section className="py-14">
+      <section className="bg-white py-14">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-foreground">Danh mục phổ biến</h2>
@@ -122,8 +122,8 @@ export default function HomePage() {
       </section>
 
       {/* AI Recommendations */}
-      <section className="relative overflow-hidden bg-background py-14">
-        <div className="absolute inset-0 bg-background" />
+      <section className="relative overflow-hidden bg-white py-14">
+        <div className="absolute inset-0 bg-white" />
         <div className="absolute inset-0 gradient-hero-mesh opacity-35" />
         <div className="container relative">
           <div className="mb-8 flex items-center justify-between">
@@ -149,7 +149,7 @@ export default function HomePage() {
       </section>
 
       {/* Featured Courses */}
-      <section className="py-14">
+      <section className="bg-white py-14">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -171,7 +171,7 @@ export default function HomePage() {
       </section>
 
       {/* Nearby */}
-      <section className="bg-background py-14">
+      <section className="bg-white py-14">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -196,7 +196,7 @@ export default function HomePage() {
       </section>
 
       {/* Trending Mentors */}
-      <section className="py-14">
+      <section className="bg-white py-14">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -215,7 +215,7 @@ export default function HomePage() {
       </section>
 
       {/* CTA */}
-      <section className="py-16">
+      <section className="bg-white py-16">
         <div className="container">
           <motion.div
             initial={{ opacity: 0, y: 20 }}

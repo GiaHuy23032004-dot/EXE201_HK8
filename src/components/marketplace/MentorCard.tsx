@@ -23,12 +23,12 @@ export function MentorCard({ mentor }: { mentor: MentorData }) {
     >
       <Link
         to={`/mentor/${mentor.id}`}
-        className="group flex items-center gap-4 rounded-2xl border bg-card p-4 shadow-card transition-all hover:shadow-card-hover hover:border-primary/20"
+        className="group flex items-center gap-4 rounded-2xl border bg-white p-4 shadow-card transition-all hover:shadow-card-hover hover:border-primary/20"
       >
         <div className="relative">
           <img src={mentor.avatar} alt={mentor.name} className="h-16 w-16 rounded-2xl object-cover ring-2 ring-transparent group-hover:ring-primary/20 transition-all" />
           {mentor.verified && (
-            <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-card shadow">
+            <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow">
               <BadgeCheck className="h-4 w-4 text-primary" />
             </div>
           )}
