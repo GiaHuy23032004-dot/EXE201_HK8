@@ -92,23 +92,23 @@ export default function AuthPage() {
   return (
     <div className="flex min-h-screen">
       {/* Left panel */}
-      <div className="hidden w-1/2 gradient-primary items-center justify-center lg:flex">
-        <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} className="max-w-md px-12 text-primary-foreground">
+      <div className="hidden w-1/2 items-center justify-center border-r bg-gradient-to-br from-background via-accent to-muted lg:flex">
+        <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} className="max-w-md px-12 text-foreground">
           <Link to="/" className="mb-8 flex items-center gap-2">
-            <img src={logoImg} alt="EduMarket" className="h-10 w-auto brightness-0 invert" />
+            <img src={logoImg} alt="EduMarket" className="h-10 w-auto" />
           </Link>
           <h2 className="mb-4 text-3xl font-bold">Marketplace kết nối người học & người dạy</h2>
-          <p className="text-primary-foreground/80">
+          <p className="text-muted-foreground">
             Tham gia cộng đồng hơn 50,000 người học và 2,500 mentor chất lượng trên khắp Việt Nam.
           </p>
           <div className="mt-8 grid grid-cols-2 gap-4">
-            <div className="rounded-xl bg-primary-foreground/10 p-4">
+            <div className="rounded-xl border bg-background/90 p-4 shadow-card backdrop-blur-sm">
               <p className="text-2xl font-bold">15,000+</p>
-              <p className="text-sm text-primary-foreground/70">Khóa học</p>
+              <p className="text-sm text-muted-foreground">Khóa học</p>
             </div>
-            <div className="rounded-xl bg-primary-foreground/10 p-4">
+            <div className="rounded-xl border bg-background/90 p-4 shadow-card backdrop-blur-sm">
               <p className="text-2xl font-bold">4.8★</p>
-              <p className="text-sm text-primary-foreground/70">Đánh giá TB</p>
+              <p className="text-sm text-muted-foreground">Đánh giá TB</p>
             </div>
           </div>
         </motion.div>
@@ -131,7 +131,7 @@ export default function AuthPage() {
                 <p className="mb-6 text-sm text-muted-foreground">Nhập email để nhận link đặt lại mật khẩu</p>
 
                 {forgotSent ? (
-                  <div className="rounded-xl border bg-accent/50 p-6 text-center">
+                  <div className="rounded-xl border bg-background p-6 text-center shadow-card">
                     <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                       <Mail className="h-6 w-6 text-primary" />
                     </div>
@@ -274,7 +274,7 @@ export default function AuthPage() {
 
         {/* Admin link - nhỏ gọn ở góc dưới */}
         <div className="absolute bottom-6 right-6">
-          <Link to="/admin/login" className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs text-muted-foreground hover:border-primary hover:text-primary transition-colors bg-card/50 backdrop-blur-sm">
+          <Link to="/admin/login" className="flex items-center gap-1.5 rounded-lg border bg-background/95 px-3 py-1.5 text-xs text-muted-foreground transition-colors backdrop-blur-sm hover:border-primary hover:text-primary">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>
