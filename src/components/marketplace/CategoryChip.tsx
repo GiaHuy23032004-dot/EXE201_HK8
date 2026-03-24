@@ -26,7 +26,7 @@ export function CategoryChip({ icon: Icon, label, slug }: CategoryChipProps) {
     <motion.div whileHover={{ y: -4 }} whileTap={{ scale: 0.95 }}>
       <Link
         to={`/search?category=${slug}`}
-        className="flex flex-col items-center gap-2.5 rounded-2xl border bg-card p-4 shadow-card transition-all hover:shadow-card-hover group"
+        className="group flex flex-col items-center gap-2.5 rounded-2xl border bg-white p-4 shadow-card transition-all hover:shadow-card-hover"
       >
         <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} shadow-lg shadow-primary/10 transition-transform group-hover:scale-110`}>
           <Icon className="h-6 w-6 text-white" />

@@ -90,7 +90,7 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen bg-white">
       {/* Left panel */}
       <div className="hidden w-1/2 items-center justify-center border-r bg-gradient-to-br from-background via-accent to-muted lg:flex">
         <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} className="max-w-md px-12 text-foreground">
@@ -115,7 +115,7 @@ export default function AuthPage() {
       </div>
 
       {/* Right panel */}
-      <div className="flex flex-1 items-center justify-center p-6">
+      <div className="flex flex-1 items-center justify-center bg-white p-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
           <Link to="/" className="mb-6 flex items-center gap-2 lg:hidden">
             <img src={logoImg} alt="EduMarket" className="h-9 w-auto" />

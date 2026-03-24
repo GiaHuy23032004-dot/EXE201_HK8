@@ -30,7 +30,7 @@ export function CourseCard({ course }: { course: CourseData }) {
     >
       <Link
         to={`/course/${course.id}`}
-        className="group block overflow-hidden rounded-2xl border bg-card shadow-card transition-all hover:shadow-card-hover"
+        className="group block overflow-hidden rounded-2xl border bg-white shadow-card transition-all hover:shadow-card-hover"
       >
         <div className="relative aspect-[4/3] overflow-hidden">
           <img
