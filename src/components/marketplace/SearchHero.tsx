@@ -58,7 +58,8 @@ export function SearchHero() {
   return (
     <section className="relative overflow-hidden py-20 md:py-28">
       {/* Mesh gradient background */}
-      <div className="absolute inset-0 gradient-hero-mesh" />
+      <div className="absolute inset-0 bg-background" />
+      <div className="absolute inset-0 gradient-hero-mesh opacity-60" />
       <div className="absolute inset-0 gradient-hero" />
 
       {/* Floating decorations */}
@@ -89,7 +90,7 @@ export function SearchHero() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.1 }}
-            className="mb-4 inline-flex items-center gap-2 rounded-full border bg-card/80 px-4 py-1.5 text-xs font-medium text-muted-foreground shadow-card backdrop-blur-sm"
+            className="mb-4 inline-flex items-center gap-2 rounded-full border bg-background/95 px-4 py-1.5 text-xs font-medium text-muted-foreground shadow-card backdrop-blur-sm"
           >
             <Sparkles className="h-3.5 w-3.5 text-primary" />
             Nền tảng #1 kết nối người học & mentor
@@ -106,7 +107,7 @@ export function SearchHero() {
           </p>
 
           <div className="relative mx-auto max-w-2xl">
-            <form onSubmit={handleSearch} className="flex items-center gap-2 rounded-2xl border bg-card p-2 shadow-elevated transition-shadow focus-within:shadow-glow">
+            <form onSubmit={handleSearch} className="flex items-center gap-2 rounded-2xl border bg-background p-2 shadow-elevated transition-shadow focus-within:shadow-glow">
               <div className="flex flex-1 items-center gap-2 px-3">
                 <Search className="h-5 w-5 text-primary" />
                 <input
@@ -136,7 +137,7 @@ export function SearchHero() {
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
-                  className="absolute left-0 right-0 top-full z-50 mt-2 rounded-2xl border bg-card p-3 shadow-elevated"
+                  className="absolute left-0 right-0 top-full z-50 mt-2 rounded-2xl border bg-background p-3 shadow-elevated"
                 >
                   {aiText && (
                     <div className="mb-3 rounded-xl bg-accent/50 p-3 text-left text-xs text-accent-foreground">
@@ -168,7 +169,7 @@ export function SearchHero() {
               <button
                 key={tag}
                 onClick={() => { setQuery(tag); navigate(`/search?q=${encodeURIComponent(tag)}`); }}
-                className="rounded-full border bg-card/80 px-3 py-1 text-xs text-muted-foreground transition-all hover:border-primary hover:text-primary hover:shadow-card backdrop-blur-sm"
+                className="rounded-full border bg-background/95 px-3 py-1 text-xs text-muted-foreground transition-all hover:border-primary hover:text-primary hover:shadow-card backdrop-blur-sm"
               >
                 {tag}
               </button>
