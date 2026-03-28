@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, MapPin, Sparkles, Loader2 } from "lucide-react";
+import { Search, MapPin, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -22,7 +22,6 @@ export function SearchHero() {
   const navigate = useNavigate();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Rotating placeholder
   useEffect(() => {
     const interval = setInterval(() => {
       setPlaceholderIndex((prev) => (prev + 1) % aiSuggestions.length);
@@ -41,7 +40,6 @@ export function SearchHero() {
     setShowSuggestions(true);
     if (!aiText) {
       setAiTyping(true);
-      // Simulate AI typing suggestion
       const text = "🤖 Gợi ý: Bạn có thể thử tìm \"Guitar cơ bản\" hoặc \"Tiếng Anh giao tiếp gần đây\"";
       let i = 0;
       const timer = setInterval(() => {
@@ -56,27 +54,31 @@ export function SearchHero() {
   };
 
   return (
-    <section className="relative overflow-hidden bg-white py-20 md:py-28">
-      {/* Mesh gradient background */}
-      <div className="absolute inset-0 bg-white" />
-      <div className="absolute inset-0 gradient-hero-mesh opacity-60" />
+    <section className="relative overflow-hidden py-20 md:py-28">
+      {/* Soft gradient background */}
       <div className="absolute inset-0 gradient-hero" />
+      <div className="absolute inset-0 gradient-hero-mesh" />
 
-      {/* Floating decorations */}
+      {/* Floating decorations - more visible */}
       <motion.div
         animate={{ y: [0, -20, 0], rotate: [0, 5, 0] }}
         transition={{ duration: 6, repeat: Infinity }}
-        className="absolute left-[10%] top-[15%] h-20 w-20 rounded-2xl gradient-primary opacity-10 blur-sm"
+        className="absolute left-[8%] top-[12%] h-24 w-24 rounded-2xl bg-primary/8 blur-xl"
       />
       <motion.div
         animate={{ y: [0, 15, 0], rotate: [0, -5, 0] }}
         transition={{ duration: 8, repeat: Infinity }}
-        className="absolute right-[15%] top-[25%] h-16 w-16 rounded-full gradient-secondary opacity-10 blur-sm"
+        className="absolute right-[12%] top-[20%] h-20 w-20 rounded-full bg-emerald-400/8 blur-xl"
       />
       <motion.div
         animate={{ y: [0, 10, 0] }}
         transition={{ duration: 7, repeat: Infinity }}
-        className="absolute left-[60%] bottom-[20%] h-24 w-24 rounded-3xl gradient-warm opacity-[0.07] blur-sm"
+        className="absolute left-[55%] bottom-[15%] h-28 w-28 rounded-3xl bg-amber-400/6 blur-xl"
+      />
+      <motion.div
+        animate={{ x: [0, 10, 0], y: [0, -8, 0] }}
+        transition={{ duration: 9, repeat: Infinity }}
+        className="absolute right-[5%] bottom-[25%] h-16 w-16 rounded-full bg-violet-400/6 blur-lg"
       />
 
       <div className="container relative">
@@ -90,9 +92,9 @@ export function SearchHero() {
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.1 }}
-            className="mb-4 inline-flex items-center gap-2 rounded-full border bg-white px-4 py-1.5 text-xs font-medium text-muted-foreground shadow-card backdrop-blur-sm"
+            className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/5 px-5 py-2 text-xs font-semibold text-primary shadow-sm"
           >
-            <Sparkles className="h-3.5 w-3.5 text-primary" />
+            <Sparkles className="h-3.5 w-3.5" />
             Nền tảng #1 kết nối người học & mentor
           </motion.div>
 
@@ -102,12 +104,12 @@ export function SearchHero() {
             <br />
             phù hợp gần bạn
           </h1>
-          <p className="mb-10 text-muted-foreground md:text-lg">
+          <p className="mb-10 text-muted-foreground md:text-lg max-w-2xl mx-auto">
             Kết nối với hàng nghìn mentor chất lượng. Học mọi thứ từ âm nhạc, ngoại ngữ đến lập trình.
           </p>
 
           <div className="relative mx-auto max-w-2xl">
-            <form onSubmit={handleSearch} className="flex items-center gap-2 rounded-2xl border bg-white p-2 shadow-elevated transition-shadow focus-within:shadow-glow">
+            <form onSubmit={handleSearch} className="flex items-center gap-2 rounded-2xl border border-border/60 bg-background p-2 shadow-elevated transition-shadow focus-within:shadow-glow focus-within:border-primary/30">
               <div className="flex flex-1 items-center gap-2 px-3">
                 <Search className="h-5 w-5 text-primary" />
                 <input
@@ -125,22 +127,21 @@ export function SearchHero() {
                 <MapPin className="h-4 w-4 text-primary/60" />
                 <span className="text-sm text-muted-foreground">TP.HCM</span>
               </div>
-              <Button type="submit" className="gradient-primary border-0 text-primary-foreground rounded-xl px-6 shadow-glow/50">
+              <Button type="submit" className="gradient-primary border-0 text-primary-foreground rounded-xl px-6 shadow-lg shadow-primary/25">
                 Tìm kiếm
               </Button>
             </form>
 
-            {/* AI Suggestions dropdown */}
             <AnimatePresence>
               {showSuggestions && (
                 <motion.div
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
-                  className="absolute left-0 right-0 top-full z-50 mt-2 rounded-2xl border bg-white p-3 shadow-elevated"
+                  className="absolute left-0 right-0 top-full z-50 mt-2 rounded-2xl border bg-background p-3 shadow-elevated"
                 >
                   {aiText && (
-                    <div className="mb-3 rounded-xl bg-accent/50 p-3 text-left text-xs text-accent-foreground">
+                    <div className="mb-3 rounded-xl bg-accent p-3 text-left text-xs text-accent-foreground">
                       {aiText}
                       {aiTyping && <span className="ml-1 inline-block h-3 w-0.5 animate-pulse bg-primary" />}
                     </div>
@@ -169,7 +170,7 @@ export function SearchHero() {
               <button
                 key={tag}
                 onClick={() => { setQuery(tag); navigate(`/search?q=${encodeURIComponent(tag)}`); }}
-                className="rounded-full border bg-white px-3 py-1 text-xs text-muted-foreground transition-all hover:border-primary hover:text-primary hover:shadow-card backdrop-blur-sm"
+                className="rounded-full border border-border/60 bg-background px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:border-primary/40 hover:text-primary hover:bg-primary/5 hover:shadow-sm"
               >
                 {tag}
               </button>

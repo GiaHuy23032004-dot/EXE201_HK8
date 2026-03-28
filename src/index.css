@@ -7,30 +7,30 @@
 @layer base {
   :root {
     --background: 0 0% 100%;
-    --foreground: 210 30% 15%;
+    --foreground: 215 25% 17%;
 
     --card: 0 0% 100%;
-    --card-foreground: 210 30% 15%;
+    --card-foreground: 215 25% 17%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 210 30% 15%;
+    --popover-foreground: 215 25% 17%;
 
     --primary: 200 95% 48%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 50% 98%;
-    --secondary-foreground: 210 30% 18%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 215 25% 17%;
 
-    --muted: 210 20% 97%;
-    --muted-foreground: 215 14% 42%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 14% 46%;
 
-    --accent: 210 25% 98%;
-    --accent-foreground: 210 30% 18%;
+    --accent: 200 60% 96%;
+    --accent-foreground: 215 25% 17%;
 
     --destructive: 0 80% 58%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 214 18% 90%;
+    --border: 214 20% 92%;
     --input: 214 18% 92%;
     --ring: 200 95% 48%;
 
@@ -42,53 +42,74 @@
     --warning-foreground: 0 0% 100%;
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 210 30% 15%;
+    --sidebar-foreground: 215 25% 17%;
     --sidebar-primary: 200 95% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 25% 98%;
-    --sidebar-accent-foreground: 210 30% 18%;
-    --sidebar-border: 214 18% 90%;
+    --sidebar-accent: 200 60% 96%;
+    --sidebar-accent-foreground: 215 25% 17%;
+    --sidebar-border: 214 20% 92%;
     --sidebar-ring: 200 95% 48%;
 
-    --gradient-primary: linear-gradient(135deg, hsl(200 95% 48%), hsl(180 70% 45%));
+    /* Soft pastel section backgrounds */
+    --section-blue: 205 100% 97%;
+    --section-teal: 170 60% 96%;
+    --section-warm: 35 80% 97%;
+    --section-purple: 260 60% 97%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(200 95% 48%), hsl(175 70% 42%));
     --gradient-secondary: linear-gradient(135deg, hsl(170 70% 45%), hsl(150 60% 40%));
     --gradient-warm: linear-gradient(135deg, hsl(25 95% 55%), hsl(350 75% 55%));
-    --gradient-hero: linear-gradient(180deg, hsl(200 95% 48% / 0.025) 0%, hsl(170 70% 45% / 0.018) 50%, transparent 100%);
-    --gradient-hero-mesh: radial-gradient(ellipse at 20% 50%, hsl(200 95% 48% / 0.035) 0%, transparent 52%), radial-gradient(ellipse at 80% 20%, hsl(170 70% 45% / 0.025) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, hsl(40 95% 52% / 0.02) 0%, transparent 48%);
-    --shadow-card: 0 1px 2px hsl(215 25% 20% / 0.04), 0 8px 24px hsl(215 25% 20% / 0.04);
-    --shadow-card-hover: 0 10px 24px hsl(200 95% 48% / 0.08), 0 12px 36px hsl(215 25% 20% / 0.05);
-    --shadow-elevated: 0 10px 30px hsl(215 25% 20% / 0.08), 0 24px 64px hsl(200 95% 48% / 0.06);
+    --gradient-hero: linear-gradient(180deg, hsl(200 100% 97%) 0%, hsl(200 80% 98%) 40%, hsl(0 0% 100%) 100%);
+    --gradient-hero-mesh: radial-gradient(ellipse at 20% 50%, hsl(200 95% 70% / 0.12) 0%, transparent 52%), radial-gradient(ellipse at 80% 20%, hsl(170 70% 60% / 0.1) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, hsl(40 95% 65% / 0.06) 0%, transparent 48%);
+    --shadow-card: 0 1px 3px hsl(215 25% 20% / 0.04), 0 4px 16px hsl(215 25% 20% / 0.04);
+    --shadow-card-hover: 0 8px 24px hsl(200 95% 48% / 0.1), 0 4px 12px hsl(215 25% 20% / 0.06);
+    --shadow-elevated: 0 8px 30px hsl(215 25% 20% / 0.08), 0 16px 48px hsl(200 95% 48% / 0.06);
     --shadow-glow: 0 0 20px hsl(200 95% 48% / 0.2), 0 0 60px hsl(200 95% 48% / 0.1);
   }
 
   .dark {
     --background: 0 0% 100%;
-    --foreground: 210 30% 15%;
+    --foreground: 215 25% 17%;
     --card: 0 0% 100%;
-    --card-foreground: 210 30% 15%;
+    --card-foreground: 215 25% 17%;
     --popover: 0 0% 100%;
-    --popover-foreground: 210 30% 15%;
+    --popover-foreground: 215 25% 17%;
     --primary: 200 95% 48%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 170 70% 45%;
-    --secondary-foreground: 0 0% 100%;
-    --muted: 210 20% 97%;
-    --muted-foreground: 215 14% 42%;
-    --accent: 210 25% 98%;
-    --accent-foreground: 210 30% 18%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 215 25% 17%;
+    --muted: 210 20% 96%;
+    --muted-foreground: 215 14% 46%;
+    --accent: 200 60% 96%;
+    --accent-foreground: 215 25% 17%;
     --destructive: 0 80% 58%;
     --destructive-foreground: 0 0% 100%;
-    --border: 214 18% 90%;
+    --border: 214 20% 92%;
     --input: 214 18% 92%;
     --ring: 200 95% 48%;
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 210 30% 15%;
+    --sidebar-foreground: 215 25% 17%;
     --sidebar-primary: 200 95% 48%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 25% 98%;
-    --sidebar-accent-foreground: 210 30% 18%;
-    --sidebar-border: 214 18% 90%;
+    --sidebar-accent: 200 60% 96%;
+    --sidebar-accent-foreground: 215 25% 17%;
+    --sidebar-border: 214 20% 92%;
     --sidebar-ring: 200 95% 48%;
+
+    --section-blue: 205 100% 97%;
+    --section-teal: 170 60% 96%;
+    --section-warm: 35 80% 97%;
+    --section-purple: 260 60% 97%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(200 95% 48%), hsl(175 70% 42%));
+    --gradient-secondary: linear-gradient(135deg, hsl(170 70% 45%), hsl(150 60% 40%));
+    --gradient-warm: linear-gradient(135deg, hsl(25 95% 55%), hsl(350 75% 55%));
+    --gradient-hero: linear-gradient(180deg, hsl(200 100% 97%) 0%, hsl(200 80% 98%) 40%, hsl(0 0% 100%) 100%);
+    --gradient-hero-mesh: radial-gradient(ellipse at 20% 50%, hsl(200 95% 70% / 0.12) 0%, transparent 52%), radial-gradient(ellipse at 80% 20%, hsl(170 70% 60% / 0.1) 0%, transparent 50%), radial-gradient(ellipse at 50% 80%, hsl(40 95% 65% / 0.06) 0%, transparent 48%);
+    --shadow-card: 0 1px 3px hsl(215 25% 20% / 0.04), 0 4px 16px hsl(215 25% 20% / 0.04);
+    --shadow-card-hover: 0 8px 24px hsl(200 95% 48% / 0.1), 0 4px 12px hsl(215 25% 20% / 0.06);
+    --shadow-elevated: 0 8px 30px hsl(215 25% 20% / 0.08), 0 16px 48px hsl(200 95% 48% / 0.06);
+    --shadow-glow: 0 0 20px hsl(200 95% 48% / 0.2), 0 0 60px hsl(200 95% 48% / 0.1);
   }
 }
 
@@ -152,5 +173,17 @@
     background: hsl(var(--card) / 0.7);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
+  }
+  .section-blue {
+    background-color: hsl(var(--section-blue));
+  }
+  .section-teal {
+    background-color: hsl(var(--section-teal));
+  }
+  .section-warm {
+    background-color: hsl(var(--section-warm));
+  }
+  .section-purple {
+    background-color: hsl(var(--section-purple));
   }
 }
