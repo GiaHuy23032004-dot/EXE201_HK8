@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, Loader2 } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, Loader2, BookOpen, Users, Star } from "lucide-react";
 import logoImg from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -90,35 +90,56 @@ export default function AuthPage() {
   };
 
   return (
-    <div className="flex min-h-screen bg-white">
-      {/* Left panel */}
-      <div className="hidden w-1/2 items-center justify-center border-r bg-gradient-to-br from-background via-accent to-muted lg:flex">
-        <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} className="max-w-md px-12 text-foreground">
+    <div className="flex min-h-screen bg-background">
+      {/* Left panel - vibrant gradient */}
+      <div className="hidden w-1/2 items-center justify-center lg:flex relative overflow-hidden">
+        {/* Background gradient */}
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-accent to-secondary" />
+        <div className="absolute inset-0 gradient-hero-mesh" />
+        {/* Decorative shapes */}
+        <div className="absolute top-20 left-10 h-32 w-32 rounded-full bg-primary/8 blur-2xl" />
+        <div className="absolute bottom-20 right-10 h-40 w-40 rounded-full bg-emerald-400/6 blur-2xl" />
+        <div className="absolute top-1/2 right-1/4 h-24 w-24 rounded-2xl bg-amber-400/6 blur-xl" />
+
+        <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} className="relative max-w-md px-12 text-foreground">
           <Link to="/" className="mb-8 flex items-center gap-2">
-            <img src={logoImg} alt="EduMarket" className="h-10 w-auto" />
+            <img src={logoImg} alt="VET" className="h-10 w-auto" />
           </Link>
-          <h2 className="mb-4 text-3xl font-bold">Marketplace kết nối người học & người dạy</h2>
+          <h2 className="mb-4 text-3xl font-bold leading-tight">Marketplace kết nối<br />người học & người dạy</h2>
           <p className="text-muted-foreground">
             Tham gia cộng đồng hơn 50,000 người học và 2,500 mentor chất lượng trên khắp Việt Nam.
           </p>
           <div className="mt-8 grid grid-cols-2 gap-4">
-            <div className="rounded-xl border bg-background/90 p-4 shadow-card backdrop-blur-sm">
-              <p className="text-2xl font-bold">15,000+</p>
+            <div className="rounded-xl border border-border/60 bg-background p-4 shadow-card">
+              <div className="flex items-center gap-2 mb-1">
+                <BookOpen className="h-4 w-4 text-primary" />
+                <p className="text-2xl font-bold text-foreground">15,000+</p>
+              </div>
               <p className="text-sm text-muted-foreground">Khóa học</p>
             </div>
-            <div className="rounded-xl border bg-background/90 p-4 shadow-card backdrop-blur-sm">
-              <p className="text-2xl font-bold">4.8★</p>
+            <div className="rounded-xl border border-border/60 bg-background p-4 shadow-card">
+              <div className="flex items-center gap-2 mb-1">
+                <Star className="h-4 w-4 text-warning" />
+                <p className="text-2xl font-bold text-foreground">4.8★</p>
+              </div>
               <p className="text-sm text-muted-foreground">Đánh giá TB</p>
             </div>
+          </div>
+          <div className="mt-4 rounded-xl border border-border/60 bg-background p-4 shadow-card">
+            <div className="flex items-center gap-2 mb-1">
+              <Users className="h-4 w-4 text-emerald-500" />
+              <p className="text-2xl font-bold text-foreground">50,000+</p>
+            </div>
+            <p className="text-sm text-muted-foreground">Học viên đã tham gia</p>
           </div>
         </motion.div>
       </div>
 
       {/* Right panel */}
-      <div className="flex flex-1 items-center justify-center bg-white p-6">
+      <div className="flex flex-1 items-center justify-center bg-background p-6">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
           <Link to="/" className="mb-6 flex items-center gap-2 lg:hidden">
-            <img src={logoImg} alt="EduMarket" className="h-9 w-auto" />
+            <img src={logoImg} alt="VET" className="h-9 w-auto" />
           </Link>
 
           <AnimatePresence mode="wait">
@@ -194,7 +215,7 @@ export default function AuthPage() {
                           </button>
                         </div>
                       </div>
-                      <Button type="submit" disabled={loading} className="w-full gradient-primary border-0 text-primary-foreground">
+                      <Button type="submit" disabled={loading} className="w-full gradient-primary border-0 text-primary-foreground shadow-lg shadow-primary/25">
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Đăng nhập
                       </Button>
@@ -248,7 +269,7 @@ export default function AuthPage() {
                           <Input value={regPassword} onChange={(e) => setRegPassword(e.target.value)} type="password" placeholder="Tối thiểu 6 ký tự" className="pl-10" required />
                         </div>
                       </div>
-                      <Button type="submit" disabled={loading} className="w-full gradient-primary border-0 text-primary-foreground">
+                      <Button type="submit" disabled={loading} className="w-full gradient-primary border-0 text-primary-foreground shadow-lg shadow-primary/25">
                         {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                         Đăng ký {role === "mentor" ? "làm Mentor" : ""}
                       </Button>
@@ -272,9 +293,8 @@ export default function AuthPage() {
           </AnimatePresence>
         </motion.div>
 
-        {/* Admin link - nhỏ gọn ở góc dưới */}
         <div className="absolute bottom-6 right-6">
-          <Link to="/admin/login" className="flex items-center gap-1.5 rounded-lg border bg-background/95 px-3 py-1.5 text-xs text-muted-foreground transition-colors backdrop-blur-sm hover:border-primary hover:text-primary">
+          <Link to="/admin/login" className="flex items-center gap-1.5 rounded-lg border bg-background px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-primary hover:text-primary">
             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
             </svg>

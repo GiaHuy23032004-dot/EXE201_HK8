@@ -47,21 +47,18 @@ export default function HomePage() {
           raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            // Map AI suggestions to existing mock courses by matching categories
             const mapped = parsed.map((s: any) => {
               const match = mockCourses.find(
                 (c) => c.category === s.category || c.title.toLowerCase().includes(s.title?.toLowerCase()?.split(" ")[0] || "")
               );
               return match || mockCourses[Math.floor(Math.random() * mockCourses.length)];
             });
-            // Remove duplicates
             const unique = [...new Map(mapped.map((c: any) => [c.id, c])).values()];
             setAiRecommendations(unique.slice(0, 4));
           }
         }
       }
     } catch {
-      // Fallback to random
       const shuffled = [...mockCourses].sort(() => Math.random() - 0.5).slice(0, 4);
       setAiRecommendations(shuffled);
     }
@@ -76,8 +73,8 @@ export default function HomePage() {
     <MainLayout>
       <SearchHero />
 
-      {/* Stats */}
-      <section className="relative border-b bg-white py-10">
+      {/* Stats - soft blue bg */}
+      <section className="relative border-y border-border/40 section-blue py-10">
         <div className="container grid grid-cols-2 gap-6 md:grid-cols-4">
           {stats.map((s, i) => (
             <motion.div
@@ -96,8 +93,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Categories */}
-      <section className="bg-white py-14">
+      {/* Categories - white bg */}
+      <section className="bg-background py-14">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-foreground">Danh mục phổ biến</h2>
@@ -121,15 +118,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* AI Recommendations */}
-      <section className="relative overflow-hidden bg-white py-14">
-        <div className="absolute inset-0 bg-white" />
-        <div className="absolute inset-0 gradient-hero-mesh opacity-35" />
+      {/* AI Recommendations - soft teal bg */}
+      <section className="relative overflow-hidden section-teal py-14">
+        <div className="absolute inset-0 gradient-hero-mesh opacity-40" />
         <div className="container relative">
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-secondary shadow-lg">
-                <Brain className="h-5 w-5 text-white" />
+                <Brain className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-foreground">AI gợi ý cho bạn</h2>
@@ -148,13 +144,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Featured Courses */}
-      <section className="bg-white py-14">
+      {/* Featured Courses - white bg */}
+      <section className="bg-background py-14">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-warm shadow-lg">
-                <Sparkles className="h-5 w-5 text-white" />
+                <Sparkles className="h-5 w-5 text-primary-foreground" />
               </div>
               <h2 className="text-2xl font-bold text-foreground">Khóa học nổi bật</h2>
             </div>
@@ -170,13 +166,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Nearby */}
-      <section className="bg-white py-14">
+      {/* Nearby - soft warm bg */}
+      <section className="section-warm py-14">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary shadow-lg">
-                <MapPin className="h-5 w-5 text-white" />
+                <MapPin className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
                 <h2 className="text-2xl font-bold text-foreground">Lớp học gần bạn</h2>
@@ -195,13 +191,13 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Trending Mentors */}
-      <section className="bg-white py-14">
+      {/* Trending Mentors - soft purple bg */}
+      <section className="section-purple py-14">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg">
-                <TrendingUp className="h-5 w-5 text-white" />
+                <TrendingUp className="h-5 w-5 text-primary-foreground" />
               </div>
               <h2 className="text-2xl font-bold text-foreground">Mentor nổi bật</h2>
             </div>
@@ -215,7 +211,7 @@ export default function HomePage() {
       </section>
 
       {/* CTA */}
-      <section className="bg-white py-16">
+      <section className="bg-background py-16">
         <div className="container">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -223,12 +219,11 @@ export default function HomePage() {
             viewport={{ once: true }}
             className="relative overflow-hidden rounded-3xl gradient-primary p-8 md:p-16 text-center"
           >
-            {/* Decorative circles */}
-            <div className="absolute -left-20 -top-20 h-60 w-60 rounded-full bg-white/10 blur-2xl" />
-            <div className="absolute -bottom-20 -right-20 h-60 w-60 rounded-full bg-white/10 blur-2xl" />
+            <div className="absolute -left-20 -top-20 h-60 w-60 rounded-full bg-primary-foreground/10 blur-2xl" />
+            <div className="absolute -bottom-20 -right-20 h-60 w-60 rounded-full bg-primary-foreground/10 blur-2xl" />
 
             <div className="relative">
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/20 px-4 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-primary-foreground/20 px-4 py-1.5 text-xs font-medium text-primary-foreground backdrop-blur-sm">
                 <Zap className="h-3.5 w-3.5" />
                 Miễn phí đăng ký
               </div>
@@ -236,10 +231,10 @@ export default function HomePage() {
                 Bạn có kỹ năng muốn chia sẻ?
               </h2>
               <p className="mb-8 text-primary-foreground/80 md:text-lg max-w-xl mx-auto">
-                Trở thành Mentor trên EduMarket và bắt đầu kiếm thu nhập từ kiến thức của bạn. Hơn 2,500 mentor đã tin tưởng chúng tôi.
+                Trở thành Mentor trên VET và bắt đầu kiếm thu nhập từ kiến thức của bạn. Hơn 2,500 mentor đã tin tưởng chúng tôi.
               </p>
               <Link to="/auth?role=mentor">
-                <Button size="lg" variant="secondary" className="rounded-xl font-semibold shadow-elevated bg-white text-foreground hover:bg-white/90">
+                <Button size="lg" variant="secondary" className="rounded-xl font-semibold shadow-elevated bg-background text-foreground hover:bg-background/90">
                   Đăng ký làm Mentor ngay
                 </Button>
               </Link>
