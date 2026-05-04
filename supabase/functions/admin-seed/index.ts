@@ -6,7 +6,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const ADMIN_EMAIL = "admin@vet.local";
+const ADMIN_EMAIL = "admin@vet-platform.com";
 const ADMIN_PASSWORD = "Admin@VET2026";
 const ADMIN_USERNAME = "admin";
 const ADMIN_NAME = "VET Administrator";
