@@ -8,6 +8,7 @@ import { AiChatAssistant } from "@/components/AiChatAssistant";
 import { AdminGuard } from "@/components/AdminGuard";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import SearchPage from "./pages/SearchPage";
 import MapPage from "./pages/MapPage";
@@ -34,6 +35,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<AuthPage />} />
+            <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/admin/login" element={<AdminLoginPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/map" element={<MapPage />} />
