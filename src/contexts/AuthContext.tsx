@@ -5,8 +5,9 @@ import type { User, Session } from "@supabase/supabase-js";
 export interface UserProfile {
   name: string;
   email: string;
+  username?: string;
   avatar?: string;
-  role: "learner" | "mentor";
+  role: "learner" | "mentor" | "admin";
   phone?: string;
   bio?: string;
   isBlocked?: boolean;
@@ -17,15 +18,23 @@ interface AuthContextType {
   session: Session | null;
   isLoggedIn: boolean;
   isLoading: boolean;
-  login: (email: string, password: string) => Promise<{ error?: string }>;
-  register: (email: string, password: string, name: string, role: "learner" | "mentor") => Promise<{ error?: string; needsEmailConfirmation?: boolean }>;
-  loginWithGoogle: () => Promise<{ error?: string }>;
+  /** Login by username OR email + password */
+  login: (identifier: string, password: string) => Promise<{ error?: string }>;
+  register: (params: {
+    username: string;
+    name: string;
+    email: string;
+    password: string;
+    role: "learner" | "mentor";
+  }) => Promise<{ error?: string; needsEmailConfirmation?: boolean }>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
   resetPassword: (email: string) => Promise<{ error?: string }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const isEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -43,18 +52,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser({
         name: data.name || authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "User",
         email: data.email || authUser.email || "",
+        username: (data as any).username || undefined,
         avatar: data.avatar_url || authUser.user_metadata?.avatar_url,
-        role: (data.role as "learner" | "mentor") || "learner",
+        role: (data.role as "learner" | "mentor" | "admin") || "learner",
         phone: data.phone || undefined,
         bio: data.bio || undefined,
         isBlocked: data.is_blocked ?? false,
       });
     } else {
-      // Fallback if profile not yet created
       setUser({
         name: authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "User",
         email: authUser.email || "",
-        avatar: authUser.user_metadata?.avatar_url,
         role: "learner",
       });
     }
@@ -65,7 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, newSession) => {
         setSession(newSession);
         if (newSession?.user) {
-          // Use setTimeout to avoid deadlock with Supabase auth
           setTimeout(() => fetchProfile(newSession.user), 0);
         } else {
           setUser(null);
@@ -85,12 +92,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const normalizedEmail = email.trim().toLowerCase();
-    const { data, error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password });
+  const login = async (identifier: string, password: string) => {
+    const id = identifier.trim();
+    let email = id.toLowerCase();
+
+    // If not an email, treat as username and look up the email
+    if (!isEmail(id)) {
+      const { data, error } = await supabase.rpc("get_email_by_username", { _username: id });
+      if (error || !data) {
+        return { error: "Tên tài khoản không tồn tại." };
+      }
+      email = String(data).toLowerCase();
+    }
+
+    const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
 
-    const userId = data.user?.id;
+    const userId = authData.user?.id;
     if (userId) {
       const { data: profile } = await supabase
         .from("profiles")
@@ -107,32 +125,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {};
   };
 
-  const register = async (email: string, password: string, name: string, role: "learner" | "mentor") => {
+  const register = async ({ username, name, email, password, role }: {
+    username: string;
+    name: string;
+    email: string;
+    password: string;
+    role: "learner" | "mentor";
+  }) => {
     const normalizedEmail = email.trim().toLowerCase();
+    const normalizedUsername = username.trim();
+
+    // Check username availability
+    const { data: taken } = await supabase.rpc("get_email_by_username", { _username: normalizedUsername });
+    if (taken) return { error: "Tên tài khoản đã có người sử dụng." };
+
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
       password,
       options: {
-        data: { full_name: name.trim(), role },
-        emailRedirectTo: window.location.origin,
+        data: {
+          full_name: name.trim(),
+          username: normalizedUsername,
+          role,
+        },
+        emailRedirectTo: `${window.location.origin}/`,
       },
     });
 
     if (error) return { error: error.message };
     return { needsEmailConfirmation: !data.session };
-  };
-
-  const loginWithGoogle = async () => {
-    // Demo mode: mock Google login with fake account
-    setSession({ user: { id: "mock-google-user" } } as any);
-    const mockUser: UserProfile = {
-      name: "Nguyễn Văn A",
-      email: "nguyenvana@gmail.com",
-      avatar: "https://lh3.googleusercontent.com/a/default-user=s96-c",
-      role: "learner",
-    };
-    setUser(mockUser);
-    return {};
   };
 
   const logout = async () => {
@@ -158,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const resetPassword = async (email: string) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
       redirectTo: `${window.location.origin}/reset-password`,
     });
     if (error) return { error: error.message };
@@ -174,7 +195,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isLoading,
         login,
         register,
-        loginWithGoogle,
         logout,
         updateProfile,
         resetPassword,

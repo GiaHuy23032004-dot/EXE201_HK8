@@ -27,6 +27,7 @@ export type Database = {
           role: string
           updated_at: string
           user_id: string
+          username: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -40,6 +41,7 @@ export type Database = {
           role?: string
           updated_at?: string
           user_id: string
+          username?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -53,6 +55,7 @@ export type Database = {
           role?: string
           updated_at?: string
           user_id?: string
+          username?: string | null
         }
         Relationships: []
       }
@@ -82,6 +85,7 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_email_by_username: { Args: { _username: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
