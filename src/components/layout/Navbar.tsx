@@ -98,12 +98,44 @@ export function Navbar() {
         <div className="flex items-center gap-2">
           {isLoggedIn ? (
             <>
-              <Button variant="ghost" size="icon" className="relative text-muted-foreground">
-                <Bell className="h-5 w-5" />
-                <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
-                  3
-                </span>
-              </Button>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button variant="ghost" size="icon" className="relative text-muted-foreground">
+                    <Bell className="h-5 w-5" />
+                    <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
+                      {notifications.length}
+                    </span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 p-0">
+                  <div className="flex items-center justify-between border-b px-4 py-3">
+                    <p className="text-sm font-semibold">Thông báo</p>
+                    <button className="text-xs text-primary hover:underline">Đánh dấu đã đọc</button>
+                  </div>
+                  <ScrollArea className="max-h-80">
+                    <div className="divide-y">
+                      {notifications.map((n, i) => {
+                        const Icon = n.icon;
+                        return (
+                          <div key={i} className="flex gap-3 p-3 hover:bg-muted/50 cursor-pointer transition-colors">
+                            <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted ${n.color}`}>
+                              <Icon className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium leading-tight">{n.title}</p>
+                              <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.desc}</p>
+                              <p className="text-[10px] text-muted-foreground mt-1">{n.time}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                  <div className="border-t px-4 py-2 text-center">
+                    <button className="text-xs text-primary hover:underline">Xem tất cả</button>
+                  </div>
+                </PopoverContent>
+              </Popover>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
