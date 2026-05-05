@@ -80,12 +80,35 @@ export default function AdminDashboard() {
   const [courses, setCourses] = useState(pendingCourses);
   const [reports, setReports] = useState(reportedItems);
   const [courseFilter, setCourseFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
-  const [reportFilter, setReportFilter] = useState<"all" | "pending" | "resolved" | "dismissed">("all");
+  const [reportFilter, setReportFilter] = useState<"all" | "pending" | "resolved" | "dismissed" | "appealed">("all");
   const [userList, setUserList] = useState<UserRecord[]>([]);
   const [userSearch, setUserSearch] = useState("");
   const [userLoading, setUserLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [activeReport, setActiveReport] = useState<ReportItem | null>(null);
+  const [strikeChoice, setStrikeChoice] = useState<string>("");
+  const [emailContent, setEmailContent] = useState<string>("");
   const { toast } = useToast();
+
+  const strikeOptions = [
+    { id: "ignore", label: "Bỏ qua báo cáo", desc: "Sai sự thật / Không phạt", tone: "muted", email: "Xin chào, sau khi xem xét, chúng tôi không tìm thấy vi phạm trong nội dung của bạn. Báo cáo đã được bỏ qua. Cảm ơn bạn đã đóng góp cho cộng đồng." },
+    { id: "strike1", label: "Gậy 1: Nhắc nhở", desc: "Yêu cầu sửa nội dung", tone: "warning", email: "Xin chào, nội dung của bạn vi phạm tiêu chuẩn cộng đồng (lần 1). Vui lòng chỉnh sửa nội dung trong vòng 48 giờ để tránh các biện pháp xử lý nặng hơn." },
+    { id: "strike2", label: "Gậy 2: Gỡ bài & cấm đăng 7 ngày", desc: "Tạm khóa quyền đăng nội dung mới", tone: "warning", email: "Xin chào, nội dung của bạn đã bị gỡ và bạn bị cấm đăng nội dung mới trong 7 ngày (vi phạm lần 2). Vui lòng đọc kỹ chính sách trước khi tiếp tục." },
+    { id: "strike3", label: "Gậy 3: Khóa vĩnh viễn tài khoản", desc: "Vi phạm nghiêm trọng / lặp lại 3 lần", tone: "destructive", email: "Xin chào, do vi phạm chính sách lần thứ 3, tài khoản Mentor của bạn đã bị khóa vĩnh viễn. Bạn có quyền kháng cáo trong vòng 7 ngày kể từ khi nhận được email này." },
+  ];
+
+  const openReportModal = (r: ReportItem) => {
+    setActiveReport(r);
+    setStrikeChoice("");
+    setEmailContent("");
+  };
+
+  const handleStrikeChange = (val: string) => {
+    setStrikeChoice(val);
+    const opt = strikeOptions.find((o) => o.id === val);
+    if (opt) setEmailContent(opt.email);
+  };
+
 
   const fetchUsers = useCallback(async () => {
     setUserLoading(true);
