@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { motion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 
 const schedule = [
   { day: "Thứ 2", time: "09:00 - 11:00" },
