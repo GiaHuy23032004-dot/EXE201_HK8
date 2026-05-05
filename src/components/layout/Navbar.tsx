@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, Bell, LogOut, Settings, User, BookOpen, ChevronDown, Shield, GraduationCap, Mic2 } from "lucide-react";
+import { Menu, X, Bell, LogOut, Settings, User, BookOpen, ChevronDown, Shield, GraduationCap, Mic2, Calendar, MessageSquare, CheckCircle2, DollarSign, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -11,6 +11,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { motion, AnimatePresence } from "framer-motion";
 import logoImg from "@/assets/logo.png";
 import { useAuth } from "@/contexts/AuthContext";
