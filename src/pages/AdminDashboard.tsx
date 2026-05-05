@@ -1,9 +1,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { Users, BookOpen, DollarSign, TrendingUp, Shield, Check, X, Eye, BarChart3, Flag, Megaphone, UserX, UserCheck, Crown, Loader2, Search, Trash2, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Users, BookOpen, DollarSign, TrendingUp, Shield, Check, X, Eye, BarChart3, Flag, Megaphone, UserX, UserCheck, Crown, Loader2, Search, Trash2, AlertCircle, CheckCircle2, EyeOff, FileText, UserCircle2, History, Send, AlertTriangle, Gavel } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
@@ -24,14 +28,16 @@ const pendingCourses = [
 type ReportItem = {
   id: string; title: string; type: "course" | "mentor" | "comment" | "payment";
   reason: string; reporter: string; reportedUser: string; reports: number;
-  date: string; status: "pending" | "resolved" | "dismissed"; detail: string;
+  date: string; status: "pending" | "resolved" | "dismissed" | "appealed"; detail: string;
+  mentorStrikes: number;
 };
 
 const reportedItems: ReportItem[] = [
-  { id: "r1", title: "Khóa học đáng ngờ XYZ", type: "course", reason: "Nội dung không phù hợp", reporter: "Nguyễn Văn A", reportedUser: "Trần B", reports: 5, date: "08/03/2026", status: "pending", detail: "Khóa học chứa nội dung sao chép từ nguồn khác mà không ghi nguồn" },
-  { id: "r2", title: "Mentor giả mạo ABC", type: "mentor", reason: "Thông tin sai lệch", reporter: "Lê C", reportedUser: "Phạm D", reports: 3, date: "07/03/2026", status: "pending", detail: "Mentor tự xưng có bằng cấp nhưng không có bằng chứng" },
-  { id: "r3", title: "Bình luận xúc phạm", type: "comment", reason: "Ngôn từ thù ghét", reporter: "Hoàng E", reportedUser: "Vũ F", reports: 8, date: "06/03/2026", status: "resolved", detail: "Bình luận chứa lời lẽ xúc phạm và phân biệt" },
-  { id: "r4", title: "Lừa đảo thanh toán", type: "payment", reason: "Gian lận tài chính", reporter: "Đỗ G", reportedUser: "Bùi H", reports: 12, date: "05/03/2026", status: "dismissed", detail: "Mentor thu tiền ngoài hệ thống và không hoàn trả" },
+  { id: "r1", title: "Khóa học đáng ngờ XYZ", type: "course", reason: "Nội dung không phù hợp", reporter: "Nguyễn Văn A", reportedUser: "Trần B", reports: 5, date: "08/03/2026", status: "pending", detail: "Khóa học chứa nội dung sao chép từ nguồn khác mà không ghi nguồn", mentorStrikes: 1 },
+  { id: "r2", title: "Mentor giả mạo ABC", type: "mentor", reason: "Thông tin sai lệch", reporter: "Lê C", reportedUser: "Phạm D", reports: 3, date: "07/03/2026", status: "pending", detail: "Mentor tự xưng có bằng cấp nhưng không có bằng chứng", mentorStrikes: 0 },
+  { id: "r3", title: "Bình luận xúc phạm", type: "comment", reason: "Ngôn từ thù ghét", reporter: "Hoàng E", reportedUser: "Vũ F", reports: 8, date: "06/03/2026", status: "resolved", detail: "Bình luận chứa lời lẽ xúc phạm và phân biệt", mentorStrikes: 2 },
+  { id: "r4", title: "Lừa đảo thanh toán", type: "payment", reason: "Gian lận tài chính", reporter: "Đỗ G", reportedUser: "Bùi H", reports: 12, date: "05/03/2026", status: "dismissed", detail: "Mentor thu tiền ngoài hệ thống và không hoàn trả", mentorStrikes: 2 },
+  { id: "r5", title: "Khiếu nại quyết định gỡ bài", type: "course", reason: "Mentor kháng cáo", reporter: "Mentor Trần B", reportedUser: "Admin", reports: 1, date: "09/03/2026", status: "appealed", detail: "Mentor cho rằng nội dung bị gỡ là hợp lệ và yêu cầu xem xét lại", mentorStrikes: 1 },
 ];
 
 const promotedListings = [
@@ -74,12 +80,35 @@ export default function AdminDashboard() {
   const [courses, setCourses] = useState(pendingCourses);
   const [reports, setReports] = useState(reportedItems);
   const [courseFilter, setCourseFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
-  const [reportFilter, setReportFilter] = useState<"all" | "pending" | "resolved" | "dismissed">("all");
+  const [reportFilter, setReportFilter] = useState<"all" | "pending" | "resolved" | "dismissed" | "appealed">("all");
   const [userList, setUserList] = useState<UserRecord[]>([]);
   const [userSearch, setUserSearch] = useState("");
   const [userLoading, setUserLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [activeReport, setActiveReport] = useState<ReportItem | null>(null);
+  const [strikeChoice, setStrikeChoice] = useState<string>("");
+  const [emailContent, setEmailContent] = useState<string>("");
   const { toast } = useToast();
+
+  const strikeOptions = [
+    { id: "ignore", label: "Bỏ qua báo cáo", desc: "Sai sự thật / Không phạt", tone: "muted", email: "Xin chào, sau khi xem xét, chúng tôi không tìm thấy vi phạm trong nội dung của bạn. Báo cáo đã được bỏ qua. Cảm ơn bạn đã đóng góp cho cộng đồng." },
+    { id: "strike1", label: "Gậy 1: Nhắc nhở", desc: "Yêu cầu sửa nội dung", tone: "warning", email: "Xin chào, nội dung của bạn vi phạm tiêu chuẩn cộng đồng (lần 1). Vui lòng chỉnh sửa nội dung trong vòng 48 giờ để tránh các biện pháp xử lý nặng hơn." },
+    { id: "strike2", label: "Gậy 2: Gỡ bài & cấm đăng 7 ngày", desc: "Tạm khóa quyền đăng nội dung mới", tone: "warning", email: "Xin chào, nội dung của bạn đã bị gỡ và bạn bị cấm đăng nội dung mới trong 7 ngày (vi phạm lần 2). Vui lòng đọc kỹ chính sách trước khi tiếp tục." },
+    { id: "strike3", label: "Gậy 3: Khóa vĩnh viễn tài khoản", desc: "Vi phạm nghiêm trọng / lặp lại 3 lần", tone: "destructive", email: "Xin chào, do vi phạm chính sách lần thứ 3, tài khoản Mentor của bạn đã bị khóa vĩnh viễn. Bạn có quyền kháng cáo trong vòng 7 ngày kể từ khi nhận được email này." },
+  ];
+
+  const openReportModal = (r: ReportItem) => {
+    setActiveReport(r);
+    setStrikeChoice("");
+    setEmailContent("");
+  };
+
+  const handleStrikeChange = (val: string) => {
+    setStrikeChoice(val);
+    const opt = strikeOptions.find((o) => o.id === val);
+    if (opt) setEmailContent(opt.email);
+  };
+
 
   const fetchUsers = useCallback(async () => {
     setUserLoading(true);
@@ -176,9 +205,20 @@ export default function AdminDashboard() {
       case "pending": return <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ xử lý</Badge>;
       case "resolved": return <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã xử lý</Badge>;
       case "dismissed": return <Badge className="bg-muted text-muted-foreground border-0 text-[10px]">Bỏ qua</Badge>;
+      case "appealed": return <Badge className="bg-primary/10 text-primary border-0 text-[10px]">Kháng cáo</Badge>;
       default: return null;
     }
   };
+
+  const submitVerdict = () => {
+    if (!activeReport || !strikeChoice) return;
+    const opt = strikeOptions.find((o) => o.id === strikeChoice)!;
+    const newStatus = strikeChoice === "ignore" ? "dismissed" as const : "resolved" as const;
+    setReports(reports.map(r => r.id === activeReport.id ? { ...r, status: newStatus } : r));
+    toast({ title: "Đã gửi phán quyết", description: `${opt.label} → đã gửi email cho mentor.` });
+    setActiveReport(null);
+  };
+
 
   return (
     <MainLayout>
@@ -426,9 +466,9 @@ export default function AdminDashboard() {
           {/* Reports Tab */}
           <TabsContent value="reports">
             <div className="mb-4 flex items-center gap-2 flex-wrap">
-              {(["all", "pending", "resolved", "dismissed"] as const).map((f) => (
+              {(["all", "pending", "appealed", "resolved", "dismissed"] as const).map((f) => (
                 <Button key={f} size="sm" variant={reportFilter === f ? "default" : "outline"} className={`rounded-lg text-xs ${reportFilter === f ? "gradient-primary border-0 text-primary-foreground" : ""}`} onClick={() => setReportFilter(f)}>
-                  {f === "all" ? "Tất cả" : f === "pending" ? "Chờ xử lý" : f === "resolved" ? "Đã xử lý" : "Bỏ qua"}
+                  {f === "all" ? "Tất cả" : f === "pending" ? "Chờ xử lý" : f === "appealed" ? "Kháng cáo" : f === "resolved" ? "Đã xử lý" : "Bỏ qua"}
                   {f !== "all" && ` (${reports.filter(r => r.status === f).length})`}
                 </Button>
               ))}
@@ -445,15 +485,25 @@ export default function AdminDashboard() {
                         <p className="font-semibold text-card-foreground">{r.title}</p>
                         {reportStatusBadge(r.status)}
                         <Badge variant="outline" className="text-[10px]">{r.reports} báo cáo</Badge>
+                        {r.reports >= 5 && (
+                          <Badge className="bg-warning/15 text-warning border-0 text-[10px] gap-1">
+                            <EyeOff className="h-3 w-3" /> Hệ thống tự động ẩn
+                          </Badge>
+                        )}
+                        {r.status === "appealed" && (
+                          <Badge className="bg-primary/10 text-primary border-0 text-[10px] gap-1">
+                            <AlertTriangle className="h-3 w-3" /> Mentor kháng cáo
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">Lý do: {r.reason}</p>
                       <p className="text-xs text-muted-foreground">Người báo cáo: {r.reporter} → Bị báo cáo: {r.reportedUser}</p>
                       <p className="text-xs text-muted-foreground mt-1 italic">{r.detail}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{r.date}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{r.date} • Lịch sử vi phạm Mentor: {r.mentorStrikes}/3</p>
                     </div>
-                    {r.status === "pending" && (
+                    {(r.status === "pending" || r.status === "appealed") && (
                       <div className="flex gap-2 shrink-0">
-                        <Button size="sm" onClick={() => handleReportAction(r.id, "resolve")} className="gradient-primary border-0 text-primary-foreground rounded-lg"><CheckCircle2 className="mr-1 h-4 w-4" />Xử lý</Button>
+                        <Button size="sm" onClick={() => openReportModal(r)} className="gradient-primary border-0 text-primary-foreground rounded-lg"><Gavel className="mr-1 h-4 w-4" />Xử lý</Button>
                         <Button size="sm" variant="outline" onClick={() => handleReportAction(r.id, "dismiss")} className="rounded-lg"><X className="mr-1 h-4 w-4" />Bỏ qua</Button>
                       </div>
                     )}
@@ -480,6 +530,109 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Verdict Modal — 5-step moderation flow */}
+      <Dialog open={!!activeReport} onOpenChange={(o) => !o && setActiveReport(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gavel className="h-5 w-5 text-primary" />
+              Xử lý báo cáo — Quy trình kiểm duyệt
+            </DialogTitle>
+          </DialogHeader>
+
+          {activeReport && (
+            <div className="space-y-5">
+              {/* Step 2: Verification */}
+              <div className="rounded-xl border bg-accent/30 p-4">
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div className="flex-1">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Bước 2 — Thẩm định</p>
+                    <p className="font-semibold text-foreground">{activeReport.title}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Lý do: {activeReport.reason}</p>
+                    <p className="text-xs text-muted-foreground italic mt-1">{activeReport.detail}</p>
+                  </div>
+                  <div className="shrink-0 rounded-lg border bg-card p-3 min-w-[180px]">
+                    <p className="text-[10px] text-muted-foreground mb-2">Lịch sử vi phạm Mentor: {activeReport.mentorStrikes}/3 lần</p>
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3].map((n) => (
+                        <div
+                          key={n}
+                          className={`h-3 w-3 rounded-full ${n <= activeReport.mentorStrikes ? "bg-destructive" : "bg-muted"}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" className="rounded-lg text-xs"><FileText className="h-3.5 w-3.5" />Xem nội dung bài đăng</Button>
+                  <Button size="sm" variant="outline" className="rounded-lg text-xs"><UserCircle2 className="h-3.5 w-3.5" />Xem hồ sơ Mentor</Button>
+                  <Button size="sm" variant="outline" className="rounded-lg text-xs"><History className="h-3.5 w-3.5" />Lịch sử báo cáo của người tố cáo</Button>
+                </div>
+              </div>
+
+              {/* Step 3: 3-Strike verdict */}
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Bước 3 — Phán quyết</p>
+                <h4 className="font-semibold text-foreground mb-3">Chọn hình thức xử lý (Hệ thống 3 gậy)</h4>
+                <RadioGroup value={strikeChoice} onValueChange={handleStrikeChange} className="space-y-2">
+                  {strikeOptions.map((o) => {
+                    const selected = strikeChoice === o.id;
+                    const isDanger = o.tone === "destructive";
+                    return (
+                      <Label
+                        key={o.id}
+                        htmlFor={o.id}
+                        className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+                          selected
+                            ? isDanger
+                              ? "border-destructive bg-destructive/5"
+                              : "border-primary bg-primary/5"
+                            : "hover:bg-accent/40"
+                        }`}
+                      >
+                        <RadioGroupItem id={o.id} value={o.id} className="mt-1" />
+                        <div className="flex-1">
+                          <p className={`font-medium text-sm ${isDanger ? "text-destructive" : "text-foreground"}`}>{o.label}</p>
+                          <p className="text-xs text-muted-foreground">{o.desc}</p>
+                        </div>
+                      </Label>
+                    );
+                  })}
+                </RadioGroup>
+              </div>
+
+              {/* Step 4: Notification */}
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Bước 4 — Thông báo</p>
+                <h4 className="font-semibold text-foreground mb-2">Nội dung Email sẽ gửi cho Mentor</h4>
+                <Textarea
+                  rows={5}
+                  placeholder="Chọn hình thức xử lý ở trên để hệ thống tự sinh nội dung email…"
+                  value={emailContent}
+                  onChange={(e) => setEmailContent(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground/80 italic mt-1">
+                  Nội dung email sẽ tự động sinh ra dựa trên hình thức phạt bạn chọn ở trên.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-lg" onClick={() => setActiveReport(null)}>Hủy thao tác</Button>
+            <Button
+              className="gradient-primary border-0 text-primary-foreground rounded-lg"
+              disabled={!strikeChoice}
+              onClick={submitVerdict}
+            >
+              <Send className="h-4 w-4" />
+              Xác nhận & Gửi thông báo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
+
   );
 }
