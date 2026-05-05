@@ -530,6 +530,109 @@ export default function AdminDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Verdict Modal — 5-step moderation flow */}
+      <Dialog open={!!activeReport} onOpenChange={(o) => !o && setActiveReport(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Gavel className="h-5 w-5 text-primary" />
+              Xử lý báo cáo — Quy trình kiểm duyệt
+            </DialogTitle>
+          </DialogHeader>
+
+          {activeReport && (
+            <div className="space-y-5">
+              {/* Step 2: Verification */}
+              <div className="rounded-xl border bg-accent/30 p-4">
+                <div className="flex items-start justify-between gap-4 mb-3">
+                  <div className="flex-1">
+                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Bước 2 — Thẩm định</p>
+                    <p className="font-semibold text-foreground">{activeReport.title}</p>
+                    <p className="text-xs text-muted-foreground mt-1">Lý do: {activeReport.reason}</p>
+                    <p className="text-xs text-muted-foreground italic mt-1">{activeReport.detail}</p>
+                  </div>
+                  <div className="shrink-0 rounded-lg border bg-card p-3 min-w-[180px]">
+                    <p className="text-[10px] text-muted-foreground mb-2">Lịch sử vi phạm Mentor: {activeReport.mentorStrikes}/3 lần</p>
+                    <div className="flex items-center gap-2">
+                      {[1, 2, 3].map((n) => (
+                        <div
+                          key={n}
+                          className={`h-3 w-3 rounded-full ${n <= activeReport.mentorStrikes ? "bg-destructive" : "bg-muted"}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline" className="rounded-lg text-xs"><FileText className="h-3.5 w-3.5" />Xem nội dung bài đăng</Button>
+                  <Button size="sm" variant="outline" className="rounded-lg text-xs"><UserCircle2 className="h-3.5 w-3.5" />Xem hồ sơ Mentor</Button>
+                  <Button size="sm" variant="outline" className="rounded-lg text-xs"><History className="h-3.5 w-3.5" />Lịch sử báo cáo của người tố cáo</Button>
+                </div>
+              </div>
+
+              {/* Step 3: 3-Strike verdict */}
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Bước 3 — Phán quyết</p>
+                <h4 className="font-semibold text-foreground mb-3">Chọn hình thức xử lý (Hệ thống 3 gậy)</h4>
+                <RadioGroup value={strikeChoice} onValueChange={handleStrikeChange} className="space-y-2">
+                  {strikeOptions.map((o) => {
+                    const selected = strikeChoice === o.id;
+                    const isDanger = o.tone === "destructive";
+                    return (
+                      <Label
+                        key={o.id}
+                        htmlFor={o.id}
+                        className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
+                          selected
+                            ? isDanger
+                              ? "border-destructive bg-destructive/5"
+                              : "border-primary bg-primary/5"
+                            : "hover:bg-accent/40"
+                        }`}
+                      >
+                        <RadioGroupItem id={o.id} value={o.id} className="mt-1" />
+                        <div className="flex-1">
+                          <p className={`font-medium text-sm ${isDanger ? "text-destructive" : "text-foreground"}`}>{o.label}</p>
+                          <p className="text-xs text-muted-foreground">{o.desc}</p>
+                        </div>
+                      </Label>
+                    );
+                  })}
+                </RadioGroup>
+              </div>
+
+              {/* Step 4: Notification */}
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Bước 4 — Thông báo</p>
+                <h4 className="font-semibold text-foreground mb-2">Nội dung Email sẽ gửi cho Mentor</h4>
+                <Textarea
+                  rows={5}
+                  placeholder="Chọn hình thức xử lý ở trên để hệ thống tự sinh nội dung email…"
+                  value={emailContent}
+                  onChange={(e) => setEmailContent(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground/80 italic mt-1">
+                  Nội dung email sẽ tự động sinh ra dựa trên hình thức phạt bạn chọn ở trên.
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" className="rounded-lg" onClick={() => setActiveReport(null)}>Hủy thao tác</Button>
+            <Button
+              className="gradient-primary border-0 text-primary-foreground rounded-lg"
+              disabled={!strikeChoice}
+              onClick={submitVerdict}
+            >
+              <Send className="h-4 w-4" />
+              Xác nhận & Gửi thông báo
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
+
   );
 }
