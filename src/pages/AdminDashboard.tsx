@@ -28,14 +28,16 @@ const pendingCourses = [
 type ReportItem = {
   id: string; title: string; type: "course" | "mentor" | "comment" | "payment";
   reason: string; reporter: string; reportedUser: string; reports: number;
-  date: string; status: "pending" | "resolved" | "dismissed"; detail: string;
+  date: string; status: "pending" | "resolved" | "dismissed" | "appealed"; detail: string;
+  mentorStrikes: number;
 };
 
 const reportedItems: ReportItem[] = [
-  { id: "r1", title: "Khóa học đáng ngờ XYZ", type: "course", reason: "Nội dung không phù hợp", reporter: "Nguyễn Văn A", reportedUser: "Trần B", reports: 5, date: "08/03/2026", status: "pending", detail: "Khóa học chứa nội dung sao chép từ nguồn khác mà không ghi nguồn" },
-  { id: "r2", title: "Mentor giả mạo ABC", type: "mentor", reason: "Thông tin sai lệch", reporter: "Lê C", reportedUser: "Phạm D", reports: 3, date: "07/03/2026", status: "pending", detail: "Mentor tự xưng có bằng cấp nhưng không có bằng chứng" },
-  { id: "r3", title: "Bình luận xúc phạm", type: "comment", reason: "Ngôn từ thù ghét", reporter: "Hoàng E", reportedUser: "Vũ F", reports: 8, date: "06/03/2026", status: "resolved", detail: "Bình luận chứa lời lẽ xúc phạm và phân biệt" },
-  { id: "r4", title: "Lừa đảo thanh toán", type: "payment", reason: "Gian lận tài chính", reporter: "Đỗ G", reportedUser: "Bùi H", reports: 12, date: "05/03/2026", status: "dismissed", detail: "Mentor thu tiền ngoài hệ thống và không hoàn trả" },
+  { id: "r1", title: "Khóa học đáng ngờ XYZ", type: "course", reason: "Nội dung không phù hợp", reporter: "Nguyễn Văn A", reportedUser: "Trần B", reports: 5, date: "08/03/2026", status: "pending", detail: "Khóa học chứa nội dung sao chép từ nguồn khác mà không ghi nguồn", mentorStrikes: 1 },
+  { id: "r2", title: "Mentor giả mạo ABC", type: "mentor", reason: "Thông tin sai lệch", reporter: "Lê C", reportedUser: "Phạm D", reports: 3, date: "07/03/2026", status: "pending", detail: "Mentor tự xưng có bằng cấp nhưng không có bằng chứng", mentorStrikes: 0 },
+  { id: "r3", title: "Bình luận xúc phạm", type: "comment", reason: "Ngôn từ thù ghét", reporter: "Hoàng E", reportedUser: "Vũ F", reports: 8, date: "06/03/2026", status: "resolved", detail: "Bình luận chứa lời lẽ xúc phạm và phân biệt", mentorStrikes: 2 },
+  { id: "r4", title: "Lừa đảo thanh toán", type: "payment", reason: "Gian lận tài chính", reporter: "Đỗ G", reportedUser: "Bùi H", reports: 12, date: "05/03/2026", status: "dismissed", detail: "Mentor thu tiền ngoài hệ thống và không hoàn trả", mentorStrikes: 2 },
+  { id: "r5", title: "Khiếu nại quyết định gỡ bài", type: "course", reason: "Mentor kháng cáo", reporter: "Mentor Trần B", reportedUser: "Admin", reports: 1, date: "09/03/2026", status: "appealed", detail: "Mentor cho rằng nội dung bị gỡ là hợp lệ và yêu cầu xem xét lại", mentorStrikes: 1 },
 ];
 
 const promotedListings = [
