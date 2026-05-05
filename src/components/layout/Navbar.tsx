@@ -25,7 +25,7 @@ export function Navbar() {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/");
+    navigate("/auth");
   };
 
   const initials = user?.name
