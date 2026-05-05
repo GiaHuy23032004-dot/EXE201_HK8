@@ -47,6 +47,18 @@ export function Navbar() {
     { label: "Bản đồ", path: "/map" },
   ];
 
+  const mentorNotifs = [
+    { icon: Calendar, color: "text-primary", title: "Học viên mới đặt lịch", desc: "Trần Thị B vừa đặt lịch học khóa 'Guitar cơ bản' lúc 19:00 thứ 5.", time: "5 phút trước" },
+    { icon: MessageSquare, color: "text-secondary", title: "Tin nhắn mới", desc: "Bạn có 1 tin nhắn mới từ học viên Lê Văn C.", time: "1 giờ trước" },
+    { icon: DollarSign, color: "text-success", title: "Thanh toán thành công", desc: "Bạn vừa nhận 450.000đ từ buổi học hôm nay.", time: "3 giờ trước" },
+  ];
+  const learnerNotifs = [
+    { icon: CheckCircle2, color: "text-success", title: "Mentor đã xác nhận lịch", desc: "Mentor Nguyễn Văn A đã xác nhận buổi học vào 20:00 tối nay.", time: "10 phút trước" },
+    { icon: Star, color: "text-warning", title: "Đánh giá khóa học", desc: "Hãy đánh giá buổi học 'Tiếng Anh giao tiếp' bạn vừa hoàn thành.", time: "2 giờ trước" },
+    { icon: MessageSquare, color: "text-secondary", title: "Tin nhắn từ Mentor", desc: "Mentor đã gửi tài liệu cho buổi học sắp tới.", time: "Hôm qua" },
+  ];
+  const notifications = user?.role === "mentor" ? mentorNotifs : learnerNotifs;
+
   return (
     <nav className="sticky top-0 z-50 border-b bg-background backdrop-blur-lg">
       <div className="container flex h-16 items-center justify-between">
