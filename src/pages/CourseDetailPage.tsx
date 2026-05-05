@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { motion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 
 const schedule = [
   { day: "Thứ 2", time: "09:00 - 11:00" },
@@ -17,6 +18,8 @@ const schedule = [
 
 export default function CourseDetailPage() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const isLearner = !user || user.role === "learner";
   const course = mockCourses.find((c) => c.id === id) || mockCourses[0];
   const mentor = mockMentors.find((m) => m.name === course.mentorName) || mockMentors[0];
 
@@ -132,20 +135,28 @@ export default function CourseDetailPage() {
                   <span className="text-sm text-muted-foreground">/buổi</span>
                 </div>
 
-                <Link to={`/booking/${course.id}`}>
-                  <Button className="w-full gradient-primary border-0 text-primary-foreground text-base py-6 rounded-xl mb-3">
-                    Đặt lịch học ngay
-                  </Button>
-                </Link>
+                {isLearner ? (
+                  <>
+                    <Link to={`/booking/${course.id}`}>
+                      <Button className="w-full gradient-primary border-0 text-primary-foreground text-base py-6 rounded-xl mb-3">
+                        Đặt lịch học ngay
+                      </Button>
+                    </Link>
 
-                <div className="flex gap-2">
-                  <Button variant="outline" className="flex-1 rounded-xl">
-                    <Heart className="mr-2 h-4 w-4" />Lưu
-                  </Button>
-                  <Button variant="outline" className="flex-1 rounded-xl">
-                    <Share2 className="mr-2 h-4 w-4" />Chia sẻ
-                  </Button>
-                </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" className="flex-1 rounded-xl">
+                        <Heart className="mr-2 h-4 w-4" />Lưu
+                      </Button>
+                      <Button variant="outline" className="flex-1 rounded-xl">
+                        <Share2 className="mr-2 h-4 w-4" />Chia sẻ
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground text-center">
+                    Bạn đang xem với vai trò Mentor — chỉ học viên mới có thể đặt lịch học.
+                  </div>
+                )}
               </div>
 
               {/* Mentor card */}
