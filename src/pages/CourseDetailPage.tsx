@@ -18,6 +18,8 @@ const schedule = [
 
 export default function CourseDetailPage() {
   const { id } = useParams();
+  const { user } = useAuth();
+  const isLearner = !user || user.role === "learner";
   const course = mockCourses.find((c) => c.id === id) || mockCourses[0];
   const mentor = mockMentors.find((m) => m.name === course.mentorName) || mockMentors[0];
 
