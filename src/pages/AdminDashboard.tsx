@@ -466,9 +466,9 @@ export default function AdminDashboard() {
           {/* Reports Tab */}
           <TabsContent value="reports">
             <div className="mb-4 flex items-center gap-2 flex-wrap">
-              {(["all", "pending", "resolved", "dismissed"] as const).map((f) => (
+              {(["all", "pending", "appealed", "resolved", "dismissed"] as const).map((f) => (
                 <Button key={f} size="sm" variant={reportFilter === f ? "default" : "outline"} className={`rounded-lg text-xs ${reportFilter === f ? "gradient-primary border-0 text-primary-foreground" : ""}`} onClick={() => setReportFilter(f)}>
-                  {f === "all" ? "Tất cả" : f === "pending" ? "Chờ xử lý" : f === "resolved" ? "Đã xử lý" : "Bỏ qua"}
+                  {f === "all" ? "Tất cả" : f === "pending" ? "Chờ xử lý" : f === "appealed" ? "Kháng cáo" : f === "resolved" ? "Đã xử lý" : "Bỏ qua"}
                   {f !== "all" && ` (${reports.filter(r => r.status === f).length})`}
                 </Button>
               ))}
@@ -485,15 +485,25 @@ export default function AdminDashboard() {
                         <p className="font-semibold text-card-foreground">{r.title}</p>
                         {reportStatusBadge(r.status)}
                         <Badge variant="outline" className="text-[10px]">{r.reports} báo cáo</Badge>
+                        {r.reports >= 5 && (
+                          <Badge className="bg-warning/15 text-warning border-0 text-[10px] gap-1">
+                            <EyeOff className="h-3 w-3" /> Hệ thống tự động ẩn
+                          </Badge>
+                        )}
+                        {r.status === "appealed" && (
+                          <Badge className="bg-primary/10 text-primary border-0 text-[10px] gap-1">
+                            <AlertTriangle className="h-3 w-3" /> Mentor kháng cáo
+                          </Badge>
+                        )}
                       </div>
                       <p className="text-xs text-muted-foreground">Lý do: {r.reason}</p>
                       <p className="text-xs text-muted-foreground">Người báo cáo: {r.reporter} → Bị báo cáo: {r.reportedUser}</p>
                       <p className="text-xs text-muted-foreground mt-1 italic">{r.detail}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{r.date}</p>
+                      <p className="text-xs text-muted-foreground mt-1">{r.date} • Lịch sử vi phạm Mentor: {r.mentorStrikes}/3</p>
                     </div>
-                    {r.status === "pending" && (
+                    {(r.status === "pending" || r.status === "appealed") && (
                       <div className="flex gap-2 shrink-0">
-                        <Button size="sm" onClick={() => handleReportAction(r.id, "resolve")} className="gradient-primary border-0 text-primary-foreground rounded-lg"><CheckCircle2 className="mr-1 h-4 w-4" />Xử lý</Button>
+                        <Button size="sm" onClick={() => openReportModal(r)} className="gradient-primary border-0 text-primary-foreground rounded-lg"><Gavel className="mr-1 h-4 w-4" />Xử lý</Button>
                         <Button size="sm" variant="outline" onClick={() => handleReportAction(r.id, "dismiss")} className="rounded-lg"><X className="mr-1 h-4 w-4" />Bỏ qua</Button>
                       </div>
                     )}
