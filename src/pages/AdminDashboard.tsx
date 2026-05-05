@@ -205,9 +205,20 @@ export default function AdminDashboard() {
       case "pending": return <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ xử lý</Badge>;
       case "resolved": return <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã xử lý</Badge>;
       case "dismissed": return <Badge className="bg-muted text-muted-foreground border-0 text-[10px]">Bỏ qua</Badge>;
+      case "appealed": return <Badge className="bg-primary/10 text-primary border-0 text-[10px]">Kháng cáo</Badge>;
       default: return null;
     }
   };
+
+  const submitVerdict = () => {
+    if (!activeReport || !strikeChoice) return;
+    const opt = strikeOptions.find((o) => o.id === strikeChoice)!;
+    const newStatus = strikeChoice === "ignore" ? "dismissed" as const : "resolved" as const;
+    setReports(reports.map(r => r.id === activeReport.id ? { ...r, status: newStatus } : r));
+    toast({ title: "Đã gửi phán quyết", description: `${opt.label} → đã gửi email cho mentor.` });
+    setActiveReport(null);
+  };
+
 
   return (
     <MainLayout>
