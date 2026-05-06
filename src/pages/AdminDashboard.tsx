@@ -124,7 +124,24 @@ export default function AdminDashboard() {
   const [activeReport, setActiveReport] = useState<ReportItem | null>(null);
   const [strikeChoice, setStrikeChoice] = useState<string>("");
   const [emailContent, setEmailContent] = useState<string>("");
+  const [payouts, setPayouts] = useState<PayoutRequest[]>(initialPayouts);
+  const [activePayout, setActivePayout] = useState<PayoutRequest | null>(null);
   const { toast } = useToast();
+
+  const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
+  const FEE = 0.15;
+
+  const confirmPayout = () => {
+    if (!activePayout) return;
+    setPayouts(payouts.map(p => p.id === activePayout.id ? { ...p, status: "paid" } : p));
+    toast({ title: "Đã chuyển khoản thành công", description: `Đã thanh toán ${fmtVnd(activePayout.amount)} cho ${activePayout.mentor}.` });
+    setActivePayout(null);
+  };
+
+  const copyAccount = (acc: string) => {
+    navigator.clipboard?.writeText(acc);
+    toast({ title: "Đã copy số tài khoản" });
+  };
 
   const strikeOptions = [
     { id: "ignore", label: "Bỏ qua báo cáo", desc: "Sai sự thật / Không phạt", tone: "muted", email: "Xin chào, sau khi xem xét, chúng tôi không tìm thấy vi phạm trong nội dung của bạn. Báo cáo đã được bỏ qua. Cảm ơn bạn đã đóng góp cho cộng đồng." },
