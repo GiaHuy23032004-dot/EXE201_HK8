@@ -46,6 +46,41 @@ const promotedListings = [
   { id: "p2", title: "Lập trình Web Fullstack", mentor: "Đức Anh", fee: 15000, days: 3, status: "expired" },
 ];
 
+type PayoutOrder = { code: string; date: string; gross: number };
+type PayoutRequest = {
+  id: string;
+  mentor: string;
+  amount: number;
+  date: string;
+  bank: string;
+  account: string;
+  holder: string;
+  orders: PayoutOrder[];
+  status: "pending" | "paid";
+};
+
+const initialPayouts: PayoutRequest[] = [
+  {
+    id: "po1", mentor: "Minh Tuấn", amount: 1955000, date: "08/03/2026",
+    bank: "Vietcombank", account: "0123456789", holder: "NGUYEN MINH TUAN",
+    status: "pending",
+    orders: [
+      { code: "OD-1042", date: "20/02/2026", gross: 500000 },
+      { code: "OD-1051", date: "21/02/2026", gross: 800000 },
+      { code: "OD-1078", date: "23/02/2026", gross: 1000000 },
+    ],
+  },
+  {
+    id: "po2", mentor: "Lan Anh", amount: 1020000, date: "07/03/2026",
+    bank: "Techcombank", account: "9988776655", holder: "TRAN LAN ANH",
+    status: "pending",
+    orders: [
+      { code: "OD-1033", date: "18/02/2026", gross: 600000 },
+      { code: "OD-1060", date: "22/02/2026", gross: 600000 },
+    ],
+  },
+];
+
 // Analytics data
 const monthlyRevenue = [
   { month: "T10", revenue: 85, bookings: 620, users: 4200 },
