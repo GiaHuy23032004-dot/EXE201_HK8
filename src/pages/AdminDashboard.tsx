@@ -582,8 +582,137 @@ export default function AdminDashboard() {
               </div>
             ))}
           </TabsContent>
+
+          {/* Payouts Tab */}
+          <TabsContent value="payouts">
+            <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
+              <div className="p-5 border-b flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="font-semibold text-foreground">Quản lý Rút tiền</h3>
+                  <p className="text-xs text-muted-foreground">Đối soát và xác nhận chuyển khoản cho Mentor</p>
+                </div>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mentor</TableHead>
+                    <TableHead className="text-right">Số tiền yêu cầu</TableHead>
+                    <TableHead>Ngày gửi</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead className="text-right">Hành động</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payouts.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.mentor}</TableCell>
+                      <TableCell className="text-right font-bold text-secondary">{fmtVnd(p.amount)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{p.date}</TableCell>
+                      <TableCell>
+                        {p.status === "pending"
+                          ? <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ xử lý</Badge>
+                          : <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã thanh toán</Badge>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {p.status === "pending" ? (
+                          <Button size="sm" onClick={() => setActivePayout(p)} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+                            <Banknote className="mr-1 h-4 w-4" />Đối soát & Duyệt
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
+
+      {/* Payout Reconciliation Modal */}
+      <Dialog open={!!activePayout} onOpenChange={(o) => !o && setActivePayout(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-primary" />Đối soát yêu cầu rút tiền — {activePayout?.mentor}
+            </DialogTitle>
+          </DialogHeader>
+          {activePayout && (
+            <div className="space-y-5">
+              {/* Bank info */}
+              <div className="rounded-xl border bg-accent/30 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Thông tin nhận tiền</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">Ngân hàng</p>
+                    <p className="font-semibold text-foreground">{activePayout.bank}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">Số tài khoản</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-foreground tracking-wider">{activePayout.account}</p>
+                      <Button size="sm" variant="outline" className="h-7 px-2 rounded-md" onClick={() => copyAccount(activePayout.account)}>
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">Chủ tài khoản</p>
+                    <p className="font-semibold text-foreground uppercase">{activePayout.holder}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reconciliation table */}
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Bảng đối soát đơn hàng (đã qua 7 ngày, chưa từng rút)</p>
+                <div className="rounded-xl border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Mã đơn</TableHead>
+                        <TableHead>Ngày mua</TableHead>
+                        <TableHead className="text-right">Giá trị</TableHead>
+                        <TableHead className="text-right">Hoa hồng (15%)</TableHead>
+                        <TableHead className="text-right">Thực trả Mentor</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {activePayout.orders.map((o) => {
+                        const fee = o.gross * FEE;
+                        return (
+                          <TableRow key={o.code}>
+                            <TableCell className="font-mono text-xs">{o.code}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{o.date}</TableCell>
+                            <TableCell className="text-right text-sm">{fmtVnd(o.gross)}</TableCell>
+                            <TableCell className="text-right text-sm text-destructive/80">−{fmtVnd(fee)}</TableCell>
+                            <TableCell className="text-right text-sm font-bold text-secondary">{fmtVnd(o.gross - fee)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4">
+            <div className="text-sm">
+              <span className="text-muted-foreground">Tổng cộng cần chuyển: </span>
+              <span className="font-bold text-secondary text-lg">{activePayout ? fmtVnd(activePayout.amount) : ""}</span>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setActivePayout(null)} className="rounded-lg">Hủy</Button>
+              <Button onClick={confirmPayout} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+                <Check className="mr-1 h-4 w-4" />Xác nhận đã chuyển khoản
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Verdict Modal — 5-step moderation flow */}
       <Dialog open={!!activeReport} onOpenChange={(o) => !o && setActiveReport(null)}>
