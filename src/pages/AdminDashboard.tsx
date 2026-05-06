@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { Users, BookOpen, DollarSign, TrendingUp, Shield, Check, X, Eye, BarChart3, Flag, Megaphone, UserX, UserCheck, Crown, Loader2, Search, Trash2, AlertCircle, CheckCircle2, EyeOff, FileText, UserCircle2, History, Send, AlertTriangle, Gavel } from "lucide-react";
+import { Users, BookOpen, DollarSign, TrendingUp, Shield, Check, X, Eye, BarChart3, Flag, Megaphone, UserX, UserCheck, Crown, Loader2, Search, Trash2, AlertCircle, CheckCircle2, EyeOff, FileText, UserCircle2, History, Send, AlertTriangle, Gavel, Wallet, Copy, Banknote } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -43,6 +44,41 @@ const reportedItems: ReportItem[] = [
 const promotedListings = [
   { id: "p1", title: "Guitar Acoustic cho người mới", mentor: "Minh Tuấn", fee: 15000, days: 3, status: "active" },
   { id: "p2", title: "Lập trình Web Fullstack", mentor: "Đức Anh", fee: 15000, days: 3, status: "expired" },
+];
+
+type PayoutOrder = { code: string; date: string; gross: number };
+type PayoutRequest = {
+  id: string;
+  mentor: string;
+  amount: number;
+  date: string;
+  bank: string;
+  account: string;
+  holder: string;
+  orders: PayoutOrder[];
+  status: "pending" | "paid";
+};
+
+const initialPayouts: PayoutRequest[] = [
+  {
+    id: "po1", mentor: "Minh Tuấn", amount: 1955000, date: "08/03/2026",
+    bank: "Vietcombank", account: "0123456789", holder: "NGUYEN MINH TUAN",
+    status: "pending",
+    orders: [
+      { code: "OD-1042", date: "20/02/2026", gross: 500000 },
+      { code: "OD-1051", date: "21/02/2026", gross: 800000 },
+      { code: "OD-1078", date: "23/02/2026", gross: 1000000 },
+    ],
+  },
+  {
+    id: "po2", mentor: "Lan Anh", amount: 1020000, date: "07/03/2026",
+    bank: "Techcombank", account: "9988776655", holder: "TRAN LAN ANH",
+    status: "pending",
+    orders: [
+      { code: "OD-1033", date: "18/02/2026", gross: 600000 },
+      { code: "OD-1060", date: "22/02/2026", gross: 600000 },
+    ],
+  },
 ];
 
 // Analytics data
@@ -88,7 +124,24 @@ export default function AdminDashboard() {
   const [activeReport, setActiveReport] = useState<ReportItem | null>(null);
   const [strikeChoice, setStrikeChoice] = useState<string>("");
   const [emailContent, setEmailContent] = useState<string>("");
+  const [payouts, setPayouts] = useState<PayoutRequest[]>(initialPayouts);
+  const [activePayout, setActivePayout] = useState<PayoutRequest | null>(null);
   const { toast } = useToast();
+
+  const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
+  const FEE = 0.15;
+
+  const confirmPayout = () => {
+    if (!activePayout) return;
+    setPayouts(payouts.map(p => p.id === activePayout.id ? { ...p, status: "paid" } : p));
+    toast({ title: "Đã chuyển khoản thành công", description: `Đã thanh toán ${fmtVnd(activePayout.amount)} cho ${activePayout.mentor}.` });
+    setActivePayout(null);
+  };
+
+  const copyAccount = (acc: string) => {
+    navigator.clipboard?.writeText(acc);
+    toast({ title: "Đã copy số tài khoản" });
+  };
 
   const strikeOptions = [
     { id: "ignore", label: "Bỏ qua báo cáo", desc: "Sai sự thật / Không phạt", tone: "muted", email: "Xin chào, sau khi xem xét, chúng tôi không tìm thấy vi phạm trong nội dung của bạn. Báo cáo đã được bỏ qua. Cảm ơn bạn đã đóng góp cho cộng đồng." },
@@ -258,6 +311,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="courses">📚 Khóa học ({courses.filter(c => c.status === "pending").length})</TabsTrigger>
             <TabsTrigger value="reports">🚩 Báo cáo ({reports.filter(r => r.status === "pending").length})</TabsTrigger>
             <TabsTrigger value="promoted">Quảng cáo</TabsTrigger>
+            <TabsTrigger value="payouts">💸 Rút tiền ({payouts.filter(p => p.status === "pending").length})</TabsTrigger>
           </TabsList>
 
           {/* Analytics Tab */}
@@ -528,8 +582,137 @@ export default function AdminDashboard() {
               </div>
             ))}
           </TabsContent>
+
+          {/* Payouts Tab */}
+          <TabsContent value="payouts">
+            <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
+              <div className="p-5 border-b flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-primary" />
+                <div>
+                  <h3 className="font-semibold text-foreground">Quản lý Rút tiền</h3>
+                  <p className="text-xs text-muted-foreground">Đối soát và xác nhận chuyển khoản cho Mentor</p>
+                </div>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mentor</TableHead>
+                    <TableHead className="text-right">Số tiền yêu cầu</TableHead>
+                    <TableHead>Ngày gửi</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead className="text-right">Hành động</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {payouts.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="font-medium">{p.mentor}</TableCell>
+                      <TableCell className="text-right font-bold text-secondary">{fmtVnd(p.amount)}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{p.date}</TableCell>
+                      <TableCell>
+                        {p.status === "pending"
+                          ? <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ xử lý</Badge>
+                          : <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã thanh toán</Badge>}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {p.status === "pending" ? (
+                          <Button size="sm" onClick={() => setActivePayout(p)} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+                            <Banknote className="mr-1 h-4 w-4" />Đối soát & Duyệt
+                          </Button>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
         </Tabs>
       </div>
+
+      {/* Payout Reconciliation Modal */}
+      <Dialog open={!!activePayout} onOpenChange={(o) => !o && setActivePayout(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Banknote className="h-5 w-5 text-primary" />Đối soát yêu cầu rút tiền — {activePayout?.mentor}
+            </DialogTitle>
+          </DialogHeader>
+          {activePayout && (
+            <div className="space-y-5">
+              {/* Bank info */}
+              <div className="rounded-xl border bg-accent/30 p-4">
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Thông tin nhận tiền</p>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">Ngân hàng</p>
+                    <p className="font-semibold text-foreground">{activePayout.bank}</p>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">Số tài khoản</p>
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-foreground tracking-wider">{activePayout.account}</p>
+                      <Button size="sm" variant="outline" className="h-7 px-2 rounded-md" onClick={() => copyAccount(activePayout.account)}>
+                        <Copy className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-[11px] text-muted-foreground">Chủ tài khoản</p>
+                    <p className="font-semibold text-foreground uppercase">{activePayout.holder}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Reconciliation table */}
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Bảng đối soát đơn hàng (đã qua 7 ngày, chưa từng rút)</p>
+                <div className="rounded-xl border overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Mã đơn</TableHead>
+                        <TableHead>Ngày mua</TableHead>
+                        <TableHead className="text-right">Giá trị</TableHead>
+                        <TableHead className="text-right">Hoa hồng (15%)</TableHead>
+                        <TableHead className="text-right">Thực trả Mentor</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {activePayout.orders.map((o) => {
+                        const fee = o.gross * FEE;
+                        return (
+                          <TableRow key={o.code}>
+                            <TableCell className="font-mono text-xs">{o.code}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{o.date}</TableCell>
+                            <TableCell className="text-right text-sm">{fmtVnd(o.gross)}</TableCell>
+                            <TableCell className="text-right text-sm text-destructive/80">−{fmtVnd(fee)}</TableCell>
+                            <TableCell className="text-right text-sm font-bold text-secondary">{fmtVnd(o.gross - fee)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4">
+            <div className="text-sm">
+              <span className="text-muted-foreground">Tổng cộng cần chuyển: </span>
+              <span className="font-bold text-secondary text-lg">{activePayout ? fmtVnd(activePayout.amount) : ""}</span>
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setActivePayout(null)} className="rounded-lg">Hủy</Button>
+              <Button onClick={confirmPayout} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+                <Check className="mr-1 h-4 w-4" />Xác nhận đã chuyển khoản
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Verdict Modal — 5-step moderation flow */}
       <Dialog open={!!activeReport} onOpenChange={(o) => !o && setActiveReport(null)}>
