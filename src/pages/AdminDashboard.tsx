@@ -126,16 +126,53 @@ export default function AdminDashboard() {
   const [emailContent, setEmailContent] = useState<string>("");
   const [payouts, setPayouts] = useState<PayoutRequest[]>(initialPayouts);
   const [activePayout, setActivePayout] = useState<PayoutRequest | null>(null);
+  const [payoutTab, setPayoutTab] = useState<"pending" | "history">("pending");
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [rejectReason, setRejectReason] = useState("");
+  const [showProofPanel, setShowProofPanel] = useState(false);
+  const [bankTxCode, setBankTxCode] = useState("");
+  const [billFileName, setBillFileName] = useState("");
   const { toast } = useToast();
 
   const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
   const FEE = 0.15;
 
-  const confirmPayout = () => {
+  const resetPayoutModal = () => {
+    setActivePayout(null);
+    setShowRejectInput(false);
+    setRejectReason("");
+    setShowProofPanel(false);
+    setBankTxCode("");
+    setBillFileName("");
+  };
+
+  const finalizePayout = () => {
     if (!activePayout) return;
     setPayouts(payouts.map(p => p.id === activePayout.id ? { ...p, status: "paid" } : p));
-    toast({ title: "Đã chuyển khoản thành công", description: `Đã thanh toán ${fmtVnd(activePayout.amount)} cho ${activePayout.mentor}.` });
-    setActivePayout(null);
+    toast({ title: "Hoàn tất thanh toán", description: `Đã thanh toán ${fmtVnd(activePayout.amount)} cho ${activePayout.mentor}.${bankTxCode ? ` Mã GD: ${bankTxCode}` : ""}` });
+    resetPayoutModal();
+  };
+
+  const rejectPayout = () => {
+    if (!activePayout || !rejectReason.trim()) {
+      toast({ title: "Vui lòng nhập lý do từ chối", variant: "destructive" });
+      return;
+    }
+    setPayouts(payouts.filter(p => p.id !== activePayout.id));
+    toast({ title: "Đã từ chối yêu cầu rút tiền", description: `Lý do: ${rejectReason}` });
+    resetPayoutModal();
+  };
+
+  const exportPayoutsCSV = () => {
+    const rows = payouts.filter(p => payoutTab === "pending" ? p.status === "pending" : p.status === "paid");
+    const header = ["Mentor", "So tien", "Ngay", "Ngan hang", "So TK", "Chu TK", "Trang thai"];
+    const csv = [header.join(","), ...rows.map(r => [r.mentor, r.amount, r.date, r.bank, r.account, r.holder, r.status].join(","))].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `payouts-${payoutTab}-${Date.now()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Đã xuất CSV" });
   };
 
   const copyAccount = (acc: string) => {
