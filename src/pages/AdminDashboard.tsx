@@ -698,7 +698,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Payout Reconciliation Modal */}
-      <Dialog open={!!activePayout} onOpenChange={(o) => !o && setActivePayout(null)}>
+      <Dialog open={!!activePayout} onOpenChange={(o) => !o && resetPayoutModal()}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -762,6 +762,70 @@ export default function AdminDashboard() {
                   </Table>
                 </div>
               </div>
+
+              {/* Reject reason input */}
+              {showRejectInput && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 animate-in slide-in-from-top-2">
+                  <Label className="text-sm font-semibold text-destructive flex items-center gap-1 mb-2">
+                    <XCircle className="h-4 w-4" />Lý do từ chối yêu cầu
+                  </Label>
+                  <Textarea
+                    placeholder="VD: Sai số tài khoản, thông tin chủ TK không trùng khớp..."
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    className="bg-background"
+                  />
+                  <div className="flex justify-end gap-2 mt-3">
+                    <Button variant="ghost" size="sm" onClick={() => { setShowRejectInput(false); setRejectReason(""); }}>Hủy</Button>
+                    <Button size="sm" variant="destructive" onClick={rejectPayout} className="rounded-lg">
+                      <XCircle className="mr-1 h-4 w-4" />Xác nhận từ chối
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Proof of payment slide-out panel */}
+              {showProofPanel && (
+                <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-4 animate-in slide-in-from-top-2 space-y-3">
+                  <p className="text-xs uppercase tracking-wide text-primary font-semibold flex items-center gap-1">
+                    <Receipt className="h-4 w-4" />Bằng chứng chuyển khoản
+                  </p>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Mã giao dịch ngân hàng (Tùy chọn)</Label>
+                    <Input
+                      placeholder="VD: FT2026030812345"
+                      value={bankTxCode}
+                      onChange={(e) => setBankTxCode(e.target.value)}
+                      className="mt-1 bg-background"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Tải lên ảnh Bill chuyển khoản</Label>
+                    <label className="mt-1 flex flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-primary/40 bg-background p-4 cursor-pointer hover:bg-accent/30 transition">
+                      <Upload className="h-5 w-5 text-primary" />
+                      <span className="text-xs text-muted-foreground">
+                        {billFileName || "Kéo thả hoặc click để chọn ảnh"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => setBillFileName(e.target.files?.[0]?.name || "")}
+                      />
+                    </label>
+                  </div>
+                  <Button
+                    onClick={finalizePayout}
+                    disabled={!billFileName}
+                    className="w-full gradient-primary border-0 text-primary-foreground rounded-lg disabled:opacity-50"
+                  >
+                    <CheckCircle2 className="mr-1 h-4 w-4" />Hoàn tất thanh toán
+                  </Button>
+                  {!billFileName && (
+                    <p className="text-[11px] text-muted-foreground text-center">Vui lòng tải lên ảnh bill để chốt sổ an toàn</p>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4">
@@ -769,9 +833,21 @@ export default function AdminDashboard() {
               <span className="text-muted-foreground">Tổng cộng cần chuyển: </span>
               <span className="font-bold text-secondary text-lg">{activePayout ? fmtVnd(activePayout.amount) : ""}</span>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setActivePayout(null)} className="rounded-lg">Hủy</Button>
-              <Button onClick={confirmPayout} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+            <div className="flex gap-2 flex-wrap">
+              <Button
+                variant="outline"
+                onClick={() => setShowRejectInput(true)}
+                disabled={showRejectInput || showProofPanel}
+                className="rounded-lg border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <XCircle className="mr-1 h-4 w-4" />Từ chối yêu cầu
+              </Button>
+              <Button variant="outline" onClick={resetPayoutModal} className="rounded-lg">Hủy</Button>
+              <Button
+                onClick={() => setShowProofPanel(true)}
+                disabled={showProofPanel}
+                className="gradient-primary border-0 text-primary-foreground rounded-lg"
+              >
                 <Check className="mr-1 h-4 w-4" />Xác nhận đã chuyển khoản
               </Button>
             </div>
