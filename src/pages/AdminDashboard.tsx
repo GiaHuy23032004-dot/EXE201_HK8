@@ -311,6 +311,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="courses">📚 Khóa học ({courses.filter(c => c.status === "pending").length})</TabsTrigger>
             <TabsTrigger value="reports">🚩 Báo cáo ({reports.filter(r => r.status === "pending").length})</TabsTrigger>
             <TabsTrigger value="promoted">Quảng cáo</TabsTrigger>
+            <TabsTrigger value="payouts">💸 Rút tiền ({payouts.filter(p => p.status === "pending").length})</TabsTrigger>
           </TabsList>
 
           {/* Analytics Tab */}
