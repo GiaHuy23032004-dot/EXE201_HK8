@@ -623,11 +623,32 @@ export default function AdminDashboard() {
           {/* Payouts Tab */}
           <TabsContent value="payouts">
             <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
-              <div className="p-5 border-b flex items-center gap-2">
-                <Wallet className="h-5 w-5 text-primary" />
-                <div>
-                  <h3 className="font-semibold text-foreground">Quản lý Rút tiền</h3>
-                  <p className="text-xs text-muted-foreground">Đối soát và xác nhận chuyển khoản cho Mentor</p>
+              <div className="p-5 border-b flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-5 w-5 text-primary" />
+                  <div>
+                    <h3 className="font-semibold text-foreground">Quản lý Rút tiền</h3>
+                    <p className="text-xs text-muted-foreground">Đối soát và xác nhận chuyển khoản cho Mentor</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="inline-flex rounded-lg border bg-muted/40 p-1">
+                    <button
+                      onClick={() => setPayoutTab("pending")}
+                      className={`px-3 py-1.5 text-xs rounded-md font-medium transition ${payoutTab === "pending" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
+                    >
+                      Chờ xử lý ({payouts.filter(p => p.status === "pending").length})
+                    </button>
+                    <button
+                      onClick={() => setPayoutTab("history")}
+                      className={`px-3 py-1.5 text-xs rounded-md font-medium transition ${payoutTab === "history" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground"}`}
+                    >
+                      Lịch sử thanh toán ({payouts.filter(p => p.status === "paid").length})
+                    </button>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={exportPayoutsCSV} className="rounded-lg">
+                    <Download className="mr-1 h-4 w-4" />Xuất CSV / Excel
+                  </Button>
                 </div>
               </div>
               <Table>
@@ -641,7 +662,7 @@ export default function AdminDashboard() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {payouts.map((p) => (
+                  {payouts.filter(p => payoutTab === "pending" ? p.status === "pending" : p.status === "paid").map((p) => (
                     <TableRow key={p.id}>
                       <TableCell className="font-medium">{p.mentor}</TableCell>
                       <TableCell className="text-right font-bold text-secondary">{fmtVnd(p.amount)}</TableCell>
@@ -657,11 +678,18 @@ export default function AdminDashboard() {
                             <Banknote className="mr-1 h-4 w-4" />Đối soát & Duyệt
                           </Button>
                         ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
+                          <span className="text-xs text-muted-foreground">Hoàn tất</span>
                         )}
                       </TableCell>
                     </TableRow>
                   ))}
+                  {payouts.filter(p => payoutTab === "pending" ? p.status === "pending" : p.status === "paid").length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-8">
+                        {payoutTab === "pending" ? "Không có yêu cầu chờ xử lý" : "Chưa có lịch sử thanh toán"}
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </div>
