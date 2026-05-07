@@ -177,6 +177,73 @@ export default function LearnerDashboard() {
               </div>
             ))}
           </TabsContent>
+
+          <TabsContent value="billing" className="space-y-3">
+            <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
+              <div className="p-5 border-b flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-primary" />
+                <div>
+                  <h3 className="font-semibold text-foreground text-sm">Lịch sử thanh toán</h3>
+                  <p className="text-xs text-muted-foreground">Tổng {billingHistory.length} giao dịch</p>
+                </div>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mã giao dịch</TableHead>
+                    <TableHead>Ngày</TableHead>
+                    <TableHead>Nội dung</TableHead>
+                    <TableHead className="text-right">Số tiền</TableHead>
+                    <TableHead>Phương thức</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead className="text-center">Biên lai</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {billingHistory.map((t) => {
+                    const refunded = t.status === "refunded";
+                    return (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-mono text-xs">{t.id}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{t.date}</TableCell>
+                        <TableCell className="text-sm max-w-[220px] truncate">{t.desc}</TableCell>
+                        <TableCell className="text-right">
+                          <p className={`font-bold text-sm ${refunded ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                            {t.amount.toLocaleString("vi-VN")}đ
+                          </p>
+                          {refunded && (
+                            <p className="text-xs font-medium text-success">+ {t.amount.toLocaleString("vi-VN")}đ (Đã hoàn)</p>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">{t.method}</TableCell>
+                        <TableCell>
+                          {refunded ? (
+                            <Badge className="bg-success/10 text-success border-0 text-[10px] gap-1">
+                              <RotateCcw className="h-3 w-3" />Đã hoàn tiền
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-success/10 text-success border-0 text-[10px] gap-1">
+                              <CheckCircle2 className="h-3 w-3" />Thành công
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 rounded-lg"
+                            onClick={() => toast({ title: "Đang tải biên lai…", description: `${t.id}.pdf` })}
+                          >
+                            <Download className="h-4 w-4 text-primary" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
         </Tabs>
 
         {/* CTA - Tìm thêm khóa học */}
