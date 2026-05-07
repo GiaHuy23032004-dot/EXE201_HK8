@@ -651,6 +651,150 @@ export default function AdminDashboard() {
               </Table>
             </div>
           </TabsContent>
+
+          {/* Master Ledger / Cashflow */}
+          <TabsContent value="ledger">
+            {(() => {
+              const parse = (s: string) => {
+                const [d, m, y] = s.split(/[\s/]/);
+                return new Date(`${y}-${m}-${d}`).getTime();
+              };
+              const fromTs = ledgerFrom ? new Date(ledgerFrom).getTime() : -Infinity;
+              const toTs = ledgerTo ? new Date(ledgerTo).getTime() + 86400000 : Infinity;
+              const filtered = ledgerData.filter(e => {
+                if (ledgerKind !== "all" && e.kind !== ledgerKind) return false;
+                const ts = parse(e.date.split(" ")[0]);
+                if (ts < fromTs || ts > toTs) return false;
+                if (ledgerSearch) {
+                  const q = ledgerSearch.toLowerCase();
+                  if (!e.id.toLowerCase().includes(q) && !e.from.toLowerCase().includes(q) && !e.to.toLowerCase().includes(q)) return false;
+                }
+                return true;
+              });
+
+              const totalGross = filtered.reduce((s, e) => s + (e.kind === "in" ? e.gross : 0), 0);
+              const totalCommission = filtered.reduce((s, e) => s + e.commission, 0);
+              const totalPayout = filtered.reduce((s, e) => s + (e.kind === "payout" ? e.gross : 0), 0);
+
+              const kindLabel = (k: LedgerEntry["kind"]) =>
+                k === "in" ? <Badge className="bg-success/10 text-success border-0 text-[10px]">Nạp vào</Badge>
+                : k === "payout" ? <Badge className="bg-primary/10 text-primary border-0 text-[10px]">Rút ra</Badge>
+                : k === "refund" ? <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]">Hoàn tiền</Badge>
+                : <Badge className="bg-secondary/10 text-secondary border-0 text-[10px]">Hoa hồng</Badge>;
+
+              const exportCsv = () => {
+                const header = ["Mã TXN", "Thời gian", "Người gửi", "Người nhận", "Phân loại", "Tổng tiền", "Hoa hồng"];
+                const rows = filtered.map(e => [e.id, e.date, e.from, e.to, e.kind, e.gross, e.commission]);
+                const csv = [header, ...rows].map(r => r.join(",")).join("\n");
+                const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url; a.download = `so-cai-${Date.now()}.csv`; a.click();
+                URL.revokeObjectURL(url);
+                toast({ title: "Đã xuất file CSV", description: `${filtered.length} giao dịch` });
+              };
+
+              return (
+                <div className="space-y-4">
+                  {/* Filters */}
+                  <div className="rounded-2xl border bg-card p-4 shadow-card">
+                    <div className="flex flex-wrap items-end gap-3">
+                      <div className="flex-1 min-w-[140px]">
+                        <Label className="text-xs text-muted-foreground">Từ ngày</Label>
+                        <Input type="date" value={ledgerFrom} onChange={(e) => setLedgerFrom(e.target.value)} className="mt-1" />
+                      </div>
+                      <div className="flex-1 min-w-[140px]">
+                        <Label className="text-xs text-muted-foreground">Đến ngày</Label>
+                        <Input type="date" value={ledgerTo} onChange={(e) => setLedgerTo(e.target.value)} className="mt-1" />
+                      </div>
+                      <div className="flex-1 min-w-[140px]">
+                        <Label className="text-xs text-muted-foreground">Loại</Label>
+                        <Select value={ledgerKind} onValueChange={(v: typeof ledgerKind) => setLedgerKind(v)}>
+                          <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">Tất cả</SelectItem>
+                            <SelectItem value="in">Tiền vào</SelectItem>
+                            <SelectItem value="payout">Payout</SelectItem>
+                            <SelectItem value="refund">Refund</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex-[2] min-w-[200px]">
+                        <Label className="text-xs text-muted-foreground">Tìm Mã TXN / Tên người dùng</Label>
+                        <div className="relative mt-1">
+                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input className="pl-10" value={ledgerSearch} onChange={(e) => setLedgerSearch(e.target.value)} placeholder="VD: TXN-3001 hoặc Minh Tuấn" />
+                        </div>
+                      </div>
+                      <Button onClick={exportCsv} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+                        <Download className="mr-1 h-4 w-4" />Export Excel
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="rounded-2xl border bg-card p-4 shadow-card">
+                      <p className="text-xs text-muted-foreground">Tổng tiền vào</p>
+                      <p className="text-xl font-bold text-success text-right tabular-nums">{fmtVnd(totalGross)}</p>
+                    </div>
+                    <div className="rounded-2xl border bg-card p-4 shadow-card">
+                      <p className="text-xs text-muted-foreground">Tổng payout</p>
+                      <p className="text-xl font-bold text-primary text-right tabular-nums">{fmtVnd(totalPayout)}</p>
+                    </div>
+                    <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-4 shadow-card">
+                      <p className="text-xs text-muted-foreground">Hoa hồng lưu giữ (Net)</p>
+                      <p className="text-xl font-extrabold text-primary text-right tabular-nums">{fmtVnd(totalCommission)}</p>
+                    </div>
+                  </div>
+
+                  {/* Ledger table */}
+                  <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
+                    <div className="p-4 border-b flex items-center gap-2">
+                      <BookText className="h-4 w-4 text-primary" />
+                      <h3 className="font-semibold text-foreground text-sm">Sổ cái dòng tiền — {filtered.length} giao dịch</h3>
+                    </div>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Mã TXN & Thời gian</TableHead>
+                          <TableHead>Người gửi ➔ Người nhận</TableHead>
+                          <TableHead>Phân loại</TableHead>
+                          <TableHead className="text-right">Tổng tiền (Gross)</TableHead>
+                          <TableHead className="text-right">Hoa hồng lưu giữ</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filtered.map((e) => (
+                          <TableRow key={e.id}>
+                            <TableCell>
+                              <p className="font-mono text-xs font-semibold">{e.id}</p>
+                              <p className="text-[11px] text-muted-foreground">{e.date}</p>
+                            </TableCell>
+                            <TableCell className="text-sm">
+                              <span className="text-muted-foreground">{e.from}</span>
+                              <span className="mx-1 text-primary">➔</span>
+                              <span className="font-medium">{e.to}</span>
+                            </TableCell>
+                            <TableCell>{kindLabel(e.kind)}</TableCell>
+                            <TableCell className="text-right tabular-nums text-sm">{fmtVnd(e.gross)}</TableCell>
+                            <TableCell className={`text-right tabular-nums text-sm font-bold ${e.commission < 0 ? "text-destructive" : "text-primary"}`}>
+                              {e.commission === 0 ? "—" : (e.commission < 0 ? "−" : "") + fmtVnd(Math.abs(e.commission))}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {filtered.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={5} className="text-center text-muted-foreground py-8 text-sm">Không có giao dịch khớp bộ lọc</TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              );
+            })()}
+          </TabsContent>
         </Tabs>
       </div>
 
