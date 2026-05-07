@@ -329,6 +329,7 @@ export default function AdminDashboard() {
             <TabsTrigger value="reports">🚩 Báo cáo ({reports.filter(r => r.status === "pending").length})</TabsTrigger>
             <TabsTrigger value="promoted">Quảng cáo</TabsTrigger>
             <TabsTrigger value="payouts">💸 Rút tiền ({payouts.filter(p => p.status === "pending").length})</TabsTrigger>
+            <TabsTrigger value="ledger">📒 Sổ cái dòng tiền</TabsTrigger>
           </TabsList>
 
           {/* Analytics Tab */}
