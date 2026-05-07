@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { mockCourses, mockReviews } from "@/data/mockData";
-import { Plus, BookOpen, Calendar, DollarSign, Star, Users, Eye, Check, X, Wallet, Clock, ArrowDownToLine, TrendingDown } from "lucide-react";
+import { Plus, BookOpen, Calendar, DollarSign, Star, Users, Eye, Check, X, Wallet, Clock, ArrowDownToLine, TrendingDown, ArrowUpRight, ArrowDownLeft, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,6 +34,20 @@ const transactions: Txn[] = [
   { id: "t4", course: "Lớp Guitar nhóm — Tháng 2", image: mockCourses[1].image, type: "offline", gross: 1200000, daysAgo: 14 },
   { id: "t5", course: "Guitar Acoustic — Buổi 3", image: mockCourses[0].image, type: "online", gross: 350000, daysAgo: 22 },
   { id: "t6", course: "Khóa 1-1 nâng cao", image: mockCourses[0].image, type: "online", gross: 800000, daysAgo: 30 },
+];
+
+type WalletTxn = {
+  id: string; time: string; code: string;
+  kind: "sale" | "withdraw" | "refund";
+  desc: string; delta: number; balance: number;
+};
+
+const walletHistory: WalletTxn[] = [
+  { id: "w1", time: "08/03/2026 09:12", code: "TXN-2041", kind: "sale", desc: "Bán khóa Guitar Acoustic — Buổi 3", delta: 297500, balance: 3855000 },
+  { id: "w2", time: "06/03/2026 14:30", code: "WD-0188", kind: "withdraw", desc: "Rút tiền về Vietcombank •••6789", delta: -2000000, balance: 3557500 },
+  { id: "w3", time: "04/03/2026 18:45", code: "TXN-2010", kind: "sale", desc: "Bán Sách hướng dẫn Guitar (PDF)", delta: 102000, balance: 5557500 },
+  { id: "w4", time: "02/03/2026 11:05", code: "RF-0072", kind: "refund", desc: "Hoàn tiền học viên Lê Minh — Buổi 2", delta: -425000, balance: 5455500 },
+  { id: "w5", time: "28/02/2026 08:20", code: "TXN-1988", kind: "sale", desc: "Bán Lớp Guitar nhóm — Tháng 2", delta: 1020000, balance: 5880500 },
 ];
 
 const FEE_RATE = 0.15;
@@ -240,53 +254,106 @@ export default function MentorDashboard() {
               </div>
             </div>
 
-            {/* Transactions */}
-            <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
-              <div className="p-5 border-b">
-                <h3 className="font-semibold text-foreground">Chi tiết doanh thu</h3>
-                <p className="text-xs text-muted-foreground mt-1">Lịch sử các giao dịch và trạng thái thanh toán</p>
-              </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Bài đăng</TableHead>
-                    <TableHead>Loại</TableHead>
-                    <TableHead className="text-right">Giá gốc</TableHead>
-                    <TableHead className="text-right">Khấu trừ (15%)</TableHead>
-                    <TableHead className="text-right">Thực nhận</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.map((t) => {
-                    const fee = t.gross * FEE_RATE;
-                    const net = t.gross - fee;
-                    const held = t.daysAgo < 7;
-                    return (
-                      <TableRow key={t.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-3">
-                            <img src={t.image} alt={t.course} className="h-9 w-9 rounded-full object-cover" />
-                            <span className="text-sm font-medium text-foreground">{t.course}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>{typeBadge(t.type)}</TableCell>
-                        <TableCell className="text-right text-sm">{fmt(t.gross)}</TableCell>
-                        <TableCell className="text-right text-sm text-destructive/80">−{fmt(fee)}</TableCell>
-                        <TableCell className="text-right text-sm font-bold text-secondary">{fmt(net)}</TableCell>
-                        <TableCell>
-                          {held ? (
-                            <Badge className="bg-warning/10 text-warning border-0 text-[10px] gap-1"><Clock className="h-3 w-3" />Đang tạm giữ</Badge>
-                          ) : (
-                            <Badge className="bg-success/10 text-success border-0 text-[10px] gap-1"><Check className="h-3 w-3" />Đã vào ví</Badge>
-                          )}
-                        </TableCell>
+            {/* Sub-tabs: Sales vs Wallet History */}
+            <Tabs defaultValue="sales">
+              <TabsList>
+                <TabsTrigger value="sales">Chi tiết doanh thu</TabsTrigger>
+                <TabsTrigger value="wallet">Lịch sử giao dịch ví</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="sales">
+                <div className="rounded-2xl border bg-card shadow-card overflow-hidden mt-2">
+                  <div className="p-5 border-b">
+                    <h3 className="font-semibold text-foreground">Chi tiết doanh thu</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Lịch sử các giao dịch và trạng thái thanh toán</p>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Bài đăng</TableHead>
+                        <TableHead>Loại</TableHead>
+                        <TableHead className="text-right">Giá gốc</TableHead>
+                        <TableHead className="text-right">Khấu trừ (15%)</TableHead>
+                        <TableHead className="text-right">Thực nhận</TableHead>
+                        <TableHead>Trạng thái</TableHead>
                       </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.map((t) => {
+                        const fee = t.gross * FEE_RATE;
+                        const net = t.gross - fee;
+                        const held = t.daysAgo < 7;
+                        return (
+                          <TableRow key={t.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <img src={t.image} alt={t.course} className="h-9 w-9 rounded-full object-cover" />
+                                <span className="text-sm font-medium text-foreground">{t.course}</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>{typeBadge(t.type)}</TableCell>
+                            <TableCell className="text-right text-sm">{fmt(t.gross)}</TableCell>
+                            <TableCell className="text-right text-sm text-destructive/80">−{fmt(fee)}</TableCell>
+                            <TableCell className="text-right text-sm font-bold text-secondary">{fmt(net)}</TableCell>
+                            <TableCell>
+                              {held ? (
+                                <Badge className="bg-warning/10 text-warning border-0 text-[10px] gap-1"><Clock className="h-3 w-3" />Đang tạm giữ</Badge>
+                              ) : (
+                                <Badge className="bg-success/10 text-success border-0 text-[10px] gap-1"><Check className="h-3 w-3" />Đã vào ví</Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="wallet">
+                <div className="rounded-2xl border bg-card shadow-card overflow-hidden mt-2">
+                  <div className="p-5 border-b">
+                    <h3 className="font-semibold text-foreground">Lịch sử giao dịch ví</h3>
+                    <p className="text-xs text-muted-foreground mt-1">Mọi biến động số dư ví của bạn</p>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Thời gian</TableHead>
+                        <TableHead>Mã GD</TableHead>
+                        <TableHead>Loại</TableHead>
+                        <TableHead>Nội dung</TableHead>
+                        <TableHead className="text-right">Biến động</TableHead>
+                        <TableHead className="text-right">Số dư cuối</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {walletHistory.map((w) => {
+                        const positive = w.delta > 0;
+                        const kindLabel =
+                          w.kind === "sale" ? { label: "Bán khóa học", icon: <ArrowDownLeft className="h-3 w-3" />, cls: "bg-success/10 text-success" }
+                          : w.kind === "withdraw" ? { label: "Rút tiền", icon: <ArrowUpRight className="h-3 w-3" />, cls: "bg-primary/10 text-primary" }
+                          : { label: "Bị hoàn tiền", icon: <RotateCcw className="h-3 w-3" />, cls: "bg-destructive/10 text-destructive" };
+                        return (
+                          <TableRow key={w.id}>
+                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{w.time}</TableCell>
+                            <TableCell className="font-mono text-xs">{w.code}</TableCell>
+                            <TableCell>
+                              <Badge className={`${kindLabel.cls} border-0 text-[10px] gap-1`}>{kindLabel.icon}{kindLabel.label}</Badge>
+                            </TableCell>
+                            <TableCell className="text-sm max-w-[260px] truncate">{w.desc}</TableCell>
+                            <TableCell className={`text-right font-bold text-sm ${positive ? "text-success" : "text-destructive"}`}>
+                              {positive ? "+ " : "− "}{Math.abs(w.delta).toLocaleString("vi-VN")}đ
+                            </TableCell>
+                            <TableCell className="text-right text-sm font-medium">{w.balance.toLocaleString("vi-VN")}đ</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </TabsContent>
+            </Tabs>
           </TabsContent>
         </Tabs>
       </div>

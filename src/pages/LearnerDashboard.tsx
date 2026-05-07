@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { mockCourses, mockReviews } from "@/data/mockData";
-import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen } from "lucide-react";
+import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Receipt, Download, CheckCircle2, RotateCcw } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,6 +20,20 @@ const bookings = [
 ];
 
 const savedCourses = mockCourses.slice(1, 5);
+
+type Billing = {
+  id: string; date: string; desc: string; amount: number;
+  method: "Thẻ tín dụng" | "Chuyển khoản" | "Ví điện tử";
+  status: "success" | "refunded";
+};
+
+const billingHistory: Billing[] = [
+  { id: "TXN-1284", date: "06/03/2026", desc: mockCourses[0].title, amount: 350000, method: "Thẻ tín dụng", status: "success" },
+  { id: "TXN-1271", date: "01/03/2026", desc: mockCourses[1].title, amount: 500000, method: "Chuyển khoản", status: "success" },
+  { id: "TXN-1245", date: "22/02/2026", desc: mockCourses[2].title, amount: 280000, method: "Ví điện tử", status: "refunded" },
+  { id: "TXN-1219", date: "15/02/2026", desc: mockCourses[3].title, amount: 420000, method: "Thẻ tín dụng", status: "success" },
+  { id: "TXN-1198", date: "08/02/2026", desc: mockCourses[4].title, amount: 600000, method: "Chuyển khoản", status: "success" },
+];
 
 const statusMap: Record<string, { label: string; color: string }> = {
   pending: { label: "Chờ xác nhận", color: "bg-warning/10 text-warning border-warning/20" },
@@ -57,6 +73,7 @@ function BookingItem({ booking }: { booking: typeof bookings[0] }) {
 
 export default function LearnerDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const pending = bookings.filter((b) => b.status === "pending");
   const upcoming = bookings.filter((b) => b.status === "upcoming");
   const completed = bookings.filter((b) => b.status === "completed");
@@ -101,6 +118,7 @@ export default function LearnerDashboard() {
             <TabsTrigger value="completed" className="flex-1">Hoàn thành ({completed.length})</TabsTrigger>
             <TabsTrigger value="saved" className="flex-1">Đã lưu</TabsTrigger>
             <TabsTrigger value="reviews" className="flex-1">Đánh giá</TabsTrigger>
+            <TabsTrigger value="billing" className="flex-1">💳 Thanh toán</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upcoming" className="space-y-3">
@@ -159,6 +177,73 @@ export default function LearnerDashboard() {
                 <p className="text-sm text-foreground">{r.comment}</p>
               </div>
             ))}
+          </TabsContent>
+
+          <TabsContent value="billing" className="space-y-3">
+            <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
+              <div className="p-5 border-b flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-primary" />
+                <div>
+                  <h3 className="font-semibold text-foreground text-sm">Lịch sử thanh toán</h3>
+                  <p className="text-xs text-muted-foreground">Tổng {billingHistory.length} giao dịch</p>
+                </div>
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Mã giao dịch</TableHead>
+                    <TableHead>Ngày</TableHead>
+                    <TableHead>Nội dung</TableHead>
+                    <TableHead className="text-right">Số tiền</TableHead>
+                    <TableHead>Phương thức</TableHead>
+                    <TableHead>Trạng thái</TableHead>
+                    <TableHead className="text-center">Biên lai</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {billingHistory.map((t) => {
+                    const refunded = t.status === "refunded";
+                    return (
+                      <TableRow key={t.id}>
+                        <TableCell className="font-mono text-xs">{t.id}</TableCell>
+                        <TableCell className="text-xs text-muted-foreground">{t.date}</TableCell>
+                        <TableCell className="text-sm max-w-[220px] truncate">{t.desc}</TableCell>
+                        <TableCell className="text-right">
+                          <p className={`font-bold text-sm ${refunded ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                            {t.amount.toLocaleString("vi-VN")}đ
+                          </p>
+                          {refunded && (
+                            <p className="text-xs font-medium text-success">+ {t.amount.toLocaleString("vi-VN")}đ (Đã hoàn)</p>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-xs">{t.method}</TableCell>
+                        <TableCell>
+                          {refunded ? (
+                            <Badge className="bg-success/10 text-success border-0 text-[10px] gap-1">
+                              <RotateCcw className="h-3 w-3" />Đã hoàn tiền
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-success/10 text-success border-0 text-[10px] gap-1">
+                              <CheckCircle2 className="h-3 w-3" />Thành công
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-8 w-8 p-0 rounded-lg"
+                            onClick={() => toast({ title: "Đang tải biên lai…", description: `${t.id}.pdf` })}
+                          >
+                            <Download className="h-4 w-4 text-primary" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           </TabsContent>
         </Tabs>
 
