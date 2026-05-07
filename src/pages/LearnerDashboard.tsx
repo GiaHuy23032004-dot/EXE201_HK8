@@ -73,6 +73,7 @@ function BookingItem({ booking }: { booking: typeof bookings[0] }) {
 
 export default function LearnerDashboard() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const pending = bookings.filter((b) => b.status === "pending");
   const upcoming = bookings.filter((b) => b.status === "upcoming");
   const completed = bookings.filter((b) => b.status === "completed");
