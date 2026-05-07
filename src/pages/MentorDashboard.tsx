@@ -36,6 +36,20 @@ const transactions: Txn[] = [
   { id: "t6", course: "Khóa 1-1 nâng cao", image: mockCourses[0].image, type: "online", gross: 800000, daysAgo: 30 },
 ];
 
+type WalletTxn = {
+  id: string; time: string; code: string;
+  kind: "sale" | "withdraw" | "refund";
+  desc: string; delta: number; balance: number;
+};
+
+const walletHistory: WalletTxn[] = [
+  { id: "w1", time: "08/03/2026 09:12", code: "TXN-2041", kind: "sale", desc: "Bán khóa Guitar Acoustic — Buổi 3", delta: 297500, balance: 3855000 },
+  { id: "w2", time: "06/03/2026 14:30", code: "WD-0188", kind: "withdraw", desc: "Rút tiền về Vietcombank •••6789", delta: -2000000, balance: 3557500 },
+  { id: "w3", time: "04/03/2026 18:45", code: "TXN-2010", kind: "sale", desc: "Bán Sách hướng dẫn Guitar (PDF)", delta: 102000, balance: 5557500 },
+  { id: "w4", time: "02/03/2026 11:05", code: "RF-0072", kind: "refund", desc: "Hoàn tiền học viên Lê Minh — Buổi 2", delta: -425000, balance: 5455500 },
+  { id: "w5", time: "28/02/2026 08:20", code: "TXN-1988", kind: "sale", desc: "Bán Lớp Guitar nhóm — Tháng 2", delta: 1020000, balance: 5880500 },
+];
+
 const FEE_RATE = 0.15;
 
 const typeBadge = (t: Txn["type"]) => {
