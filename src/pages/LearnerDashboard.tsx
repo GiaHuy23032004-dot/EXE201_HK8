@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { mockCourses, mockReviews } from "@/data/mockData";
-import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen } from "lucide-react";
+import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Receipt, Download, CheckCircle2, RotateCcw } from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
