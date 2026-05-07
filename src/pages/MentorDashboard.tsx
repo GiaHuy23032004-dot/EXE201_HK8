@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { mockCourses, mockReviews } from "@/data/mockData";
-import { Plus, BookOpen, Calendar, DollarSign, Star, Users, Eye, Check, X, Wallet, Clock, ArrowDownToLine, TrendingDown } from "lucide-react";
+import { Plus, BookOpen, Calendar, DollarSign, Star, Users, Eye, Check, X, Wallet, Clock, ArrowDownToLine, TrendingDown, ArrowUpRight, ArrowDownLeft, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
