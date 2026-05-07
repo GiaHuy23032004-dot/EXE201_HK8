@@ -117,6 +117,7 @@ export default function LearnerDashboard() {
             <TabsTrigger value="completed" className="flex-1">Hoàn thành ({completed.length})</TabsTrigger>
             <TabsTrigger value="saved" className="flex-1">Đã lưu</TabsTrigger>
             <TabsTrigger value="reviews" className="flex-1">Đánh giá</TabsTrigger>
+            <TabsTrigger value="billing" className="flex-1">💳 Thanh toán</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upcoming" className="space-y-3">
