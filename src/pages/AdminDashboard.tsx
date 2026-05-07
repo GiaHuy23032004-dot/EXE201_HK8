@@ -142,6 +142,10 @@ export default function AdminDashboard() {
   const [strikeChoice, setStrikeChoice] = useState<string>("");
   const [emailContent, setEmailContent] = useState<string>("");
   const [payouts, setPayouts] = useState<PayoutRequest[]>(initialPayouts);
+  const [ledgerFrom, setLedgerFrom] = useState("");
+  const [ledgerTo, setLedgerTo] = useState("");
+  const [ledgerKind, setLedgerKind] = useState<"all" | "in" | "payout" | "refund">("all");
+  const [ledgerSearch, setLedgerSearch] = useState("");
   const [activePayout, setActivePayout] = useState<PayoutRequest | null>(null);
   const { toast } = useToast();
 
