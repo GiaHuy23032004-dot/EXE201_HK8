@@ -82,6 +82,22 @@ const initialPayouts: PayoutRequest[] = [
   },
 ];
 
+type LedgerEntry = {
+  id: string; date: string; from: string; to: string;
+  kind: "in" | "payout" | "commission" | "refund";
+  gross: number; commission: number;
+};
+
+const ledgerData: LedgerEntry[] = [
+  { id: "TXN-3001", date: "08/03/2026 10:21", from: "Học viên Nguyễn A", to: "Hệ thống", kind: "in", gross: 500000, commission: 75000 },
+  { id: "TXN-3002", date: "08/03/2026 11:05", from: "Học viên Trần B", to: "Hệ thống", kind: "in", gross: 350000, commission: 52500 },
+  { id: "PO-1042",  date: "08/03/2026 14:30", from: "Hệ thống", to: "Mentor Minh Tuấn", kind: "payout", gross: 1955000, commission: 0 },
+  { id: "TXN-3003", date: "07/03/2026 09:18", from: "Học viên Lê C", to: "Hệ thống", kind: "in", gross: 800000, commission: 120000 },
+  { id: "RF-0072",  date: "06/03/2026 18:45", from: "Hệ thống", to: "Học viên Lê Minh", kind: "refund", gross: 425000, commission: -63750 },
+  { id: "PO-1039",  date: "05/03/2026 10:00", from: "Hệ thống", to: "Mentor Lan Anh", kind: "payout", gross: 1020000, commission: 0 },
+  { id: "TXN-2998", date: "04/03/2026 16:40", from: "Học viên Phạm D", to: "Hệ thống", kind: "in", gross: 1200000, commission: 180000 },
+];
+
 // Analytics data
 const monthlyRevenue = [
   { month: "T10", revenue: 85, bookings: 620, users: 4200 },
