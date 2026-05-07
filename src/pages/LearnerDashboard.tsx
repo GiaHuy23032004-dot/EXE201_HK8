@@ -21,8 +21,6 @@ const bookings = [
 
 const savedCourses = mockCourses.slice(1, 5);
 
-const savedCourses = mockCourses.slice(1, 5);
-
 type Billing = {
   id: string; date: string; desc: string; amount: number;
   method: "Thẻ tín dụng" | "Chuyển khoản" | "Ví điện tử";
