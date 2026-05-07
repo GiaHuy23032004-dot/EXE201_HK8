@@ -21,6 +21,22 @@ const bookings = [
 
 const savedCourses = mockCourses.slice(1, 5);
 
+const savedCourses = mockCourses.slice(1, 5);
+
+type Billing = {
+  id: string; date: string; desc: string; amount: number;
+  method: "Thẻ tín dụng" | "Chuyển khoản" | "Ví điện tử";
+  status: "success" | "refunded";
+};
+
+const billingHistory: Billing[] = [
+  { id: "TXN-1284", date: "06/03/2026", desc: mockCourses[0].title, amount: 350000, method: "Thẻ tín dụng", status: "success" },
+  { id: "TXN-1271", date: "01/03/2026", desc: mockCourses[1].title, amount: 500000, method: "Chuyển khoản", status: "success" },
+  { id: "TXN-1245", date: "22/02/2026", desc: mockCourses[2].title, amount: 280000, method: "Ví điện tử", status: "refunded" },
+  { id: "TXN-1219", date: "15/02/2026", desc: mockCourses[3].title, amount: 420000, method: "Thẻ tín dụng", status: "success" },
+  { id: "TXN-1198", date: "08/02/2026", desc: mockCourses[4].title, amount: 600000, method: "Chuyển khoản", status: "success" },
+];
+
 const statusMap: Record<string, { label: string; color: string }> = {
   pending: { label: "Chờ xác nhận", color: "bg-warning/10 text-warning border-warning/20" },
   upcoming: { label: "Sắp tới", color: "bg-secondary/10 text-secondary border-secondary/20" },
