@@ -165,10 +165,12 @@ export function Navbar() {
                     <User className="mr-2 h-4 w-4" />
                     Hồ sơ cá nhân
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate(dashboardPath)}>
-                    <DashboardIcon className="mr-2 h-4 w-4" />
-                    {dashboardLabel}
-                  </DropdownMenuItem>
+                  {!isAdmin && (
+                    <DropdownMenuItem onClick={() => navigate(dashboardPath)}>
+                      <DashboardIcon className="mr-2 h-4 w-4" />
+                      {dashboardLabel}
+                    </DropdownMenuItem>
+                  )}
                   {isAdmin && (
                     <DropdownMenuItem onClick={() => navigate("/admin")} className="text-destructive focus:text-destructive">
                       <Shield className="mr-2 h-4 w-4" />
