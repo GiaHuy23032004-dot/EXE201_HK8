@@ -165,10 +165,12 @@ export function Navbar() {
                     <User className="mr-2 h-4 w-4" />
                     Hồ sơ cá nhân
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate(dashboardPath)}>
-                    <DashboardIcon className="mr-2 h-4 w-4" />
-                    {dashboardLabel}
-                  </DropdownMenuItem>
+                  {!isAdmin && (
+                    <DropdownMenuItem onClick={() => navigate(dashboardPath)}>
+                      <DashboardIcon className="mr-2 h-4 w-4" />
+                      {dashboardLabel}
+                    </DropdownMenuItem>
+                  )}
                   {isAdmin && (
                     <DropdownMenuItem onClick={() => navigate("/admin")} className="text-destructive focus:text-destructive">
                       <Shield className="mr-2 h-4 w-4" />
@@ -233,9 +235,11 @@ export function Navbar() {
               ))}
               {isLoggedIn && (
                 <>
-                  <Link to={dashboardPath} onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
-                    <DashboardIcon className="h-4 w-4" />{dashboardLabel}
-                  </Link>
+                  {!isAdmin && (
+                    <Link to={dashboardPath} onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
+                      <DashboardIcon className="h-4 w-4" />{dashboardLabel}
+                    </Link>
+                  )}
                   {isAdmin && (
                     <Link to="/admin" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-destructive hover:bg-muted">
                       <Shield className="h-4 w-4" />Admin Panel
