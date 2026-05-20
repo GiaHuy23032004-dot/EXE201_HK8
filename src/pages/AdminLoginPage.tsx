@@ -29,8 +29,9 @@ export default function AdminLoginPage() {
   }, []);
 
   // After login, verify role and route
+  const userId = session?.user?.id;
   useEffect(() => {
-    if (!isLoggedIn || !session) return;
+    if (!userId) return;
     let cancelled = false;
     supabase.functions.invoke("admin-check", { body: { action: "check" } }).then(({ data }) => {
       if (cancelled) return;
@@ -46,7 +47,7 @@ export default function AdminLoginPage() {
       }
     });
     return () => { cancelled = true; };
-  }, [isLoggedIn, session, navigate, toast, logout]);
+  }, [userId, navigate, toast, logout]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

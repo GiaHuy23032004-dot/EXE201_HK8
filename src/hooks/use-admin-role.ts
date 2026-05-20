@@ -3,12 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function useAdminRole() {
-  const { isLoggedIn, session } = useAuth();
+  const { session } = useAuth();
+  const userId = session?.user?.id;
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!isLoggedIn || !session) {
+    if (!userId) {
       setIsAdmin(false);
       return;
     }
@@ -32,7 +33,8 @@ export function useAdminRole() {
       });
 
     return () => { cancelled = true; };
-  }, [isLoggedIn, session]);
+    // Depend on stable userId — not the session object, which changes on every token refresh.
+  }, [userId]);
 
   return { isAdmin, isLoading };
 }

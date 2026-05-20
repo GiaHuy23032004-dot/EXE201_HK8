@@ -5,37 +5,42 @@ import { supabase } from "@/integrations/supabase/client";
 import { Loader2, Shield } from "lucide-react";
 
 export function AdminGuard({ children }: { children: React.ReactNode }) {
-  const { isLoggedIn, isLoading, session } = useAuth();
+  const { isLoading, session } = useAuth();
+  const userId = session?.user?.id;
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (isLoading) return;
 
-    if (!isLoggedIn || !session) {
+    if (!userId) {
+      setIsAdmin(false);
       navigate("/admin/login", { replace: true });
       return;
     }
 
-    const checkAdmin = async () => {
-      try {
-        const { data, error } = await supabase.functions.invoke("admin-check", {
-          body: { action: "check" },
-        });
+    let cancelled = false;
+    supabase.functions
+      .invoke("admin-check", { body: { action: "check" } })
+      .then(({ data, error }) => {
+        if (cancelled) return;
         if (!error && data?.isAdmin) {
           setIsAdmin(true);
         } else {
           setIsAdmin(false);
           navigate("/admin/login", { replace: true });
         }
-      } catch {
+      })
+      .catch(() => {
+        if (cancelled) return;
         setIsAdmin(false);
         navigate("/admin/login", { replace: true });
-      }
-    };
+      });
 
-    checkAdmin();
-  }, [isLoggedIn, isLoading, session, navigate]);
+    return () => { cancelled = true; };
+    // Only re-check when user identity or loading state actually changes,
+    // NOT on every session object refresh (which causes flicker/redirect loops).
+  }, [userId, isLoading, navigate]);
 
   if (isLoading || isAdmin === null) {
     return (
