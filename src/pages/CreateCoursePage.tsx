@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useNavigate } from "react-router-dom";
-import { Image, MapPin, Monitor, Globe, Clock, DollarSign, FileText, Tag, Upload, CheckCircle2 } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useCreateCourse } from "@/hooks/use-courses";
+import { Image, MapPin, Monitor, Globe, Clock, DollarSign, FileText, Upload, CheckCircle2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,18 +12,64 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { categories } from "@/data/mockData";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
+import { useToast } from "@/hooks/use-toast";
 
 const days = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
 
 export default function CreateCoursePage() {
   const navigate = useNavigate();
+  const { session } = useAuth();
+  const { toast } = useToast();
+  const createCourse = useCreateCourse();
+
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [description, setDescription] = useState("");
   const [format, setFormat] = useState<"online" | "offline">("offline");
+  const [location, setLocation] = useState("");
+  const [meetingLink, setMeetingLink] = useState("");
+  const [price, setPrice] = useState("");
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [startTime, setStartTime] = useState("09:00");
+  const [endTime, setEndTime] = useState("11:00");
   const [submitted, setSubmitted] = useState(false);
 
   const toggleDay = (day: string) => {
     setSelectedDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!session?.user?.id) {
+      toast({ title: "Vui lòng đăng nhập", variant: "destructive" });
+      return;
+    }
+    if (!title || !category || !price) {
+      toast({ title: "Vui lòng điền đầy đủ thông tin bắt buộc", variant: "destructive" });
+      return;
+    }
+
+    try {
+      await createCourse.mutateAsync({
+        mentor_id: session.user.id,
+        title,
+        description,
+        category,
+        format,
+        price: parseInt(price),
+        location: format === "offline" ? location : undefined,
+        meeting_link: format === "online" ? meetingLink : undefined,
+        schedules: selectedDays.map((day) => ({
+          day_of_week: day,
+          start_time: startTime,
+          end_time: endTime,
+        })),
+      });
+      setSubmitted(true);
+    } catch (err: any) {
+      toast({ title: "Tạo khóa học thất bại", description: err.message, variant: "destructive" });
+    }
   };
 
   if (submitted) {
@@ -38,7 +86,9 @@ export default function CreateCoursePage() {
               <Button onClick={() => navigate("/mentor/dashboard")} className="gradient-primary border-0 text-primary-foreground rounded-xl">
                 Về Dashboard
               </Button>
-              <Button variant="outline" onClick={() => setSubmitted(false)} className="rounded-xl">Tạo thêm</Button>
+              <Button variant="outline" onClick={() => { setSubmitted(false); setTitle(""); setCategory(""); setDescription(""); setPrice(""); setSelectedDays([]); }} className="rounded-xl">
+                Tạo thêm
+              </Button>
             </div>
           </motion.div>
         </div>
@@ -52,19 +102,19 @@ export default function CreateCoursePage() {
         <h1 className="mb-2 text-2xl font-bold text-foreground">Tạo khóa học mới</h1>
         <p className="mb-8 text-sm text-muted-foreground">Điền thông tin để đăng khóa học lên marketplace</p>
 
-        <form onSubmit={(e) => { e.preventDefault(); setSubmitted(true); }} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {/* Basic info */}
           <div className="rounded-2xl border bg-card p-6 shadow-card space-y-4">
             <h2 className="font-semibold text-foreground flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />Thông tin cơ bản
             </h2>
             <div>
-              <Label>Tên khóa học</Label>
-              <Input placeholder="VD: Guitar Acoustic cho người mới bắt đầu" className="mt-1 rounded-xl" />
+              <Label>Tên khóa học <span className="text-destructive">*</span></Label>
+              <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="VD: Guitar Acoustic cho người mới bắt đầu" className="mt-1 rounded-xl" required />
             </div>
             <div>
-              <Label>Danh mục</Label>
-              <Select>
+              <Label>Danh mục <span className="text-destructive">*</span></Label>
+              <Select value={category} onValueChange={setCategory} required>
                 <SelectTrigger className="mt-1 rounded-xl"><SelectValue placeholder="Chọn danh mục" /></SelectTrigger>
                 <SelectContent>
                   {categories.map((c) => <SelectItem key={c.slug} value={c.slug}>{c.label}</SelectItem>)}
@@ -73,7 +123,7 @@ export default function CreateCoursePage() {
             </div>
             <div>
               <Label>Mô tả khóa học</Label>
-              <Textarea placeholder="Mô tả chi tiết về khóa học, nội dung giảng dạy..." className="mt-1 min-h-[120px] rounded-xl" />
+              <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Mô tả chi tiết về khóa học, nội dung giảng dạy..." className="mt-1 min-h-[120px] rounded-xl" />
             </div>
           </div>
 
@@ -83,19 +133,13 @@ export default function CreateCoursePage() {
               <Globe className="h-5 w-5 text-primary" />Hình thức & Địa điểm
             </h2>
             <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setFormat("offline")}
-                className={`flex-1 flex items-center gap-3 rounded-xl border-2 p-4 transition-all ${format === "offline" ? "border-primary bg-accent" : "border-border"}`}
-              >
+              <button type="button" onClick={() => setFormat("offline")}
+                className={`flex-1 flex items-center gap-3 rounded-xl border-2 p-4 transition-all ${format === "offline" ? "border-primary bg-accent" : "border-border"}`}>
                 <MapPin className="h-5 w-5 text-primary" />
                 <div className="text-left"><p className="text-sm font-medium text-foreground">Offline</p><p className="text-xs text-muted-foreground">Dạy tại địa điểm</p></div>
               </button>
-              <button
-                type="button"
-                onClick={() => setFormat("online")}
-                className={`flex-1 flex items-center gap-3 rounded-xl border-2 p-4 transition-all ${format === "online" ? "border-primary bg-accent" : "border-border"}`}
-              >
+              <button type="button" onClick={() => setFormat("online")}
+                className={`flex-1 flex items-center gap-3 rounded-xl border-2 p-4 transition-all ${format === "online" ? "border-primary bg-accent" : "border-border"}`}>
                 <Monitor className="h-5 w-5 text-secondary" />
                 <div className="text-left"><p className="text-sm font-medium text-foreground">Online</p><p className="text-xs text-muted-foreground">Dạy qua video call</p></div>
               </button>
@@ -103,13 +147,13 @@ export default function CreateCoursePage() {
             {format === "offline" && (
               <div>
                 <Label>Địa chỉ lớp học</Label>
-                <Input placeholder="Số nhà, đường, quận, thành phố" className="mt-1 rounded-xl" />
+                <Input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Số nhà, đường, quận, thành phố" className="mt-1 rounded-xl" />
               </div>
             )}
             {format === "online" && (
               <div>
                 <Label>Link phòng học (Zoom/Meet)</Label>
-                <Input placeholder="https://zoom.us/j/..." className="mt-1 rounded-xl" />
+                <Input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} placeholder="https://zoom.us/j/..." className="mt-1 rounded-xl" />
               </div>
             )}
           </div>
@@ -121,14 +165,10 @@ export default function CreateCoursePage() {
             </h2>
             <div className="flex flex-wrap gap-2">
               {days.map((day) => (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => toggleDay(day)}
+                <button key={day} type="button" onClick={() => toggleDay(day)}
                   className={`rounded-xl border px-4 py-2 text-sm transition-all ${
                     selectedDays.includes(day) ? "border-primary bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:border-primary/30"
-                  }`}
-                >
+                  }`}>
                   {day}
                 </button>
               ))}
@@ -136,11 +176,11 @@ export default function CreateCoursePage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label>Giờ bắt đầu</Label>
-                <Input type="time" className="mt-1 rounded-xl" defaultValue="09:00" />
+                <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1 rounded-xl" />
               </div>
               <div>
                 <Label>Giờ kết thúc</Label>
-                <Input type="time" className="mt-1 rounded-xl" defaultValue="11:00" />
+                <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1 rounded-xl" />
               </div>
             </div>
           </div>
@@ -148,19 +188,11 @@ export default function CreateCoursePage() {
           {/* Pricing */}
           <div className="rounded-2xl border bg-card p-6 shadow-card space-y-4">
             <h2 className="font-semibold text-foreground flex items-center gap-2">
-              <DollarSign className="h-5 w-5 text-primary" />Giá & Quảng cáo
+              <DollarSign className="h-5 w-5 text-primary" />Giá
             </h2>
             <div>
-              <Label>Giá mỗi buổi (VNĐ)</Label>
-              <Input type="number" placeholder="200000" className="mt-1 rounded-xl" />
-            </div>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-foreground">Tin nổi bật</p>
-                <p className="text-xs text-muted-foreground">15,000 VNĐ / 3 ngày - Hiển thị ưu tiên</p>
-              </div>
-              <Switch />
+              <Label>Giá mỗi buổi (VNĐ) <span className="text-destructive">*</span></Label>
+              <Input type="number" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="200000" className="mt-1 rounded-xl" required />
             </div>
           </div>
 
@@ -176,8 +208,8 @@ export default function CreateCoursePage() {
             </div>
           </div>
 
-          <Button type="submit" className="w-full gradient-primary border-0 text-primary-foreground py-6 rounded-xl text-base">
-            Đăng khóa học
+          <Button type="submit" disabled={createCourse.isPending} className="w-full gradient-primary border-0 text-primary-foreground py-6 rounded-xl text-base">
+            {createCourse.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang tạo...</> : "Đăng khóa học"}
           </Button>
         </form>
       </div>

@@ -1,12 +1,13 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { SearchHero } from "@/components/marketplace/SearchHero";
 import { CourseCard } from "@/components/marketplace/CourseCard";
 import { MentorCard } from "@/components/marketplace/MentorCard";
 import { CategoryChip } from "@/components/marketplace/CategoryChip";
-import { mockCourses, mockMentors } from "@/data/mockData";
-import { Music, Globe, Code, Palette, Dumbbell, ChefHat, Briefcase, Pencil, ArrowRight, TrendingUp, MapPin, Sparkles, Brain, Zap } from "lucide-react";
+import { useCourses } from "@/hooks/use-courses";
+import { useQuery } from "@tanstack/react-query";
+import { Music, Globe, Code, Palette, Dumbbell, ChefHat, Briefcase, Pencil, ArrowRight, TrendingUp, MapPin, Sparkles, Brain, Zap, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
@@ -29,51 +30,64 @@ const stats = [
   { label: "Đánh giá 5 sao", value: "12,000+", icon: "⭐" },
 ];
 
+// Helper map course từ Supabase sang CourseCard props
+function mapCourse(c: any) {
+  return {
+    id: c.id,
+    title: c.title,
+    mentorName: c.mentor?.name || "Mentor",
+    mentorAvatar: c.mentor?.avatar_url || "",
+    price: c.price,
+    rating: c.rating,
+    reviewCount: c.review_count,
+    image: c.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&h=400&fit=crop",
+    category: c.category,
+    format: c.format,
+    location: c.location || undefined,
+    promoted: c.is_promoted,
+    studentsCount: c.students_count,
+  };
+}
+
 export default function HomePage() {
-  const featured = mockCourses.filter((c) => c.promoted);
-  const nearby = mockCourses.filter((c) => c.format === "offline");
-  const [aiRecommendations, setAiRecommendations] = useState(mockCourses.slice(0, 4));
-  const [aiLoading, setAiLoading] = useState(false);
+  const { data: allCourses = [], isLoading } = useCourses();
 
-  const fetchAiRecommendations = useCallback(async () => {
-    setAiLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-search", {
-        body: { query: "Gợi ý 4 khóa học phổ biến nhất cho người mới bắt đầu tại Việt Nam", type: "recommend" },
-      });
-      if (!error && data?.suggestions) {
-        let raw = data.suggestions;
-        if (typeof raw === "string") {
-          raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            const mapped = parsed.map((s: any) => {
-              const match = mockCourses.find(
-                (c) => c.category === s.category || c.title.toLowerCase().includes(s.title?.toLowerCase()?.split(" ")[0] || "")
-              );
-              return match || mockCourses[Math.floor(Math.random() * mockCourses.length)];
-            });
-            const unique = [...new Map(mapped.map((c: any) => [c.id, c])).values()];
-            setAiRecommendations(unique.slice(0, 4));
-          }
-        }
-      }
-    } catch {
-      const shuffled = [...mockCourses].sort(() => Math.random() - 0.5).slice(0, 4);
-      setAiRecommendations(shuffled);
-    }
-    setAiLoading(false);
-  }, []);
+  const featured = allCourses.filter((c) => c.is_promoted).slice(0, 4);
+  const nearby = allCourses.filter((c) => c.format === "offline").slice(0, 4);
+  const recommended = allCourses.slice(0, 4);
 
-  useEffect(() => {
-    fetchAiRecommendations();
-  }, [fetchAiRecommendations]);
+  // Fetch mentors từ Supabase
+  const { data: mentors = [] } = useQuery({
+    queryKey: ["mentors-home"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, name, avatar_url, bio, role")
+        .eq("role", "mentor")
+        .limit(6);
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+
+  // Map mentors sang MentorCard props
+  const mappedMentors = mentors.map((m: any) => ({
+    id: m.user_id,
+    name: m.name || "Mentor",
+    avatar: m.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face",
+    specialty: "Giảng viên",
+    rating: 4.8,
+    reviewCount: 0,
+    coursesCount: 0,
+    verified: true,
+    bio: m.bio || "",
+  }));
 
   return (
     <MainLayout>
       <SearchHero />
 
-      {/* Stats - soft blue bg */}
+      {/* Stats */}
       <section className="relative border-y border-border/40 section-blue py-10">
         <div className="container grid grid-cols-2 gap-6 md:grid-cols-4">
           {stats.map((s, i) => (
@@ -93,7 +107,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* Categories - white bg */}
+      {/* Categories */}
       <section className="bg-background py-14">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
@@ -104,13 +118,7 @@ export default function HomePage() {
           </div>
           <div className="grid grid-cols-4 gap-3 md:grid-cols-8">
             {categoryIcons.map((cat, i) => (
-              <motion.div
-                key={cat.slug}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.05 }}
-              >
+              <motion.div key={cat.slug} initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.05 }}>
                 <CategoryChip {...cat} />
               </motion.div>
             ))}
@@ -118,7 +126,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* AI Recommendations - soft teal bg */}
+      {/* AI Recommendations */}
       <section className="relative overflow-hidden section-teal py-14">
         <div className="absolute inset-0 gradient-hero-mesh opacity-40" />
         <div className="container relative">
@@ -128,87 +136,89 @@ export default function HomePage() {
                 <Brain className="h-5 w-5 text-primary-foreground" />
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-foreground">AI gợi ý cho bạn</h2>
-                <p className="text-xs text-muted-foreground">Dựa trên sở thích và vị trí của bạn</p>
+                <h2 className="text-2xl font-bold text-foreground">Gợi ý cho bạn</h2>
+                <p className="text-xs text-muted-foreground">Các khóa học phổ biến nhất</p>
               </div>
             </div>
             <Link to="/search" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
               Xem thêm <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {aiRecommendations.map((c) => (
-              <CourseCard key={c.id} course={c} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Courses - white bg */}
-      <section className="bg-background py-14">
-        <div className="container">
-          <div className="mb-8 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-warm shadow-lg">
-                <Sparkles className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <h2 className="text-2xl font-bold text-foreground">Khóa học nổi bật</h2>
+          {isLoading ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => <div key={i} className="h-64 rounded-2xl bg-muted/50 animate-pulse" />)}
             </div>
-            <Link to="/search" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-              Xem thêm <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {featured.map((c) => (
-              <CourseCard key={c.id} course={c} />
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Nearby - soft warm bg */}
-      <section className="section-warm py-14">
-        <div className="container">
-          <div className="mb-8 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary shadow-lg">
-                <MapPin className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <div>
-                <h2 className="text-2xl font-bold text-foreground">Lớp học gần bạn</h2>
-                <p className="text-xs text-muted-foreground">TP.HCM • bán kính 5km</p>
-              </div>
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {recommended.map((c) => <CourseCard key={c.id} course={mapCourse(c)} />)}
             </div>
-            <Link to="/map" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
-              Xem bản đồ <ArrowRight className="h-4 w-4" />
-            </Link>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {nearby.map((c) => (
-              <CourseCard key={c.id} course={c} />
-            ))}
-          </div>
+          )}
         </div>
       </section>
 
-      {/* Trending Mentors - soft purple bg */}
-      <section className="section-purple py-14">
-        <div className="container">
-          <div className="mb-8 flex items-center justify-between">
-            <div className="flex items-center gap-3">
+      {/* Featured Courses */}
+      {featured.length > 0 && (
+        <section className="bg-background py-14">
+          <div className="container">
+            <div className="mb-8 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-warm shadow-lg">
+                  <Sparkles className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <h2 className="text-2xl font-bold text-foreground">Khóa học nổi bật</h2>
+              </div>
+              <Link to="/search" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                Xem thêm <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {featured.map((c) => <CourseCard key={c.id} course={mapCourse(c)} />)}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Nearby */}
+      {nearby.length > 0 && (
+        <section className="section-warm py-14">
+          <div className="container">
+            <div className="mb-8 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary shadow-lg">
+                  <MapPin className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-foreground">Lớp học gần bạn</h2>
+                  <p className="text-xs text-muted-foreground">TP.HCM • bán kính 5km</p>
+                </div>
+              </div>
+              <Link to="/map" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+                Xem bản đồ <ArrowRight className="h-4 w-4" />
+              </Link>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {nearby.map((c) => <CourseCard key={c.id} course={mapCourse(c)} />)}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* Trending Mentors */}
+      {mappedMentors.length > 0 && (
+        <section className="section-purple py-14">
+          <div className="container">
+            <div className="mb-8 flex items-center gap-3">
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg">
                 <TrendingUp className="h-5 w-5 text-primary-foreground" />
               </div>
               <h2 className="text-2xl font-bold text-foreground">Mentor nổi bật</h2>
             </div>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {mappedMentors.map((m) => <MentorCard key={m.id} mentor={m} />)}
+            </div>
           </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {mockMentors.slice(0, 6).map((m) => (
-              <MentorCard key={m.id} mentor={m} />
-            ))}
-          </div>
-        </div>
-      </section>
+        </section>
+      )}
 
       {/* CTA */}
       <section className="bg-background py-16">
@@ -221,17 +231,13 @@ export default function HomePage() {
           >
             <div className="absolute -left-20 -top-20 h-60 w-60 rounded-full bg-primary-foreground/10 blur-2xl" />
             <div className="absolute -bottom-20 -right-20 h-60 w-60 rounded-full bg-primary-foreground/10 blur-2xl" />
-
             <div className="relative">
               <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-primary-foreground/20 px-4 py-1.5 text-xs font-medium text-primary-foreground backdrop-blur-sm">
-                <Zap className="h-3.5 w-3.5" />
-                Miễn phí đăng ký
+                <Zap className="h-3.5 w-3.5" />Miễn phí đăng ký
               </div>
-              <h2 className="mb-4 text-2xl font-bold text-primary-foreground md:text-4xl">
-                Bạn có kỹ năng muốn chia sẻ?
-              </h2>
+              <h2 className="mb-4 text-2xl font-bold text-primary-foreground md:text-4xl">Bạn có kỹ năng muốn chia sẻ?</h2>
               <p className="mb-8 text-primary-foreground/80 md:text-lg max-w-xl mx-auto">
-                Trở thành Mentor trên VET và bắt đầu kiếm thu nhập từ kiến thức của bạn. Hơn 2,500 mentor đã tin tưởng chúng tôi.
+                Trở thành Mentor trên VET và bắt đầu kiếm thu nhập từ kiến thức của bạn.
               </p>
               <Link to="/auth?role=mentor">
                 <Button size="lg" variant="secondary" className="rounded-xl font-semibold shadow-elevated bg-background text-foreground hover:bg-background/90">

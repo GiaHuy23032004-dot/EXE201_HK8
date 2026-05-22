@@ -1,3 +1,8 @@
+# Environment variables (chứa secrets - không push lên git)
+.env
+.env.local
+.env.production
+
 # Logs
 logs
 *.log

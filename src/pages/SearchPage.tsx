@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { CourseCard } from "@/components/marketplace/CourseCard";
-import { mockCourses, categories } from "@/data/mockData";
+import { categories } from "@/data/mockData";
+import { useCourses } from "@/hooks/use-courses";
 import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List, Sparkles, Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
@@ -16,7 +16,6 @@ export default function SearchPage() {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [format, setFormat] = useState<"all" | "online" | "offline">("all");
   const [priceRange, setPriceRange] = useState([0, 1000000]);
-  const [distance, setDistance] = useState(5);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
@@ -29,7 +28,16 @@ export default function SearchPage() {
     if (q) setQuery(q);
   }, []);
 
-  // AI search suggestions with debounce
+  // Fetch courses từ Supabase
+  const { data: courses = [], isLoading } = useCourses({
+    query,
+    category: selectedCategory,
+    format,
+    minPrice: priceRange[0],
+    maxPrice: priceRange[1],
+  });
+
+  // AI search suggestions
   const fetchAiSuggestions = useCallback(async (searchQuery: string) => {
     if (!searchQuery || searchQuery.length < 2) {
       setAiSuggestions([]);
@@ -41,41 +49,43 @@ export default function SearchPage() {
         body: { query: searchQuery, type: "search" },
       });
       if (!error && data?.suggestions) {
-        try {
-          // Clean markdown code blocks if present
-          let raw = data.suggestions;
-          if (typeof raw === "string") {
-            raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              setAiSuggestions(parsed.map((s: any) => s.title || s).slice(0, 5));
-              setShowAiPanel(true);
-            }
+        let raw = data.suggestions;
+        if (typeof raw === "string") {
+          raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            setAiSuggestions(parsed.map((s: any) => s.title || s).slice(0, 5));
+            setShowAiPanel(true);
           }
-        } catch {
-          setAiSuggestions([]);
         }
       }
     } catch {
-      // Silently fail AI suggestions
+      // Silently fail
     }
     setAiLoading(false);
   }, []);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      fetchAiSuggestions(query);
-    }, 500);
+    const timer = setTimeout(() => fetchAiSuggestions(query), 500);
     return () => clearTimeout(timer);
   }, [query, fetchAiSuggestions]);
 
-  const filtered = mockCourses.filter((c) => {
-    if (selectedCategory && c.category !== selectedCategory) return false;
-    if (format !== "all" && c.format !== format) return false;
-    if (c.price < priceRange[0] || c.price > priceRange[1]) return false;
-    if (query && !c.title.toLowerCase().includes(query.toLowerCase())) return false;
-    return true;
-  });
+  // Map Supabase course sang CourseCard format
+  const mappedCourses = courses.map((c) => ({
+    id: c.id,
+    title: c.title,
+    mentorName: c.mentor?.name || "Mentor",
+    mentorAvatar: c.mentor?.avatar_url || "",
+    price: c.price,
+    rating: c.rating,
+    reviewCount: c.review_count,
+    image: c.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&h=400&fit=crop",
+    category: c.category,
+    format: c.format,
+    location: c.location || undefined,
+    promoted: c.is_promoted,
+    studentsCount: c.students_count,
+  }));
 
   return (
     <MainLayout>
@@ -100,7 +110,6 @@ export default function SearchPage() {
               )}
             </div>
 
-            {/* AI Suggestions panel */}
             <AnimatePresence>
               {showAiPanel && aiSuggestions.length > 0 && (
                 <motion.div
@@ -202,14 +211,15 @@ export default function SearchPage() {
                 </div>
               </div>
               <div>
-                <p className="mb-2 text-sm font-medium text-foreground">Khoảng cách: {distance}km</p>
-                <Slider value={[distance]} onValueChange={(v) => setDistance(v[0])} max={10} step={1} className="mt-3" />
-              </div>
-              <div>
                 <p className="mb-2 text-sm font-medium text-foreground">
                   Giá: {priceRange[0].toLocaleString("vi-VN")}đ - {priceRange[1].toLocaleString("vi-VN")}đ
                 </p>
                 <Slider value={priceRange} onValueChange={setPriceRange} max={1000000} step={50000} className="mt-3" />
+              </div>
+              <div className="flex items-end">
+                <Button variant="outline" size="sm" onClick={() => { setFormat("all"); setPriceRange([0, 1000000]); setSelectedCategory(null); }}>
+                  Xóa bộ lọc
+                </Button>
               </div>
             </div>
           </motion.div>
@@ -220,8 +230,12 @@ export default function SearchPage() {
       <div className="container py-8">
         <div className="mb-6 flex items-center justify-between">
           <p className="text-sm text-muted-foreground">
-            <span className="font-semibold text-foreground">{filtered.length}</span> kết quả
-            {query && <> cho "<span className="text-primary font-medium">{query}</span>"</>}
+            {isLoading ? (
+              <span className="flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />Đang tải...</span>
+            ) : (
+              <><span className="font-semibold text-foreground">{mappedCourses.length}</span> kết quả
+              {query && <> cho "<span className="text-primary font-medium">{query}</span>"</>}</>
+            )}
           </p>
           <div className="flex items-center gap-1 rounded-lg border p-0.5">
             <button
@@ -239,13 +253,21 @@ export default function SearchPage() {
           </div>
         </div>
 
-        <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid gap-4"}>
-          {filtered.map((c) => (
-            <CourseCard key={c.id} course={c} />
-          ))}
-        </div>
+        {isLoading ? (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div key={i} className="h-64 rounded-2xl bg-muted animate-pulse" />
+            ))}
+          </div>
+        ) : (
+          <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid gap-4"}>
+            {mappedCourses.map((c) => (
+              <CourseCard key={c.id} course={c} />
+            ))}
+          </div>
+        )}
 
-        {filtered.length === 0 && (
+        {!isLoading && mappedCourses.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted">
               <Search className="h-8 w-8 text-muted-foreground" />
