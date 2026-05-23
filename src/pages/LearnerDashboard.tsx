@@ -2,15 +2,19 @@ import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useLearnerBookings, useCancelBooking } from "@/hooks/use-bookings";
 import { useSavedCourses } from "@/hooks/use-saved-courses";
-import { useLearnerReviews } from "@/hooks/use-reviews";
+import { useLearnerReviews, useCreateReview } from "@/hooks/use-reviews";
 import { useAuth } from "@/contexts/AuthContext";
-import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Receipt, CheckCircle2, RotateCcw, Loader2 } from "lucide-react";
+import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { useQueryClient } from "@tanstack/react-query";
 
 const statusMap: Record<string, { label: string; color: string }> = {
   pending:   { label: "Chờ xác nhận", color: "bg-warning/10 text-warning border-warning/20" },
@@ -20,15 +24,29 @@ const statusMap: Record<string, { label: string; color: string }> = {
   declined:  { label: "Bị từ chối",   color: "bg-destructive/10 text-destructive border-destructive/20" },
 };
 
+type ReviewTarget = {
+  bookingId: string;
+  courseId: string;
+  courseTitle: string;
+};
+
 export default function LearnerDashboard() {
   const { user, session } = useAuth();
   const { toast } = useToast();
+  const qc = useQueryClient();
   const userId = session?.user?.id;
 
   const { data: bookings = [], isLoading: bookingsLoading } = useLearnerBookings(userId);
   const { data: savedData = [], isLoading: savedLoading } = useSavedCourses(userId);
   const { data: reviews = [] } = useLearnerReviews(userId);
   const cancelBooking = useCancelBooking();
+  const createReview = useCreateReview();
+
+  // Review dialog state
+  const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
+  const [reviewRating, setReviewRating] = useState(0);
+  const [reviewHover, setReviewHover] = useState(0);
+  const [reviewComment, setReviewComment] = useState("");
 
   const pending   = bookings.filter((b) => b.status === "pending");
   const upcoming  = bookings.filter((b) => b.status === "upcoming");
@@ -41,6 +59,36 @@ export default function LearnerDashboard() {
       toast({ title: "Đã hủy đặt lịch" });
     } catch {
       toast({ title: "Không thể hủy", variant: "destructive" });
+    }
+  };
+
+  const openReviewDialog = (booking: typeof bookings[0]) => {
+    setReviewTarget({
+      bookingId: booking.id,
+      courseId: booking.course_id,
+      courseTitle: booking.course?.title ?? "",
+    });
+    setReviewRating(0);
+    setReviewHover(0);
+    setReviewComment("");
+  };
+
+  const handleSubmitReview = async () => {
+    if (!reviewTarget || !userId || reviewRating === 0) return;
+    try {
+      await createReview.mutateAsync({
+        course_id: reviewTarget.courseId,
+        booking_id: reviewTarget.bookingId,
+        learner_id: userId,
+        rating: reviewRating,
+        comment: reviewComment.trim() || undefined,
+      });
+      qc.invalidateQueries({ queryKey: ["learner-reviews", userId] });
+      qc.invalidateQueries({ queryKey: ["reviews", reviewTarget.courseId] });
+      toast({ title: "Đã gửi đánh giá", description: `Cảm ơn bạn đã đánh giá "${reviewTarget.courseTitle}"` });
+      setReviewTarget(null);
+    } catch (err: any) {
+      toast({ title: "Không thể gửi đánh giá", description: err.message, variant: "destructive" });
     }
   };
 
@@ -64,7 +112,12 @@ export default function LearnerDashboard() {
             <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{booking.start_time} - {booking.end_time}</span>
           </div>
           {booking.status === "completed" && (
-            <Button variant="outline" size="sm" className="mt-2 h-7 text-xs rounded-lg">
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 h-7 text-xs rounded-lg"
+              onClick={() => openReviewDialog(booking)}
+            >
               <Star className="mr-1 h-3 w-3" />Đánh giá khóa học
             </Button>
           )}
@@ -199,6 +252,79 @@ export default function LearnerDashboard() {
           </Link>
         </div>
       </div>
+
+      {/* Review Dialog */}
+      <Dialog open={!!reviewTarget} onOpenChange={(open) => !open && setReviewTarget(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Star className="h-5 w-5 text-warning" />
+              Đánh giá khóa học
+            </DialogTitle>
+          </DialogHeader>
+          {reviewTarget && (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">{reviewTarget.courseTitle}</p>
+
+              {/* Star rating */}
+              <div>
+                <Label className="text-sm font-medium">Xếp hạng</Label>
+                <div className="flex items-center gap-1 mt-2">
+                  {Array.from({ length: 5 }).map((_, i) => {
+                    const val = i + 1;
+                    return (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setReviewRating(val)}
+                        onMouseEnter={() => setReviewHover(val)}
+                        onMouseLeave={() => setReviewHover(0)}
+                        className="transition-transform hover:scale-110"
+                      >
+                        <Star
+                          className={`h-8 w-8 ${
+                            val <= (reviewHover || reviewRating)
+                              ? "fill-warning text-warning"
+                              : "text-muted-foreground"
+                          }`}
+                        />
+                      </button>
+                    );
+                  })}
+                  {reviewRating > 0 && (
+                    <span className="ml-2 text-sm text-muted-foreground">
+                      {["", "Rất tệ", "Tệ", "Bình thường", "Tốt", "Xuất sắc"][reviewRating]}
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Comment */}
+              <div>
+                <Label className="text-sm font-medium">Nhận xét (tùy chọn)</Label>
+                <Textarea
+                  className="mt-2"
+                  rows={4}
+                  placeholder="Chia sẻ trải nghiệm của bạn về khóa học này..."
+                  value={reviewComment}
+                  onChange={(e) => setReviewComment(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setReviewTarget(null)}>Hủy</Button>
+            <Button
+              className="gradient-primary border-0 text-primary-foreground"
+              disabled={reviewRating === 0 || createReview.isPending}
+              onClick={handleSubmitReview}
+            >
+              {createReview.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Gửi đánh giá
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

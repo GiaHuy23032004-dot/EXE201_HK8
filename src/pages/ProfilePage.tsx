@@ -1,23 +1,28 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUploadImage } from "@/hooks/use-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Camera, Mail, Phone, User, BookOpen, Award, Save } from "lucide-react";
+import { Camera, Mail, Phone, User, BookOpen, Award, Save, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 
 export default function ProfilePage() {
-  const { user, isLoggedIn, updateProfile } = useAuth();
+  const { user, session, isLoggedIn, updateProfile } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const { uploadImage, uploading } = useUploadImage();
 
-  const [name, setName] = useState(user?.name || "");
-  const [phone, setPhone] = useState(user?.phone || "");
-  const [bio, setBio] = useState(user?.bio || "");
+  const [name, setName]           = useState(user?.name  || "");
+  const [phone, setPhone]         = useState(user?.phone || "");
+  const [bio, setBio]             = useState(user?.bio   || "");
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [saving, setSaving]       = useState(false);
 
   if (!isLoggedIn) {
     navigate("/auth");
@@ -26,10 +31,32 @@ export default function ProfilePage() {
 
   const initials = user?.name?.split(" ").map(w => w[0]).slice(0, 2).join("").toUpperCase();
 
+  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !session?.user?.id) return;
+
+    // Preview ngay lập tức
+    setAvatarPreview(URL.createObjectURL(file));
+
+    // Upload lên Supabase Storage
+    const url = await uploadImage(file, "avatars", session.user.id);
+    if (url) {
+      await updateProfile({ avatar: url });
+      toast({ title: "Đã cập nhật ảnh đại diện" });
+    } else {
+      toast({ title: "Upload ảnh thất bại", variant: "destructive" });
+      setAvatarPreview(null);
+    }
+  };
+
   const handleSave = async () => {
+    setSaving(true);
     await updateProfile({ name, phone, bio });
+    setSaving(false);
     toast({ title: "Đã cập nhật hồ sơ", description: "Thông tin cá nhân đã được lưu." });
   };
+
+  const currentAvatar = avatarPreview || user?.avatar;
 
   return (
     <MainLayout>
@@ -41,11 +68,24 @@ export default function ProfilePage() {
           <div className="mb-8 flex items-center gap-5">
             <div className="relative">
               <Avatar className="h-20 w-20">
-                <AvatarImage src={user?.avatar} />
+                <AvatarImage src={currentAvatar} />
                 <AvatarFallback className="bg-primary text-primary-foreground text-xl">{initials}</AvatarFallback>
               </Avatar>
-              <button className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-primary text-primary-foreground shadow">
-                <Camera className="h-4 w-4" />
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleAvatarChange}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
+                className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-card bg-primary text-primary-foreground shadow hover:bg-primary/90 transition-colors"
+              >
+                {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
               </button>
             </div>
             <div>
@@ -54,6 +94,7 @@ export default function ProfilePage() {
               <span className="mt-1 inline-block rounded-full bg-accent px-3 py-0.5 text-xs font-medium text-accent-foreground">
                 {user?.role === "mentor" ? "👨‍🏫 Mentor" : "🎓 Người học"}
               </span>
+              <p className="text-xs text-muted-foreground mt-1">Click vào icon camera để đổi ảnh đại diện</p>
             </div>
           </div>
 
@@ -78,7 +119,9 @@ export default function ProfilePage() {
 
           {user?.role === "mentor" && (
             <div className="mt-6 rounded-xl border bg-accent/30 p-4">
-              <h3 className="mb-2 flex items-center gap-2 font-semibold text-foreground"><Award className="h-4 w-4 text-primary" /> Thông tin Mentor</h3>
+              <h3 className="mb-2 flex items-center gap-2 font-semibold text-foreground">
+                <Award className="h-4 w-4 text-primary" /> Thông tin Mentor
+              </h3>
               <p className="text-sm text-muted-foreground">Chỉnh sửa chứng chỉ, kinh nghiệm giảng dạy và kỹ năng chuyên môn tại trang Mentor Dashboard.</p>
               <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/mentor/dashboard")}>
                 Đi đến Dashboard
@@ -87,8 +130,9 @@ export default function ProfilePage() {
           )}
 
           <div className="mt-8 flex justify-end">
-            <Button onClick={handleSave} className="gradient-primary border-0 text-primary-foreground gap-2">
-              <Save className="h-4 w-4" /> Lưu thay đổi
+            <Button onClick={handleSave} disabled={saving} className="gradient-primary border-0 text-primary-foreground gap-2">
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              Lưu thay đổi
             </Button>
           </div>
         </div>

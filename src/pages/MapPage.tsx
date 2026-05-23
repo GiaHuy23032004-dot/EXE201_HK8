@@ -1,21 +1,21 @@
 import { MainLayout } from "@/components/layout/MainLayout";
-import { mockCourses } from "@/data/mockData";
-import { MapPin, Monitor, Star, ArrowLeft } from "lucide-react";
+import { useCourses } from "@/hooks/use-courses";
+import { MapPin, Star, ArrowLeft, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 
-const pinPositions = [
-  { top: "25%", left: "30%" },
-  { top: "40%", left: "55%" },
-  { top: "60%", left: "25%" },
-  { top: "35%", left: "70%" },
-  { top: "55%", left: "45%" },
-  { top: "70%", left: "65%" },
+const PIN_POSITIONS = [
+  { top: "20%", left: "25%" }, { top: "35%", left: "55%" },
+  { top: "55%", left: "20%" }, { top: "30%", left: "72%" },
+  { top: "60%", left: "48%" }, { top: "70%", left: "68%" },
+  { top: "45%", left: "35%" }, { top: "25%", left: "45%" },
 ];
 
 export default function MapPage() {
-  const offlineCourses = mockCourses.filter((c) => c.format === "offline");
+  const { data: allCourses = [], isLoading } = useCourses({ format: "offline" });
+
+  const offlineCourses = allCourses.filter((c) => c.format === "offline");
 
   return (
     <MainLayout hideFooter>
@@ -39,34 +39,53 @@ export default function MapPage() {
               />
             </div>
           </div>
-          <div className="divide-y">
-            {offlineCourses.map((course) => (
-              <Link
-                key={course.id}
-                to={`/course/${course.id}`}
-                className="flex gap-3 p-4 transition-colors hover:bg-muted/50"
-              >
-                <img src={course.image} alt={course.title} className="h-20 w-20 rounded-xl object-cover" />
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-card-foreground line-clamp-1">{course.title}</h3>
-                  <p className="text-xs text-muted-foreground mt-1">{course.mentorName}</p>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                    <Star className="h-3 w-3 fill-warning text-warning" />
-                    {course.rating}
-                    <span>•</span>
-                    <MapPin className="h-3 w-3" />
-                    {course.distance}
+
+          {isLoading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : offlineCourses.length === 0 ? (
+            <div className="flex flex-col items-center py-12 text-center px-4">
+              <MapPin className="h-10 w-10 text-muted mb-3" />
+              <p className="text-sm text-muted-foreground">Chưa có lớp học offline nào</p>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {offlineCourses.map((course) => (
+                <Link
+                  key={course.id}
+                  to={`/course/${course.id}`}
+                  className="flex gap-3 p-4 transition-colors hover:bg-muted/50"
+                >
+                  <img
+                    src={course.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200&h=200&fit=crop"}
+                    alt={course.title}
+                    className="h-20 w-20 rounded-xl object-cover shrink-0"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-semibold text-card-foreground line-clamp-1">{course.title}</h3>
+                    <p className="text-xs text-muted-foreground mt-1">{course.mentor?.name || "Mentor"}</p>
+                    <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                      <Star className="h-3 w-3 fill-warning text-warning" />
+                      {course.rating}
+                      {course.location && (
+                        <>
+                          <span>•</span>
+                          <MapPin className="h-3 w-3" />
+                          <span className="truncate">{course.location}</span>
+                        </>
+                      )}
+                    </div>
+                    <p className="mt-1 text-sm font-bold text-primary">{course.price.toLocaleString("vi-VN")}đ/buổi</p>
                   </div>
-                  <p className="mt-1 text-sm font-bold text-primary">{course.price.toLocaleString("vi-VN")}đ</p>
-                </div>
-              </Link>
-            ))}
-          </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Map area */}
         <div className="relative flex-1 bg-muted">
-          {/* Simulated map */}
           <div className="absolute inset-0 bg-gradient-to-br from-muted to-accent/30">
             <svg className="absolute inset-0 h-full w-full opacity-10" xmlns="http://www.w3.org/2000/svg">
               <defs>
@@ -85,20 +104,23 @@ export default function MapPage() {
               </div>
             </div>
 
-            {/* Course pins */}
-            {offlineCourses.slice(0, 6).map((course, i) => (
+            {/* Course pins từ Supabase */}
+            {offlineCourses.slice(0, 8).map((course, i) => (
               <Link
                 key={course.id}
                 to={`/course/${course.id}`}
                 className="absolute group"
-                style={{ top: pinPositions[i]?.top, left: pinPositions[i]?.left }}
+                style={{
+                  top: PIN_POSITIONS[i % PIN_POSITIONS.length]?.top,
+                  left: PIN_POSITIONS[i % PIN_POSITIONS.length]?.left,
+                }}
               >
                 <div className="flex flex-col items-center">
                   <div className="rounded-full gradient-primary p-2 shadow-lg transition-transform group-hover:scale-110">
                     <MapPin className="h-4 w-4 text-primary-foreground" />
                   </div>
-                  <div className="mt-1 rounded-lg bg-card px-2 py-1 shadow-card opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                    <p className="text-xs font-semibold text-card-foreground">{course.title.slice(0, 20)}...</p>
+                  <div className="mt-1 rounded-lg bg-card px-2 py-1 shadow-card opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap max-w-[160px]">
+                    <p className="text-xs font-semibold text-card-foreground truncate">{course.title}</p>
                     <p className="text-xs text-primary font-bold">{course.price.toLocaleString("vi-VN")}đ</p>
                   </div>
                 </div>

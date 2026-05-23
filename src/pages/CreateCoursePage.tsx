@@ -3,7 +3,8 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCreateCourse } from "@/hooks/use-courses";
-import { Image, MapPin, Monitor, Globe, Clock, DollarSign, FileText, Upload, CheckCircle2, Loader2 } from "lucide-react";
+import { Image, MapPin, Monitor, Globe, Clock, DollarSign, FileText, Upload, CheckCircle2, Loader2, X } from "lucide-react";
+import { useUploadImage } from "@/hooks/use-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,6 +35,16 @@ export default function CreateCoursePage() {
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("11:00");
   const [submitted, setSubmitted] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const { uploadImage, uploading: imageUploading } = useUploadImage();
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
 
   const toggleDay = (day: string) => {
     setSelectedDays((prev) => prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day]);
@@ -51,6 +62,11 @@ export default function CreateCoursePage() {
     }
 
     try {
+      let imageUrl: string | undefined;
+      if (imageFile) {
+        const url = await uploadImage(imageFile, "course-images", session.user.id);
+        if (url) imageUrl = url;
+      }
       await createCourse.mutateAsync({
         mentor_id: session.user.id,
         title,
@@ -60,6 +76,7 @@ export default function CreateCoursePage() {
         price: parseInt(price),
         location: format === "offline" ? location : undefined,
         meeting_link: format === "online" ? meetingLink : undefined,
+        image_url: imageUrl,
         schedules: selectedDays.map((day) => ({
           day_of_week: day,
           start_time: startTime,
@@ -201,15 +218,36 @@ export default function CreateCoursePage() {
             <h2 className="font-semibold text-foreground flex items-center gap-2">
               <Image className="h-5 w-5 text-primary" />Hình ảnh
             </h2>
-            <div className="rounded-xl border-2 border-dashed p-8 text-center">
-              <Upload className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Kéo thả hoặc click để upload hình ảnh</p>
-              <p className="text-xs text-muted-foreground mt-1">PNG, JPG tối đa 5MB</p>
-            </div>
+            <label className="block cursor-pointer">
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="hidden"
+                onChange={handleImageChange}
+              />
+              {imagePreview ? (
+                <div className="relative">
+                  <img src={imagePreview} alt="Preview" className="w-full h-48 object-cover rounded-xl" />
+                  <button
+                    type="button"
+                    onClick={(e) => { e.preventDefault(); setImageFile(null); setImagePreview(null); }}
+                    className="absolute top-2 right-2 rounded-full bg-destructive p-1 text-white"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="rounded-xl border-2 border-dashed p-8 text-center hover:border-primary/50 transition-colors">
+                  <Upload className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Kéo thả hoặc click để upload hình ảnh</p>
+                  <p className="text-xs text-muted-foreground mt-1">PNG, JPG, WebP tối đa 5MB</p>
+                </div>
+              )}
+            </label>
           </div>
 
-          <Button type="submit" disabled={createCourse.isPending} className="w-full gradient-primary border-0 text-primary-foreground py-6 rounded-xl text-base">
-            {createCourse.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang tạo...</> : "Đăng khóa học"}
+          <Button type="submit" disabled={createCourse.isPending || imageUploading} className="w-full gradient-primary border-0 text-primary-foreground py-6 rounded-xl text-base">
+            {(createCourse.isPending || imageUploading) ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />{imageUploading ? "Đang upload ảnh..." : "Đang tạo..."}</> : "Đăng khóa học"}
           </Button>
         </form>
       </div>

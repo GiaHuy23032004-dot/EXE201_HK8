@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { Bell, Lock, Globe, Moon, Shield, Trash2 } from "lucide-react";
+import { Bell, Lock, Globe, Moon, Shield, Trash2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 
@@ -13,14 +14,46 @@ export default function SettingsPage() {
   const { isLoggedIn, logout } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
+
   const [emailNotif, setEmailNotif] = useState(true);
-  const [pushNotif, setPushNotif] = useState(true);
-  const [darkMode, setDarkMode] = useState(false);
+  const [pushNotif, setPushNotif]   = useState(true);
+  const [darkMode, setDarkMode]     = useState(false);
+  const [currentPw, setCurrentPw]   = useState("");
+  const [newPw, setNewPw]           = useState("");
+  const [pwLoading, setPwLoading]   = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   if (!isLoggedIn) {
     navigate("/auth");
     return null;
   }
+
+  const handleChangePassword = async () => {
+    if (!newPw || newPw.length < 8) {
+      toast({ title: "Mật khẩu mới phải có ít nhất 8 ký tự", variant: "destructive" });
+      return;
+    }
+    setPwLoading(true);
+    const { error } = await supabase.auth.updateUser({ password: newPw });
+    setPwLoading(false);
+    if (error) {
+      toast({ title: "Đổi mật khẩu thất bại", description: error.message, variant: "destructive" });
+    } else {
+      setCurrentPw("");
+      setNewPw("");
+      toast({ title: "Đã đổi mật khẩu thành công" });
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!window.confirm("Bạn có chắc muốn xóa tài khoản? Hành động này không thể hoàn tác.")) return;
+    setDeleteLoading(true);
+    // Đăng xuất trước, admin sẽ xóa user qua Edge Function nếu cần
+    await logout();
+    toast({ title: "Đã đăng xuất. Liên hệ admin để xóa tài khoản hoàn toàn." });
+    navigate("/");
+    setDeleteLoading(false);
+  };
 
   return (
     <MainLayout>
@@ -58,15 +91,21 @@ export default function SettingsPage() {
             </h2>
             <div className="space-y-4">
               <div>
-                <Label>Mật khẩu hiện tại</Label>
-                <Input type="password" placeholder="••••••••" className="mt-1" />
-              </div>
-              <div>
                 <Label>Mật khẩu mới</Label>
-                <Input type="password" placeholder="Tối thiểu 8 ký tự" className="mt-1" />
+                <Input
+                  type="password"
+                  placeholder="Tối thiểu 8 ký tự"
+                  value={newPw}
+                  onChange={(e) => setNewPw(e.target.value)}
+                  className="mt-1"
+                />
               </div>
-              <Button variant="outline" onClick={() => toast({ title: "Đã cập nhật mật khẩu" })}>
-                Đổi mật khẩu
+              <Button
+                variant="outline"
+                onClick={handleChangePassword}
+                disabled={pwLoading || !newPw}
+              >
+                {pwLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang đổi...</> : "Đổi mật khẩu"}
               </Button>
             </div>
           </div>
@@ -113,7 +152,15 @@ export default function SettingsPage() {
               <Trash2 className="h-5 w-5" /> Vùng nguy hiểm
             </h2>
             <p className="mb-4 text-sm text-muted-foreground">Xóa tài khoản sẽ xóa tất cả dữ liệu và không thể hoàn tác.</p>
-            <Button variant="destructive" size="sm">Xóa tài khoản</Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleDeleteAccount}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Xóa tài khoản
+            </Button>
           </div>
         </div>
       </div>

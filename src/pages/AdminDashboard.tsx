@@ -13,108 +13,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
-
-const pendingMentors = [
-  { id: "m1", name: "Hoàng Minh", email: "hoang@mail.com", specialty: "Piano", date: "08/03/2026" },
-  { id: "m2", name: "Lan Anh", email: "lan@mail.com", specialty: "Tiếng Nhật", date: "07/03/2026" },
-];
-
-const pendingCourses = [
-  { id: "c1", title: "Khóa học Piano Jazz", mentor: "Hoàng Minh", category: "Âm nhạc", price: 300000, status: "pending" as const, createdAt: "08/03/2026", description: "Khóa học Piano Jazz dành cho người có nền tảng cơ bản" },
-  { id: "c2", title: "Tiếng Nhật N3", mentor: "Lan Anh", category: "Ngoại ngữ", price: 400000, status: "pending" as const, createdAt: "07/03/2026", description: "Luyện thi JLPT N3 hiệu quả" },
-  { id: "c3", title: "Lập trình React", mentor: "Đức Anh", category: "Công nghệ", price: 500000, status: "approved" as const, createdAt: "06/03/2026", description: "Fullstack React & TypeScript" },
-  { id: "c4", title: "Yoga cơ bản", mentor: "Thanh Hà", category: "Sức khỏe", price: 200000, status: "rejected" as const, createdAt: "05/03/2026", description: "Yoga cho người mới bắt đầu" },
-];
-
-type ReportItem = {
-  id: string; title: string; type: "course" | "mentor" | "comment" | "payment";
-  reason: string; reporter: string; reportedUser: string; reports: number;
-  date: string; status: "pending" | "resolved" | "dismissed" | "appealed"; detail: string;
-  mentorStrikes: number;
-};
-
-const reportedItems: ReportItem[] = [
-  { id: "r1", title: "Khóa học đáng ngờ XYZ", type: "course", reason: "Nội dung không phù hợp", reporter: "Nguyễn Văn A", reportedUser: "Trần B", reports: 5, date: "08/03/2026", status: "pending", detail: "Khóa học chứa nội dung sao chép từ nguồn khác mà không ghi nguồn", mentorStrikes: 1 },
-  { id: "r2", title: "Mentor giả mạo ABC", type: "mentor", reason: "Thông tin sai lệch", reporter: "Lê C", reportedUser: "Phạm D", reports: 3, date: "07/03/2026", status: "pending", detail: "Mentor tự xưng có bằng cấp nhưng không có bằng chứng", mentorStrikes: 0 },
-  { id: "r3", title: "Bình luận xúc phạm", type: "comment", reason: "Ngôn từ thù ghét", reporter: "Hoàng E", reportedUser: "Vũ F", reports: 8, date: "06/03/2026", status: "resolved", detail: "Bình luận chứa lời lẽ xúc phạm và phân biệt", mentorStrikes: 2 },
-  { id: "r4", title: "Lừa đảo thanh toán", type: "payment", reason: "Gian lận tài chính", reporter: "Đỗ G", reportedUser: "Bùi H", reports: 12, date: "05/03/2026", status: "dismissed", detail: "Mentor thu tiền ngoài hệ thống và không hoàn trả", mentorStrikes: 2 },
-  { id: "r5", title: "Khiếu nại quyết định gỡ bài", type: "course", reason: "Mentor kháng cáo", reporter: "Mentor Trần B", reportedUser: "Admin", reports: 1, date: "09/03/2026", status: "appealed", detail: "Mentor cho rằng nội dung bị gỡ là hợp lệ và yêu cầu xem xét lại", mentorStrikes: 1 },
-];
-
-const promotedListings = [
-  { id: "p1", title: "Guitar Acoustic cho người mới", mentor: "Minh Tuấn", fee: 15000, days: 3, status: "active" },
-  { id: "p2", title: "Lập trình Web Fullstack", mentor: "Đức Anh", fee: 15000, days: 3, status: "expired" },
-];
-
-type PayoutOrder = { code: string; date: string; gross: number };
-type PayoutRequest = {
-  id: string;
-  mentor: string;
-  amount: number;
-  date: string;
-  bank: string;
-  account: string;
-  holder: string;
-  orders: PayoutOrder[];
-  status: "pending" | "paid";
-};
-
-const initialPayouts: PayoutRequest[] = [
-  {
-    id: "po1", mentor: "Minh Tuấn", amount: 1955000, date: "08/03/2026",
-    bank: "Vietcombank", account: "0123456789", holder: "NGUYEN MINH TUAN",
-    status: "pending",
-    orders: [
-      { code: "OD-1042", date: "20/02/2026", gross: 500000 },
-      { code: "OD-1051", date: "21/02/2026", gross: 800000 },
-      { code: "OD-1078", date: "23/02/2026", gross: 1000000 },
-    ],
-  },
-  {
-    id: "po2", mentor: "Lan Anh", amount: 1020000, date: "07/03/2026",
-    bank: "Techcombank", account: "9988776655", holder: "TRAN LAN ANH",
-    status: "pending",
-    orders: [
-      { code: "OD-1033", date: "18/02/2026", gross: 600000 },
-      { code: "OD-1060", date: "22/02/2026", gross: 600000 },
-    ],
-  },
-];
-
-type LedgerEntry = {
-  id: string; date: string; from: string; to: string;
-  kind: "in" | "payout" | "commission" | "refund";
-  gross: number; commission: number;
-};
-
-const ledgerData: LedgerEntry[] = [
-  { id: "TXN-3001", date: "08/03/2026 10:21", from: "Học viên Nguyễn A", to: "Hệ thống", kind: "in", gross: 500000, commission: 75000 },
-  { id: "TXN-3002", date: "08/03/2026 11:05", from: "Học viên Trần B", to: "Hệ thống", kind: "in", gross: 350000, commission: 52500 },
-  { id: "PO-1042",  date: "08/03/2026 14:30", from: "Hệ thống", to: "Mentor Minh Tuấn", kind: "payout", gross: 1955000, commission: 0 },
-  { id: "TXN-3003", date: "07/03/2026 09:18", from: "Học viên Lê C", to: "Hệ thống", kind: "in", gross: 800000, commission: 120000 },
-  { id: "RF-0072",  date: "06/03/2026 18:45", from: "Hệ thống", to: "Học viên Lê Minh", kind: "refund", gross: 425000, commission: -63750 },
-  { id: "PO-1039",  date: "05/03/2026 10:00", from: "Hệ thống", to: "Mentor Lan Anh", kind: "payout", gross: 1020000, commission: 0 },
-  { id: "TXN-2998", date: "04/03/2026 16:40", from: "Học viên Phạm D", to: "Hệ thống", kind: "in", gross: 1200000, commission: 180000 },
-];
-
-// Analytics data
-const monthlyRevenue = [
-  { month: "T10", revenue: 85, bookings: 620, users: 4200 },
-  { month: "T11", revenue: 92, bookings: 710, users: 4800 },
-  { month: "T12", revenue: 78, bookings: 580, users: 5100 },
-  { month: "T1", revenue: 105, bookings: 820, users: 5900 },
-  { month: "T2", revenue: 118, bookings: 950, users: 6400 },
-  { month: "T3", revenue: 120, bookings: 1020, users: 7200 },
-];
-
-const categoryData = [
-  { name: "Ngoại ngữ", value: 35 },
-  { name: "Âm nhạc", value: 25 },
-  { name: "Công nghệ", value: 20 },
-  { name: "Sức khỏe", value: 12 },
-  { name: "Khác", value: 8 },
-];
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "hsl(var(--warning, 38 92% 50%))", "hsl(var(--muted-foreground))"];
 
@@ -128,10 +28,33 @@ type UserRecord = {
   roles: string[];
 };
 
+type ReportItem = {
+  id: string; title: string; type: "course" | "mentor" | "comment" | "payment";
+  reason: string; reporter: string; reportedUser: string; reports: number;
+  date: string; status: "pending" | "resolved" | "dismissed" | "appealed"; detail: string;
+  mentorStrikes: number;
+};
+
+type PayoutOrder = { code: string; date: string; gross: number };
+type PayoutRequest = {
+  id: string; mentor: string; amount: number; date: string;
+  bank: string; account: string; holder: string;
+  orders: PayoutOrder[]; status: "pending" | "paid";
+};
+
+type LedgerEntry = {
+  id: string; date: string; from: string; to: string;
+  kind: "in" | "payout" | "commission" | "refund";
+  gross: number; commission: number;
+};
+
 export default function AdminDashboard() {
-  const [mentors, setMentors] = useState(pendingMentors);
-  const [courses, setCourses] = useState(pendingCourses);
-  const [reports, setReports] = useState(reportedItems);
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
+  const FEE = 0.15;
+
+  // ── UI state ──────────────────────────────────────────────
   const [courseFilter, setCourseFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
   const [reportFilter, setReportFilter] = useState<"all" | "pending" | "resolved" | "dismissed" | "appealed">("all");
   const [userList, setUserList] = useState<UserRecord[]>([]);
@@ -141,22 +64,366 @@ export default function AdminDashboard() {
   const [activeReport, setActiveReport] = useState<ReportItem | null>(null);
   const [strikeChoice, setStrikeChoice] = useState<string>("");
   const [emailContent, setEmailContent] = useState<string>("");
-  const [payouts, setPayouts] = useState<PayoutRequest[]>(initialPayouts);
+  const [activePayout, setActivePayout] = useState<PayoutRequest | null>(null);
   const [ledgerFrom, setLedgerFrom] = useState("");
   const [ledgerTo, setLedgerTo] = useState("");
   const [ledgerKind, setLedgerKind] = useState<"all" | "in" | "payout" | "refund">("all");
   const [ledgerSearch, setLedgerSearch] = useState("");
-  const [activePayout, setActivePayout] = useState<PayoutRequest | null>(null);
-  const { toast } = useToast();
 
-  const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
-  const FEE = 0.15;
+  // ── Supabase queries ──────────────────────────────────────
+
+  // Pending Mentors
+  const { data: mentors = [], isLoading: mentorsLoading, refetch: refetchMentors } = useQuery({
+    queryKey: ["admin-pending-mentors"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("user_id, name, email, role, created_at")
+        .eq("role", "mentor")
+        .order("created_at", { ascending: false })
+        .limit(10);
+      if (error) throw error;
+      return (data ?? []).map((p: any) => ({
+        id: p.user_id,
+        name: p.name ?? "Không tên",
+        email: p.email ?? "",
+        specialty: "",
+        date: new Date(p.created_at).toLocaleDateString("vi-VN"),
+      }));
+    },
+  });
+
+  // Courses (all statuses for admin)
+  const { data: courses = [], isLoading: coursesLoading, refetch: refetchCourses } = useQuery({
+    queryKey: ["admin-courses"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("courses")
+        .select("*, mentor:profiles!courses_mentor_id_fkey(name)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((c: any) => ({
+        id: c.id,
+        title: c.title,
+        mentor: c.mentor?.name ?? "Mentor",
+        category: c.category,
+        price: c.price,
+        status: c.status as "pending" | "approved" | "rejected",
+        createdAt: new Date(c.created_at).toLocaleDateString("vi-VN"),
+        description: c.description ?? "",
+      }));
+    },
+  });
+
+  // Reports
+  const { data: reports = [], isLoading: reportsLoading, refetch: refetchReports } = useQuery({
+    queryKey: ["admin-reports"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("reports")
+        .select(`
+          id, type, title, reason, detail, status, created_at,
+          reporter:profiles!reports_reporter_id_fkey(name),
+          reported:profiles!reports_reported_user_id_fkey(name)
+        `)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        title: r.title,
+        type: r.type as ReportItem["type"],
+        reason: r.reason,
+        reporter: r.reporter?.name ?? "Ẩn danh",
+        reportedUser: r.reported?.name ?? "Không rõ",
+        reports: 1,
+        date: new Date(r.created_at).toLocaleDateString("vi-VN"),
+        status: r.status as ReportItem["status"],
+        detail: r.detail ?? "",
+        mentorStrikes: 0,
+      })) as ReportItem[];
+    },
+  });
+
+  // Promoted listings
+  const { data: promotedListings = [], isLoading: promotedLoading } = useQuery({
+    queryKey: ["admin-promoted"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("promoted_listings")
+        .select("*, course:courses(title), mentor:profiles!promoted_listings_mentor_id_fkey(name)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((p: any) => ({
+        id: p.id,
+        title: p.course?.title ?? "Khóa học",
+        mentor: p.mentor?.name ?? "Mentor",
+        fee: p.fee,
+        days: p.days,
+        status: p.status as string,
+      }));
+    },
+  });
+
+  // Withdrawal requests (payouts)
+  const { data: payouts = [], isLoading: payoutsLoading, refetch: refetchPayouts } = useQuery({
+    queryKey: ["admin-payouts"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("withdrawal_requests")
+        .select("*, mentor:profiles!withdrawal_requests_mentor_id_fkey(name)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return (data ?? []).map((p: any) => ({
+        id: p.id,
+        mentor: p.mentor?.name ?? "Mentor",
+        amount: p.amount,
+        date: new Date(p.created_at).toLocaleDateString("vi-VN"),
+        bank: p.bank_name,
+        account: p.bank_account,
+        holder: p.bank_holder,
+        status: p.status as "pending" | "paid",
+        orders: [],
+      })) as PayoutRequest[];
+    },
+  });
+
+  // Ledger (transactions)
+  const { data: ledgerData = [], isLoading: ledgerLoading } = useQuery({
+    queryKey: ["admin-ledger"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select(`
+          id, amount, platform_fee, net_amount, status, created_at, reference_code,
+          learner:profiles!transactions_learner_id_fkey(name),
+          mentor:profiles!transactions_mentor_id_fkey(name)
+        `)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (error) throw error;
+      return (data ?? []).map((t: any) => ({
+        id: t.reference_code ?? t.id.slice(0, 8),
+        date: new Date(t.created_at).toLocaleString("vi-VN"),
+        from: t.learner?.name ?? "Học viên",
+        to: t.mentor?.name ?? "Hệ thống",
+        kind: t.status === "refunded" ? "refund" : "in" as LedgerEntry["kind"],
+        gross: t.amount,
+        commission: t.platform_fee,
+      })) as LedgerEntry[];
+    },
+  });
+
+  // Analytics aggregates
+  const { data: analytics } = useQuery({
+    queryKey: ["admin-analytics"],
+    queryFn: async () => {
+      const [usersRes, coursesRes, bookingsRes, revenueRes] = await Promise.all([
+        supabase.from("profiles").select("user_id", { count: "exact", head: true }),
+        supabase.from("courses").select("id", { count: "exact", head: true }),
+        supabase.from("bookings").select("id", { count: "exact", head: true }),
+        supabase.from("transactions").select("amount").eq("status", "success"),
+      ]);
+      const totalRevenue = (revenueRes.data ?? []).reduce((s: number, t: any) => s + t.amount, 0);
+      return {
+        users: usersRes.count ?? 0,
+        courses: coursesRes.count ?? 0,
+        bookings: bookingsRes.count ?? 0,
+        revenue: totalRevenue,
+      };
+    },
+  });
+
+  // Monthly revenue from transactions
+  const { data: monthlyRevenue = [] } = useQuery({
+    queryKey: ["admin-monthly-revenue"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select("amount, created_at")
+        .eq("status", "success")
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      const map: Record<string, { revenue: number; bookings: number }> = {};
+      (data ?? []).forEach((t: any) => {
+        const d = new Date(t.created_at);
+        const key = `T${d.getMonth() + 1}`;
+        if (!map[key]) map[key] = { revenue: 0, bookings: 0 };
+        map[key].revenue += Math.round(t.amount / 1_000_000);
+        map[key].bookings += 1;
+      });
+      return Object.entries(map).map(([month, v]) => ({ month, ...v, users: 0 }));
+    },
+  });
+
+  // Category distribution
+  const { data: categoryData = [] } = useQuery({
+    queryKey: ["admin-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("courses")
+        .select("category")
+        .eq("status", "approved");
+      if (error) throw error;
+      const map: Record<string, number> = {};
+      (data ?? []).forEach((c: any) => { map[c.category] = (map[c.category] ?? 0) + 1; });
+      return Object.entries(map)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([name, value]) => ({ name, value }));
+    },
+  });
+
+  // ── Mutations ─────────────────────────────────────────────
+
+  const approveMentor = useMutation({
+    mutationFn: async (userId: string) => {
+      // Mentor is already role=mentor; just toast success (no extra status field)
+      return userId;
+    },
+    onSuccess: () => { refetchMentors(); toast({ title: "Đã duyệt mentor" }); },
+  });
+
+  const rejectMentor = useMutation({
+    mutationFn: async (userId: string) => {
+      const { error } = await supabase.from("profiles").update({ role: "learner" }).eq("user_id", userId);
+      if (error) throw error;
+    },
+    onSuccess: () => { refetchMentors(); toast({ title: "Đã từ chối mentor" }); },
+    onError: () => toast({ title: "Lỗi", variant: "destructive" }),
+  });
+
+  const updateCourseStatus = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: "approved" | "rejected" }) => {
+      const { error } = await supabase.from("courses").update({ status }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_, vars) => {
+      refetchCourses();
+      toast({ title: vars.status === "approved" ? "Đã duyệt khóa học" : "Đã từ chối khóa học" });
+    },
+    onError: () => toast({ title: "Lỗi cập nhật khóa học", variant: "destructive" }),
+  });
+
+  const deleteCourse = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from("courses").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { refetchCourses(); toast({ title: "Đã xóa khóa học" }); },
+    onError: () => toast({ title: "Lỗi xóa khóa học", variant: "destructive" }),
+  });
+
+  const updateReportStatus = useMutation({
+    mutationFn: async ({ id, status, verdict, email }: { id: string; status: string; verdict?: string; email?: string }) => {
+      const { error } = await supabase.from("reports").update({
+        status,
+        admin_verdict: verdict,
+        admin_email: email,
+        resolved_at: new Date().toISOString(),
+      }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => { refetchReports(); },
+    onError: () => toast({ title: "Lỗi cập nhật báo cáo", variant: "destructive" }),
+  });
+
+  const confirmPayoutMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("withdrawal_requests")
+        .update({ status: "paid", processed_at: new Date().toISOString() })
+        .eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refetchPayouts();
+      toast({ title: "Đã xác nhận chuyển khoản" });
+      setActivePayout(null);
+    },
+    onError: () => toast({ title: "Lỗi xác nhận payout", variant: "destructive" }),
+  });
+
+  // ── User management (via Edge Function) ──────────────────
+
+  const fetchUsers = useCallback(async () => {
+    setUserLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-users", {
+        body: { action: "list" },
+      });
+      if (!error && data?.users) {
+        setUserList(data.users);
+      } else {
+        toast({ title: "Lỗi", description: "Không thể tải danh sách người dùng.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Lỗi", description: "Không thể kết nối server.", variant: "destructive" });
+    }
+    setUserLoading(false);
+  }, []);
+
+  const handleToggleBlock = async (userId: string, currentlyBlocked: boolean) => {
+    setActionLoading(userId + "_block");
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-users", {
+        body: { action: "toggle-block", targetUserId: userId },
+      });
+      if (!error && data?.success) {
+        setUserList((prev) => prev.map((u) => u.user_id === userId ? { ...u, is_blocked: data.is_blocked } : u));
+        toast({ title: data.is_blocked ? "Đã khóa tài khoản" : "Đã mở khóa tài khoản" });
+      } else {
+        toast({ title: "Lỗi", description: "Không thể thực hiện thao tác.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Lỗi", description: "Có lỗi xảy ra.", variant: "destructive" });
+    }
+    setActionLoading(null);
+  };
+
+  const handleAssignAdmin = async (userId: string, hasAdmin: boolean) => {
+    setActionLoading(userId + "_role");
+    const action = hasAdmin ? "remove-role" : "assign-role";
+    try {
+      const { data, error } = await supabase.functions.invoke("admin-users", {
+        body: { action, targetUserId: userId, role: "admin" },
+      });
+      if (!error && data?.success) {
+        setUserList((prev) => prev.map((u) => {
+          if (u.user_id !== userId) return u;
+          const roles = hasAdmin ? u.roles.filter((r) => r !== "admin") : [...u.roles, "admin"];
+          return { ...u, roles };
+        }));
+        toast({ title: hasAdmin ? "Đã thu hồi quyền Admin" : "Đã cấp quyền Admin" });
+      } else {
+        toast({ title: "Lỗi", description: "Không thể thay đổi quyền.", variant: "destructive" });
+      }
+    } catch {
+      toast({ title: "Lỗi", description: "Có lỗi xảy ra.", variant: "destructive" });
+    }
+    setActionLoading(null);
+  };
+
+  // ── Helpers ───────────────────────────────────────────────
+
+  const handleCourseAction = (courseId: string, action: "approve" | "reject" | "delete") => {
+    if (action === "delete") {
+      deleteCourse.mutate(courseId);
+    } else {
+      updateCourseStatus.mutate({ id: courseId, status: action === "approve" ? "approved" : "rejected" });
+    }
+  };
+
+  const handleReportAction = (reportId: string, action: "resolve" | "dismiss") => {
+    updateReportStatus.mutate({
+      id: reportId,
+      status: action === "resolve" ? "resolved" : "dismissed",
+    });
+    toast({ title: action === "resolve" ? "Đã xử lý báo cáo" : "Đã bỏ qua báo cáo" });
+  };
 
   const confirmPayout = () => {
     if (!activePayout) return;
-    setPayouts(payouts.map(p => p.id === activePayout.id ? { ...p, status: "paid" } : p));
-    toast({ title: "Đã chuyển khoản thành công", description: `Đã thanh toán ${fmtVnd(activePayout.amount)} cho ${activePayout.mentor}.` });
-    setActivePayout(null);
+    confirmPayoutMutation.mutate(activePayout.id);
   };
 
   const copyAccount = (acc: string) => {
@@ -183,82 +450,18 @@ export default function AdminDashboard() {
     if (opt) setEmailContent(opt.email);
   };
 
-
-  const fetchUsers = useCallback(async () => {
-    setUserLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-users", {
-        body: { action: "list" },
-      });
-      if (!error && data?.users) {
-        setUserList(data.users);
-      } else {
-        toast({ title: "Lỗi", description: "Không thể tải danh sách người dùng.", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Lỗi", description: "Không thể kết nối server.", variant: "destructive" });
-    }
-    setUserLoading(false);
-  }, []);
-
-  const handleToggleBlock = async (userId: string, currentlyBlocked: boolean) => {
-    setActionLoading(userId + "_block");
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-users", {
-        body: { action: "toggle-block", targetUserId: userId },
-      });
-      if (!error && data?.success) {
-        setUserList((prev) =>
-          prev.map((u) => (u.user_id === userId ? { ...u, is_blocked: data.is_blocked } : u))
-        );
-        toast({ title: data.is_blocked ? "Đã khóa tài khoản" : "Đã mở khóa tài khoản" });
-      } else {
-        toast({ title: "Lỗi", description: "Không thể thực hiện thao tác.", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Lỗi", description: "Có lỗi xảy ra.", variant: "destructive" });
-    }
-    setActionLoading(null);
-  };
-
-  const handleAssignAdmin = async (userId: string, hasAdmin: boolean) => {
-    setActionLoading(userId + "_role");
-    const action = hasAdmin ? "remove-role" : "assign-role";
-    try {
-      const { data, error } = await supabase.functions.invoke("admin-users", {
-        body: { action, targetUserId: userId, role: "admin" },
-      });
-      if (!error && data?.success) {
-        setUserList((prev) =>
-          prev.map((u) => {
-            if (u.user_id !== userId) return u;
-            const roles = hasAdmin ? u.roles.filter((r) => r !== "admin") : [...u.roles, "admin"];
-            return { ...u, roles };
-          })
-        );
-        toast({ title: hasAdmin ? "Đã thu hồi quyền Admin" : "Đã cấp quyền Admin" });
-      } else {
-        toast({ title: "Lỗi", description: "Không thể thay đổi quyền.", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Lỗi", description: "Có lỗi xảy ra.", variant: "destructive" });
-    }
-    setActionLoading(null);
-  };
-
-  const handleCourseAction = (courseId: string, action: "approve" | "reject" | "delete") => {
-    if (action === "delete") {
-      setCourses(courses.filter(c => c.id !== courseId));
-      toast({ title: "Đã xóa khóa học" });
-    } else {
-      setCourses(courses.map(c => c.id === courseId ? { ...c, status: action === "approve" ? "approved" as const : "rejected" as const } : c));
-      toast({ title: action === "approve" ? "Đã duyệt khóa học" : "Đã từ chối khóa học" });
-    }
-  };
-
-  const handleReportAction = (reportId: string, action: "resolve" | "dismiss") => {
-    setReports(reports.map(r => r.id === reportId ? { ...r, status: action === "resolve" ? "resolved" as const : "dismissed" as const } : r));
-    toast({ title: action === "resolve" ? "Đã xử lý báo cáo" : "Đã bỏ qua báo cáo" });
+  const submitVerdict = () => {
+    if (!activeReport || !strikeChoice) return;
+    const opt = strikeOptions.find((o) => o.id === strikeChoice)!;
+    const newStatus = strikeChoice === "ignore" ? "dismissed" : "resolved";
+    updateReportStatus.mutate({
+      id: activeReport.id,
+      status: newStatus,
+      verdict: opt.label,
+      email: emailContent,
+    });
+    toast({ title: "Đã gửi phán quyết", description: `${opt.label} → đã gửi email cho mentor.` });
+    setActiveReport(null);
   };
 
   const filteredCourses = courses.filter(c => courseFilter === "all" || c.status === courseFilter);
@@ -284,16 +487,53 @@ export default function AdminDashboard() {
     }
   };
 
-  const submitVerdict = () => {
-    if (!activeReport || !strikeChoice) return;
-    const opt = strikeOptions.find((o) => o.id === strikeChoice)!;
-    const newStatus = strikeChoice === "ignore" ? "dismissed" as const : "resolved" as const;
-    setReports(reports.map(r => r.id === activeReport.id ? { ...r, status: newStatus } : r));
-    toast({ title: "Đã gửi phán quyết", description: `${opt.label} → đã gửi email cho mentor.` });
-    setActiveReport(null);
+  // ── Ledger filter logic ───────────────────────────────────
+  const filteredLedger = (() => {
+    const parse = (s: string) => {
+      const parts = s.split(/[\s/]/);
+      if (parts.length >= 3) {
+        const [d, m, y] = parts;
+        return new Date(`${y}-${m}-${d}`).getTime();
+      }
+      return NaN;
+    };
+    const fromTs = ledgerFrom ? new Date(ledgerFrom).getTime() : -Infinity;
+    const toTs = ledgerTo ? new Date(ledgerTo).getTime() + 86400000 : Infinity;
+    return ledgerData.filter(e => {
+      if (ledgerKind !== "all" && e.kind !== ledgerKind) return false;
+      const ts = parse(e.date.split(" ")[0]);
+      if (!isNaN(ts) && (ts < fromTs || ts > toTs)) return false;
+      if (ledgerSearch) {
+        const q = ledgerSearch.toLowerCase();
+        if (!e.id.toLowerCase().includes(q) && !e.from.toLowerCase().includes(q) && !e.to.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  })();
+
+  const totalGross = filteredLedger.reduce((s, e) => s + (e.kind === "in" ? e.gross : 0), 0);
+  const totalCommission = filteredLedger.reduce((s, e) => s + e.commission, 0);
+  const totalPayout = filteredLedger.reduce((s, e) => s + (e.kind === "payout" ? e.gross : 0), 0);
+
+  const kindLabel = (k: LedgerEntry["kind"]) =>
+    k === "in" ? <Badge className="bg-success/10 text-success border-0 text-[10px]">Nạp vào</Badge>
+    : k === "payout" ? <Badge className="bg-primary/10 text-primary border-0 text-[10px]">Rút ra</Badge>
+    : k === "refund" ? <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]">Hoàn tiền</Badge>
+    : <Badge className="bg-secondary/10 text-secondary border-0 text-[10px]">Hoa hồng</Badge>;
+
+  const exportCsv = () => {
+    const header = ["Mã TXN", "Thời gian", "Người gửi", "Người nhận", "Phân loại", "Tổng tiền", "Hoa hồng"];
+    const rows = filteredLedger.map(e => [e.id, e.date, e.from, e.to, e.kind, e.gross, e.commission]);
+    const csv = [header, ...rows].map(r => r.join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `so-cai-${Date.now()}.csv`; a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Đã xuất file CSV", description: `${filteredLedger.length} giao dịch` });
   };
 
-
+  // ── Render ────────────────────────────────────────────────
   return (
     <MainLayout>
       <div className="container py-8">
@@ -308,11 +548,11 @@ export default function AdminDashboard() {
         {/* Metrics */}
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-5">
           {[
-            { icon: Users, label: "Tổng người dùng", value: "52,340", color: "text-secondary" },
-            { icon: BookOpen, label: "Tổng khóa học", value: "15,128", color: "text-primary" },
-            { icon: BarChart3, label: "Tổng booking", value: "8,450", color: "text-success" },
-            { icon: DollarSign, label: "Doanh thu", value: "1.2B", color: "text-warning" },
-            { icon: TrendingUp, label: "Mentor hoạt động", value: "2,513", color: "text-accent-foreground" },
+            { icon: Users, label: "Tổng người dùng", value: analytics ? analytics.users.toLocaleString("vi-VN") : "—", color: "text-secondary" },
+            { icon: BookOpen, label: "Tổng khóa học", value: analytics ? analytics.courses.toLocaleString("vi-VN") : "—", color: "text-primary" },
+            { icon: BarChart3, label: "Tổng booking", value: analytics ? analytics.bookings.toLocaleString("vi-VN") : "—", color: "text-success" },
+            { icon: DollarSign, label: "Doanh thu", value: analytics ? (analytics.revenue >= 1_000_000 ? (analytics.revenue / 1_000_000).toFixed(1) + "M" : fmtVnd(analytics.revenue)) : "—", color: "text-warning" },
+            { icon: TrendingUp, label: "Mentor hoạt động", value: mentors.length.toString(), color: "text-accent-foreground" },
           ].map((stat) => (
             <div key={stat.label} className="rounded-2xl border bg-card p-5 shadow-card">
               <div className="flex items-center gap-2 mb-2">
@@ -340,9 +580,9 @@ export default function AdminDashboard() {
           <TabsContent value="analytics">
             <div className="grid gap-6 md:grid-cols-3 mb-6">
               {[
-                { label: "Tổng doanh thu tháng", value: "120M VNĐ", change: "+12%", icon: DollarSign },
-                { label: "Booking tháng này", value: "1,020", change: "+8%", icon: BarChart3 },
-                { label: "Người dùng mới", value: "7,200", change: "+15%", icon: Users },
+                { label: "Tổng doanh thu tháng", value: analytics ? (analytics.revenue >= 1_000_000 ? (analytics.revenue / 1_000_000).toFixed(1) + "M VNĐ" : fmtVnd(analytics.revenue)) : "—", change: "", icon: DollarSign },
+                { label: "Booking tháng này", value: analytics ? analytics.bookings.toLocaleString("vi-VN") : "—", change: "", icon: BarChart3 },
+                { label: "Người dùng", value: analytics ? analytics.users.toLocaleString("vi-VN") : "—", change: "", icon: Users },
               ].map((kpi) => (
                 <div key={kpi.label} className="rounded-2xl border bg-card p-6 shadow-card">
                   <div className="flex items-center justify-between mb-2">
@@ -350,15 +590,13 @@ export default function AdminDashboard() {
                     <kpi.icon className="h-5 w-5 text-muted-foreground" />
                   </div>
                   <p className="text-3xl font-bold text-foreground">{kpi.value}</p>
-                  <p className="text-xs text-success mt-1">▲ {kpi.change} so với tháng trước</p>
                 </div>
               ))}
             </div>
 
             <div className="grid gap-6 md:grid-cols-2">
-              {/* Revenue Chart */}
               <div className="rounded-2xl border bg-card p-6 shadow-card">
-                <h3 className="font-semibold text-foreground mb-4">Doanh thu 6 tháng (triệu VNĐ)</h3>
+                <h3 className="font-semibold text-foreground mb-4">Doanh thu theo tháng (triệu VNĐ)</h3>
                 <ResponsiveContainer width="100%" height={280}>
                   <AreaChart data={monthlyRevenue}>
                     <defs>
@@ -376,7 +614,6 @@ export default function AdminDashboard() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Bookings Chart */}
               <div className="rounded-2xl border bg-card p-6 shadow-card">
                 <h3 className="font-semibold text-foreground mb-4">Bookings theo tháng</h3>
                 <ResponsiveContainer width="100%" height={280}>
@@ -390,7 +627,6 @@ export default function AdminDashboard() {
                 </ResponsiveContainer>
               </div>
 
-              {/* Category Pie Chart */}
               <div className="rounded-2xl border bg-card p-6 shadow-card">
                 <h3 className="font-semibold text-foreground mb-4">Phân bổ danh mục</h3>
                 <ResponsiveContainer width="100%" height={280}>
@@ -405,7 +641,6 @@ export default function AdminDashboard() {
                 </ResponsiveContainer>
               </div>
 
-              {/* User Growth */}
               <div className="rounded-2xl border bg-card p-6 shadow-card">
                 <h3 className="font-semibold text-foreground mb-4">Tăng trưởng người dùng</h3>
                 <ResponsiveContainer width="100%" height={280}>
@@ -480,22 +715,30 @@ export default function AdminDashboard() {
             )}
           </TabsContent>
 
+          {/* Mentors Tab */}
           <TabsContent value="mentors" className="space-y-3">
-            {mentors.map((m) => (
+            {mentorsLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : mentors.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8">Không có mentor nào đang chờ duyệt</p>
+            ) : mentors.map((m: any) => (
               <div key={m.id} className="flex items-center gap-4 rounded-2xl border bg-card p-4 shadow-card">
                 <div className="h-12 w-12 rounded-xl bg-accent flex items-center justify-center text-lg font-bold text-accent-foreground">{m.name[0]}</div>
                 <div className="flex-1">
                   <p className="font-semibold text-card-foreground">{m.name}</p>
-                  <p className="text-xs text-muted-foreground">{m.email} • {m.specialty}</p>
+                  <p className="text-xs text-muted-foreground">{m.email}{m.specialty ? ` • ${m.specialty}` : ""}</p>
                   <p className="text-xs text-muted-foreground">Đăng ký: {m.date}</p>
                 </div>
                 <div className="flex gap-2">
-                  <Button size="sm" onClick={() => setMentors(mentors.filter(x => x.id !== m.id))} className="gradient-primary border-0 text-primary-foreground rounded-lg"><Check className="mr-1 h-4 w-4" />Duyệt</Button>
-                  <Button size="sm" variant="outline" onClick={() => setMentors(mentors.filter(x => x.id !== m.id))} className="rounded-lg"><X className="mr-1 h-4 w-4" />Từ chối</Button>
+                  <Button size="sm" onClick={() => approveMentor.mutate(m.id)} className="gradient-primary border-0 text-primary-foreground rounded-lg" disabled={approveMentor.isPending}>
+                    <Check className="mr-1 h-4 w-4" />Duyệt
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => rejectMentor.mutate(m.id)} className="rounded-lg" disabled={rejectMentor.isPending}>
+                    <X className="mr-1 h-4 w-4" />Từ chối
+                  </Button>
                 </div>
               </div>
             ))}
-            {mentors.length === 0 && <p className="text-center text-muted-foreground py-8">Không có mentor nào đang chờ duyệt</p>}
           </TabsContent>
 
           {/* Course Management Tab */}
@@ -508,35 +751,39 @@ export default function AdminDashboard() {
                 </Button>
               ))}
             </div>
-            <div className="space-y-3">
-              {filteredCourses.map((c) => (
-                <div key={c.id} className="rounded-2xl border bg-card p-4 shadow-card">
-                  <div className="flex items-start gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <p className="font-semibold text-card-foreground">{c.title}</p>
-                        {c.status === "pending" && <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ duyệt</Badge>}
-                        {c.status === "approved" && <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã duyệt</Badge>}
-                        {c.status === "rejected" && <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]">Từ chối</Badge>}
+            {coursesLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : (
+              <div className="space-y-3">
+                {filteredCourses.map((c) => (
+                  <div key={c.id} className="rounded-2xl border bg-card p-4 shadow-card">
+                    <div className="flex items-start gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <p className="font-semibold text-card-foreground">{c.title}</p>
+                          {c.status === "pending" && <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ duyệt</Badge>}
+                          {c.status === "approved" && <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã duyệt</Badge>}
+                          {c.status === "rejected" && <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]">Từ chối</Badge>}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Mentor: {c.mentor} • {c.category} • {c.createdAt}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{c.description}</p>
+                        <p className="text-sm font-bold text-primary mt-2">{c.price.toLocaleString("vi-VN")}đ/buổi</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Mentor: {c.mentor} • {c.category} • {c.createdAt}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{c.description}</p>
-                      <p className="text-sm font-bold text-primary mt-2">{c.price.toLocaleString("vi-VN")}đ/buổi</p>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      {c.status === "pending" && (
-                        <>
-                          <Button size="sm" onClick={() => handleCourseAction(c.id, "approve")} className="gradient-primary border-0 text-primary-foreground rounded-lg"><Check className="mr-1 h-4 w-4" />Duyệt</Button>
-                          <Button size="sm" variant="outline" onClick={() => handleCourseAction(c.id, "reject")} className="rounded-lg"><X className="mr-1 h-4 w-4" />Từ chối</Button>
-                        </>
-                      )}
-                      <Button size="sm" variant="outline" onClick={() => handleCourseAction(c.id, "delete")} className="rounded-lg text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                      <div className="flex gap-2 shrink-0">
+                        {c.status === "pending" && (
+                          <>
+                            <Button size="sm" onClick={() => handleCourseAction(c.id, "approve")} className="gradient-primary border-0 text-primary-foreground rounded-lg" disabled={updateCourseStatus.isPending}><Check className="mr-1 h-4 w-4" />Duyệt</Button>
+                            <Button size="sm" variant="outline" onClick={() => handleCourseAction(c.id, "reject")} className="rounded-lg" disabled={updateCourseStatus.isPending}><X className="mr-1 h-4 w-4" />Từ chối</Button>
+                          </>
+                        )}
+                        <Button size="sm" variant="outline" onClick={() => handleCourseAction(c.id, "delete")} className="rounded-lg text-destructive hover:text-destructive" disabled={deleteCourse.isPending}><Trash2 className="h-4 w-4" /></Button>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-              {filteredCourses.length === 0 && <p className="text-center text-muted-foreground py-8">Không có khóa học nào</p>}
-            </div>
+                ))}
+                {filteredCourses.length === 0 && <p className="text-center text-muted-foreground py-8">Không có khóa học nào</p>}
+              </div>
+            )}
           </TabsContent>
 
           {/* Reports Tab */}
@@ -549,60 +796,64 @@ export default function AdminDashboard() {
                 </Button>
               ))}
             </div>
-            <div className="space-y-3">
-              {filteredReports.map((r) => (
-                <div key={r.id} className="rounded-2xl border bg-card p-4 shadow-card">
-                  <div className="flex items-start gap-4">
-                    <div className="rounded-xl bg-destructive/10 p-3 shrink-0">
-                      {reportTypeIcon(r.type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <p className="font-semibold text-card-foreground">{r.title}</p>
-                        {reportStatusBadge(r.status)}
-                        <Badge variant="outline" className="text-[10px]">{r.reports} báo cáo</Badge>
-                        {r.reports >= 5 && (
-                          <Badge className="bg-warning/15 text-warning border-0 text-[10px] gap-1">
-                            <EyeOff className="h-3 w-3" /> Hệ thống tự động ẩn
-                          </Badge>
-                        )}
-                        {r.status === "appealed" && (
-                          <Badge className="bg-primary/10 text-primary border-0 text-[10px] gap-1">
-                            <AlertTriangle className="h-3 w-3" /> Mentor kháng cáo
-                          </Badge>
-                        )}
+            {reportsLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : (
+              <div className="space-y-3">
+                {filteredReports.map((r) => (
+                  <div key={r.id} className="rounded-2xl border bg-card p-4 shadow-card">
+                    <div className="flex items-start gap-4">
+                      <div className="rounded-xl bg-destructive/10 p-3 shrink-0">{reportTypeIcon(r.type)}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <p className="font-semibold text-card-foreground">{r.title}</p>
+                          {reportStatusBadge(r.status)}
+                          <Badge variant="outline" className="text-[10px]">{r.reports} báo cáo</Badge>
+                          {r.reports >= 5 && (
+                            <Badge className="bg-warning/15 text-warning border-0 text-[10px] gap-1">
+                              <EyeOff className="h-3 w-3" /> Hệ thống tự động ẩn
+                            </Badge>
+                          )}
+                          {r.status === "appealed" && (
+                            <Badge className="bg-primary/10 text-primary border-0 text-[10px] gap-1">
+                              <AlertTriangle className="h-3 w-3" /> Mentor kháng cáo
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground">Lý do: {r.reason}</p>
+                        <p className="text-xs text-muted-foreground">Người báo cáo: {r.reporter} → Bị báo cáo: {r.reportedUser}</p>
+                        <p className="text-xs text-muted-foreground mt-1 italic">{r.detail}</p>
+                        <p className="text-xs text-muted-foreground mt-1">{r.date} • Lịch sử vi phạm Mentor: {r.mentorStrikes}/3</p>
                       </div>
-                      <p className="text-xs text-muted-foreground">Lý do: {r.reason}</p>
-                      <p className="text-xs text-muted-foreground">Người báo cáo: {r.reporter} → Bị báo cáo: {r.reportedUser}</p>
-                      <p className="text-xs text-muted-foreground mt-1 italic">{r.detail}</p>
-                      <p className="text-xs text-muted-foreground mt-1">{r.date} • Lịch sử vi phạm Mentor: {r.mentorStrikes}/3</p>
+                      {(r.status === "pending" || r.status === "appealed") && (
+                        <div className="flex gap-2 shrink-0">
+                          <Button size="sm" onClick={() => openReportModal(r)} className="gradient-primary border-0 text-primary-foreground rounded-lg"><Gavel className="mr-1 h-4 w-4" />Xử lý</Button>
+                          <Button size="sm" variant="outline" onClick={() => handleReportAction(r.id, "dismiss")} className="rounded-lg"><X className="mr-1 h-4 w-4" />Bỏ qua</Button>
+                        </div>
+                      )}
                     </div>
-                    {(r.status === "pending" || r.status === "appealed") && (
-                      <div className="flex gap-2 shrink-0">
-                        <Button size="sm" onClick={() => openReportModal(r)} className="gradient-primary border-0 text-primary-foreground rounded-lg"><Gavel className="mr-1 h-4 w-4" />Xử lý</Button>
-                        <Button size="sm" variant="outline" onClick={() => handleReportAction(r.id, "dismiss")} className="rounded-lg"><X className="mr-1 h-4 w-4" />Bỏ qua</Button>
-                      </div>
-                    )}
                   </div>
-                </div>
-              ))}
-              {filteredReports.length === 0 && <p className="text-center text-muted-foreground py-8">Không có báo cáo nào</p>}
-            </div>
+                ))}
+                {filteredReports.length === 0 && <p className="text-center text-muted-foreground py-8">Không có báo cáo nào</p>}
+              </div>
+            )}
           </TabsContent>
 
+          {/* Promoted Tab */}
           <TabsContent value="promoted" className="space-y-3">
-            {promotedListings.map((p) => (
-              <div key={p.id} className="flex items-center gap-4 rounded-2xl border bg-card p-4 shadow-card">
-                <div className="rounded-xl bg-warning/10 p-3"><Megaphone className="h-5 w-5 text-warning" /></div>
-                <div className="flex-1">
-                  <p className="font-semibold text-card-foreground">{p.title}</p>
-                  <p className="text-xs text-muted-foreground">Mentor: {p.mentor} • {p.fee.toLocaleString("vi-VN")}đ / {p.days} ngày</p>
+            {promotedLoading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+              : promotedListings.length > 0 ? promotedListings.map((p: any) => (
+                <div key={p.id} className="flex items-center gap-4 rounded-2xl border bg-card p-4 shadow-card">
+                  <div className="rounded-xl bg-warning/10 p-3"><Megaphone className="h-5 w-5 text-warning" /></div>
+                  <div className="flex-1">
+                    <p className="font-semibold text-card-foreground">{p.title}</p>
+                    <p className="text-xs text-muted-foreground">Mentor: {p.mentor} • {p.fee.toLocaleString("vi-VN")}đ / {p.days} ngày</p>
+                  </div>
+                  <Badge className={p.status === "active" ? "bg-success/10 text-success border-0" : "bg-muted text-muted-foreground border-0"}>
+                    {p.status === "active" ? "Đang chạy" : p.status === "expired" ? "Hết hạn" : "Chờ duyệt"}
+                  </Badge>
                 </div>
-                <Badge className={p.status === "active" ? "bg-success/10 text-success border-0" : "bg-muted text-muted-foreground border-0"}>
-                  {p.status === "active" ? "Đang chạy" : "Hết hạn"}
-                </Badge>
-              </div>
-            ))}
+              )) : <p className="text-center text-muted-foreground py-8">Chưa có tin quảng cáo nào</p>}
           </TabsContent>
 
           {/* Payouts Tab */}
@@ -615,373 +866,229 @@ export default function AdminDashboard() {
                   <p className="text-xs text-muted-foreground">Đối soát và xác nhận chuyển khoản cho Mentor</p>
                 </div>
               </div>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mentor</TableHead>
-                    <TableHead className="text-right">Số tiền yêu cầu</TableHead>
-                    <TableHead>Ngày gửi</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                    <TableHead className="text-right">Hành động</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payouts.map((p) => (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.mentor}</TableCell>
-                      <TableCell className="text-right font-bold text-secondary">{fmtVnd(p.amount)}</TableCell>
-                      <TableCell className="text-sm text-muted-foreground">{p.date}</TableCell>
-                      <TableCell>
-                        {p.status === "pending"
-                          ? <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ xử lý</Badge>
-                          : <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã thanh toán</Badge>}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {p.status === "pending" ? (
-                          <Button size="sm" onClick={() => setActivePayout(p)} className="gradient-primary border-0 text-primary-foreground rounded-lg">
-                            <Banknote className="mr-1 h-4 w-4" />Đối soát & Duyệt
-                          </Button>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
+              {payoutsLoading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div> : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mentor</TableHead>
+                      <TableHead className="text-right">Số tiền yêu cầu</TableHead>
+                      <TableHead>Ngày gửi</TableHead>
+                      <TableHead>Ngân hàng</TableHead>
+                      <TableHead>Trạng thái</TableHead>
+                      <TableHead className="text-right">Hành động</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {payouts.length > 0 ? payouts.map((p) => (
+                      <TableRow key={p.id}>
+                        <TableCell className="font-medium">{p.mentor}</TableCell>
+                        <TableCell className="text-right font-bold text-secondary">{fmtVnd(p.amount)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">{p.date}</TableCell>
+                        <TableCell className="text-sm">{p.bank} • {p.account}</TableCell>
+                        <TableCell>
+                          {p.status === "pending"
+                            ? <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ xử lý</Badge>
+                            : <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã thanh toán</Badge>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {p.status === "pending" ? (
+                            <Button size="sm" onClick={() => setActivePayout(p)} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+                              <Banknote className="mr-1 h-4 w-4" />Duyệt
+                            </Button>
+                          ) : <span className="text-xs text-muted-foreground">—</span>}
+                        </TableCell>
+                      </TableRow>
+                    )) : (
+                      <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Chưa có yêu cầu rút tiền nào</TableCell></TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              )}
             </div>
           </TabsContent>
 
-          {/* Master Ledger / Cashflow */}
+          {/* Ledger Tab */}
           <TabsContent value="ledger">
-            {(() => {
-              const parse = (s: string) => {
-                const [d, m, y] = s.split(/[\s/]/);
-                return new Date(`${y}-${m}-${d}`).getTime();
-              };
-              const fromTs = ledgerFrom ? new Date(ledgerFrom).getTime() : -Infinity;
-              const toTs = ledgerTo ? new Date(ledgerTo).getTime() + 86400000 : Infinity;
-              const filtered = ledgerData.filter(e => {
-                if (ledgerKind !== "all" && e.kind !== ledgerKind) return false;
-                const ts = parse(e.date.split(" ")[0]);
-                if (ts < fromTs || ts > toTs) return false;
-                if (ledgerSearch) {
-                  const q = ledgerSearch.toLowerCase();
-                  if (!e.id.toLowerCase().includes(q) && !e.from.toLowerCase().includes(q) && !e.to.toLowerCase().includes(q)) return false;
-                }
-                return true;
-              });
-
-              const totalGross = filtered.reduce((s, e) => s + (e.kind === "in" ? e.gross : 0), 0);
-              const totalCommission = filtered.reduce((s, e) => s + e.commission, 0);
-              const totalPayout = filtered.reduce((s, e) => s + (e.kind === "payout" ? e.gross : 0), 0);
-
-              const kindLabel = (k: LedgerEntry["kind"]) =>
-                k === "in" ? <Badge className="bg-success/10 text-success border-0 text-[10px]">Nạp vào</Badge>
-                : k === "payout" ? <Badge className="bg-primary/10 text-primary border-0 text-[10px]">Rút ra</Badge>
-                : k === "refund" ? <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]">Hoàn tiền</Badge>
-                : <Badge className="bg-secondary/10 text-secondary border-0 text-[10px]">Hoa hồng</Badge>;
-
-              const exportCsv = () => {
-                const header = ["Mã TXN", "Thời gian", "Người gửi", "Người nhận", "Phân loại", "Tổng tiền", "Hoa hồng"];
-                const rows = filtered.map(e => [e.id, e.date, e.from, e.to, e.kind, e.gross, e.commission]);
-                const csv = [header, ...rows].map(r => r.join(",")).join("\n");
-                const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url; a.download = `so-cai-${Date.now()}.csv`; a.click();
-                URL.revokeObjectURL(url);
-                toast({ title: "Đã xuất file CSV", description: `${filtered.length} giao dịch` });
-              };
-
-              return (
-                <div className="space-y-4">
-                  {/* Filters */}
-                  <div className="rounded-2xl border bg-card p-4 shadow-card">
-                    <div className="flex flex-wrap items-end gap-3">
-                      <div className="flex-1 min-w-[140px]">
-                        <Label className="text-xs text-muted-foreground">Từ ngày</Label>
-                        <Input type="date" value={ledgerFrom} onChange={(e) => setLedgerFrom(e.target.value)} className="mt-1" />
-                      </div>
-                      <div className="flex-1 min-w-[140px]">
-                        <Label className="text-xs text-muted-foreground">Đến ngày</Label>
-                        <Input type="date" value={ledgerTo} onChange={(e) => setLedgerTo(e.target.value)} className="mt-1" />
-                      </div>
-                      <div className="flex-1 min-w-[140px]">
-                        <Label className="text-xs text-muted-foreground">Loại</Label>
-                        <Select value={ledgerKind} onValueChange={(v: typeof ledgerKind) => setLedgerKind(v)}>
-                          <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">Tất cả</SelectItem>
-                            <SelectItem value="in">Tiền vào</SelectItem>
-                            <SelectItem value="payout">Payout</SelectItem>
-                            <SelectItem value="refund">Refund</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex-[2] min-w-[200px]">
-                        <Label className="text-xs text-muted-foreground">Tìm Mã TXN / Tên người dùng</Label>
-                        <div className="relative mt-1">
-                          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input className="pl-10" value={ledgerSearch} onChange={(e) => setLedgerSearch(e.target.value)} placeholder="VD: TXN-3001 hoặc Minh Tuấn" />
-                        </div>
-                      </div>
-                      <Button onClick={exportCsv} className="gradient-primary border-0 text-primary-foreground rounded-lg">
-                        <Download className="mr-1 h-4 w-4" />Export Excel
-                      </Button>
+            <div className="space-y-4">
+              <div className="rounded-2xl border bg-card p-4 shadow-card">
+                <div className="flex flex-wrap items-end gap-3">
+                  <div className="flex-1 min-w-[140px]">
+                    <Label className="text-xs text-muted-foreground">Từ ngày</Label>
+                    <Input type="date" value={ledgerFrom} onChange={(e) => setLedgerFrom(e.target.value)} className="mt-1" />
+                  </div>
+                  <div className="flex-1 min-w-[140px]">
+                    <Label className="text-xs text-muted-foreground">Đến ngày</Label>
+                    <Input type="date" value={ledgerTo} onChange={(e) => setLedgerTo(e.target.value)} className="mt-1" />
+                  </div>
+                  <div className="flex-1 min-w-[140px]">
+                    <Label className="text-xs text-muted-foreground">Loại</Label>
+                    <Select value={ledgerKind} onValueChange={(v: typeof ledgerKind) => setLedgerKind(v)}>
+                      <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Tất cả</SelectItem>
+                        <SelectItem value="in">Tiền vào</SelectItem>
+                        <SelectItem value="payout">Payout</SelectItem>
+                        <SelectItem value="refund">Refund</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex-[2] min-w-[200px]">
+                    <Label className="text-xs text-muted-foreground">Tìm kiếm</Label>
+                    <div className="relative mt-1">
+                      <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input className="pl-10" value={ledgerSearch} onChange={(e) => setLedgerSearch(e.target.value)} placeholder="Mã TXN hoặc tên..." />
                     </div>
                   </div>
-
-                  {/* Summary */}
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    <div className="rounded-2xl border bg-card p-4 shadow-card">
-                      <p className="text-xs text-muted-foreground">Tổng tiền vào</p>
-                      <p className="text-xl font-bold text-success text-right tabular-nums">{fmtVnd(totalGross)}</p>
-                    </div>
-                    <div className="rounded-2xl border bg-card p-4 shadow-card">
-                      <p className="text-xs text-muted-foreground">Tổng payout</p>
-                      <p className="text-xl font-bold text-primary text-right tabular-nums">{fmtVnd(totalPayout)}</p>
-                    </div>
-                    <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-4 shadow-card">
-                      <p className="text-xs text-muted-foreground">Hoa hồng lưu giữ (Net)</p>
-                      <p className="text-xl font-extrabold text-primary text-right tabular-nums">{fmtVnd(totalCommission)}</p>
-                    </div>
-                  </div>
-
-                  {/* Ledger table */}
-                  <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
-                    <div className="p-4 border-b flex items-center gap-2">
-                      <BookText className="h-4 w-4 text-primary" />
-                      <h3 className="font-semibold text-foreground text-sm">Sổ cái dòng tiền — {filtered.length} giao dịch</h3>
-                    </div>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Mã TXN & Thời gian</TableHead>
-                          <TableHead>Người gửi ➔ Người nhận</TableHead>
-                          <TableHead>Phân loại</TableHead>
-                          <TableHead className="text-right">Tổng tiền (Gross)</TableHead>
-                          <TableHead className="text-right">Hoa hồng lưu giữ</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {filtered.map((e) => (
-                          <TableRow key={e.id}>
-                            <TableCell>
-                              <p className="font-mono text-xs font-semibold">{e.id}</p>
-                              <p className="text-[11px] text-muted-foreground">{e.date}</p>
-                            </TableCell>
-                            <TableCell className="text-sm">
-                              <span className="text-muted-foreground">{e.from}</span>
-                              <span className="mx-1 text-primary">➔</span>
-                              <span className="font-medium">{e.to}</span>
-                            </TableCell>
-                            <TableCell>{kindLabel(e.kind)}</TableCell>
-                            <TableCell className="text-right tabular-nums text-sm">{fmtVnd(e.gross)}</TableCell>
-                            <TableCell className={`text-right tabular-nums text-sm font-bold ${e.commission < 0 ? "text-destructive" : "text-primary"}`}>
-                              {e.commission === 0 ? "—" : (e.commission < 0 ? "−" : "") + fmtVnd(Math.abs(e.commission))}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                        {filtered.length === 0 && (
-                          <TableRow>
-                            <TableCell colSpan={5} className="text-center text-muted-foreground py-8 text-sm">Không có giao dịch khớp bộ lọc</TableCell>
-                          </TableRow>
-                        )}
-                      </TableBody>
-                    </Table>
-                  </div>
+                  <Button onClick={exportCsv} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+                    <Download className="mr-1 h-4 w-4" />Export CSV
+                  </Button>
                 </div>
-              );
-            })()}
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div className="rounded-2xl border bg-card p-4 shadow-card">
+                  <p className="text-xs text-muted-foreground">Tổng tiền vào</p>
+                  <p className="text-xl font-bold text-success text-right">{fmtVnd(filteredLedger.reduce((s, e) => s + (e.kind === "in" ? e.gross : 0), 0))}</p>
+                </div>
+                <div className="rounded-2xl border bg-card p-4 shadow-card">
+                  <p className="text-xs text-muted-foreground">Tổng payout</p>
+                  <p className="text-xl font-bold text-primary text-right">{fmtVnd(filteredLedger.reduce((s, e) => s + (e.kind === "payout" ? e.gross : 0), 0))}</p>
+                </div>
+                <div className="rounded-2xl border-2 border-primary/30 bg-primary/5 p-4 shadow-card">
+                  <p className="text-xs text-muted-foreground">Hoa hồng (Net)</p>
+                  <p className="text-xl font-extrabold text-primary text-right">{fmtVnd(filteredLedger.reduce((s, e) => s + e.commission, 0))}</p>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
+                <div className="p-4 border-b flex items-center gap-2">
+                  <BookText className="h-4 w-4 text-primary" />
+                  <h3 className="font-semibold text-foreground text-sm">Sổ cái — {filteredLedger.length} giao dịch</h3>
+                </div>
+                {ledgerLoading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div> : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Mã TXN & Thời gian</TableHead>
+                        <TableHead>Người gửi ➔ Người nhận</TableHead>
+                        <TableHead>Loại</TableHead>
+                        <TableHead className="text-right">Tổng tiền</TableHead>
+                        <TableHead className="text-right">Hoa hồng</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredLedger.length > 0 ? filteredLedger.map((e) => (
+                        <TableRow key={e.id}>
+                          <TableCell>
+                            <p className="font-mono text-xs font-semibold">{e.id}</p>
+                            <p className="text-[11px] text-muted-foreground">{e.date}</p>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <span className="text-muted-foreground">{e.from}</span>
+                            <span className="mx-1 text-primary">➔</span>
+                            <span className="font-medium">{e.to}</span>
+                          </TableCell>
+                          <TableCell>
+                            {e.kind === "in" ? <Badge className="bg-success/10 text-success border-0 text-[10px]">Tiền vào</Badge>
+                              : e.kind === "payout" ? <Badge className="bg-primary/10 text-primary border-0 text-[10px]">Payout</Badge>
+                              : <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]">Hoàn tiền</Badge>}
+                          </TableCell>
+                          <TableCell className="text-right text-sm">{fmtVnd(e.gross)}</TableCell>
+                          <TableCell className={`text-right text-sm font-bold ${e.commission < 0 ? "text-destructive" : "text-primary"}`}>
+                            {e.commission === 0 ? "—" : fmtVnd(Math.abs(e.commission))}
+                          </TableCell>
+                        </TableRow>
+                      )) : (
+                        <TableRow><TableCell colSpan={5} className="text-center text-muted-foreground py-8">Không có giao dịch nào</TableCell></TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            </div>
           </TabsContent>
         </Tabs>
       </div>
 
-      {/* Payout Reconciliation Modal */}
+      {/* Payout Modal */}
       <Dialog open={!!activePayout} onOpenChange={(o) => !o && setActivePayout(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Banknote className="h-5 w-5 text-primary" />Đối soát yêu cầu rút tiền — {activePayout?.mentor}
+              <Banknote className="h-5 w-5 text-primary" />Xác nhận rút tiền — {activePayout?.mentor}
             </DialogTitle>
           </DialogHeader>
           {activePayout && (
-            <div className="space-y-5">
-              {/* Bank info */}
-              <div className="rounded-xl border bg-accent/30 p-4">
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Thông tin nhận tiền</p>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
-                  <div>
-                    <p className="text-[11px] text-muted-foreground">Ngân hàng</p>
-                    <p className="font-semibold text-foreground">{activePayout.bank}</p>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-muted-foreground">Số tài khoản</p>
-                    <div className="flex items-center gap-2">
-                      <p className="font-semibold text-foreground tracking-wider">{activePayout.account}</p>
-                      <Button size="sm" variant="outline" className="h-7 px-2 rounded-md" onClick={() => copyAccount(activePayout.account)}>
-                        <Copy className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                  <div>
-                    <p className="text-[11px] text-muted-foreground">Chủ tài khoản</p>
-                    <p className="font-semibold text-foreground uppercase">{activePayout.holder}</p>
+            <div className="space-y-4">
+              <div className="rounded-xl border bg-accent/30 p-4 space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-muted-foreground">Ngân hàng</span><span className="font-semibold">{activePayout.bank}</span></div>
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">Số tài khoản</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold tracking-wider">{activePayout.account}</span>
+                    <Button size="sm" variant="outline" className="h-7 px-2" onClick={() => copyAccount(activePayout.account)}><Copy className="h-3 w-3" /></Button>
                   </div>
                 </div>
-              </div>
-
-              {/* Reconciliation table */}
-              <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Bảng đối soát đơn hàng (đã qua 7 ngày, chưa từng rút)</p>
-                <div className="rounded-xl border overflow-hidden">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Mã đơn</TableHead>
-                        <TableHead>Ngày mua</TableHead>
-                        <TableHead className="text-right">Giá trị</TableHead>
-                        <TableHead className="text-right">Hoa hồng (15%)</TableHead>
-                        <TableHead className="text-right">Thực trả Mentor</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {activePayout.orders.map((o) => {
-                        const fee = o.gross * FEE;
-                        return (
-                          <TableRow key={o.code}>
-                            <TableCell className="font-mono text-xs">{o.code}</TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{o.date}</TableCell>
-                            <TableCell className="text-right text-sm">{fmtVnd(o.gross)}</TableCell>
-                            <TableCell className="text-right text-sm text-destructive/80">−{fmtVnd(fee)}</TableCell>
-                            <TableCell className="text-right text-sm font-bold text-secondary">{fmtVnd(o.gross - fee)}</TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
+                <div className="flex justify-between"><span className="text-muted-foreground">Chủ tài khoản</span><span className="font-semibold uppercase">{activePayout.holder}</span></div>
+                <div className="flex justify-between text-base font-bold border-t pt-2 mt-2">
+                  <span>Số tiền</span><span className="text-secondary">{fmtVnd(activePayout.amount)}</span>
                 </div>
               </div>
             </div>
           )}
-          <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t pt-4">
-            <div className="text-sm">
-              <span className="text-muted-foreground">Tổng cộng cần chuyển: </span>
-              <span className="font-bold text-secondary text-lg">{activePayout ? fmtVnd(activePayout.amount) : ""}</span>
-            </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setActivePayout(null)} className="rounded-lg">Hủy</Button>
-              <Button onClick={confirmPayout} className="gradient-primary border-0 text-primary-foreground rounded-lg">
-                <Check className="mr-1 h-4 w-4" />Xác nhận đã chuyển khoản
-              </Button>
-            </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setActivePayout(null)} className="rounded-lg">Hủy</Button>
+            <Button onClick={confirmPayout} disabled={confirmPayoutMutation.isPending} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+              {confirmPayoutMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="mr-1 h-4 w-4" />Xác nhận đã chuyển</>}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Verdict Modal — 5-step moderation flow */}
+      {/* Verdict Modal */}
       <Dialog open={!!activeReport} onOpenChange={(o) => !o && setActiveReport(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Gavel className="h-5 w-5 text-primary" />
-              Xử lý báo cáo — Quy trình kiểm duyệt
+              <Gavel className="h-5 w-5 text-primary" />Xử lý báo cáo
             </DialogTitle>
           </DialogHeader>
-
           {activeReport && (
-            <div className="space-y-5">
-              {/* Step 2: Verification */}
+            <div className="space-y-4">
               <div className="rounded-xl border bg-accent/30 p-4">
-                <div className="flex items-start justify-between gap-4 mb-3">
-                  <div className="flex-1">
-                    <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Bước 2 — Thẩm định</p>
-                    <p className="font-semibold text-foreground">{activeReport.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Lý do: {activeReport.reason}</p>
-                    <p className="text-xs text-muted-foreground italic mt-1">{activeReport.detail}</p>
-                  </div>
-                  <div className="shrink-0 rounded-lg border bg-card p-3 min-w-[180px]">
-                    <p className="text-[10px] text-muted-foreground mb-2">Lịch sử vi phạm Mentor: {activeReport.mentorStrikes}/3 lần</p>
-                    <div className="flex items-center gap-2">
-                      {[1, 2, 3].map((n) => (
-                        <div
-                          key={n}
-                          className={`h-3 w-3 rounded-full ${n <= activeReport.mentorStrikes ? "bg-destructive" : "bg-muted"}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button size="sm" variant="outline" className="rounded-lg text-xs"><FileText className="h-3.5 w-3.5" />Xem nội dung bài đăng</Button>
-                  <Button size="sm" variant="outline" className="rounded-lg text-xs"><UserCircle2 className="h-3.5 w-3.5" />Xem hồ sơ Mentor</Button>
-                  <Button size="sm" variant="outline" className="rounded-lg text-xs"><History className="h-3.5 w-3.5" />Lịch sử báo cáo của người tố cáo</Button>
-                </div>
+                <p className="font-semibold text-foreground">{activeReport.title}</p>
+                <p className="text-xs text-muted-foreground mt-1">Lý do: {activeReport.reason}</p>
+                <p className="text-xs text-muted-foreground italic mt-1">{activeReport.detail}</p>
               </div>
-
-              {/* Step 3: 3-Strike verdict */}
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Bước 3 — Phán quyết</p>
-                <h4 className="font-semibold text-foreground mb-3">Chọn hình thức xử lý (Hệ thống 3 gậy)</h4>
+                <p className="text-sm font-semibold text-foreground mb-3">Chọn hình thức xử lý</p>
                 <RadioGroup value={strikeChoice} onValueChange={handleStrikeChange} className="space-y-2">
-                  {strikeOptions.map((o) => {
-                    const selected = strikeChoice === o.id;
-                    const isDanger = o.tone === "destructive";
-                    return (
-                      <Label
-                        key={o.id}
-                        htmlFor={o.id}
-                        className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${
-                          selected
-                            ? isDanger
-                              ? "border-destructive bg-destructive/5"
-                              : "border-primary bg-primary/5"
-                            : "hover:bg-accent/40"
-                        }`}
-                      >
-                        <RadioGroupItem id={o.id} value={o.id} className="mt-1" />
-                        <div className="flex-1">
-                          <p className={`font-medium text-sm ${isDanger ? "text-destructive" : "text-foreground"}`}>{o.label}</p>
-                          <p className="text-xs text-muted-foreground">{o.desc}</p>
-                        </div>
-                      </Label>
-                    );
-                  })}
+                  {strikeOptions.map((o) => (
+                    <Label key={o.id} htmlFor={o.id}
+                      className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${strikeChoice === o.id ? "border-primary bg-primary/5" : "hover:bg-accent/40"}`}>
+                      <RadioGroupItem id={o.id} value={o.id} className="mt-1" />
+                      <div>
+                        <p className="font-medium text-sm text-foreground">{o.label}</p>
+                        <p className="text-xs text-muted-foreground">{o.desc}</p>
+                      </div>
+                    </Label>
+                  ))}
                 </RadioGroup>
               </div>
-
-              {/* Step 4: Notification */}
               <div>
-                <p className="text-xs uppercase tracking-wide text-muted-foreground mb-1">Bước 4 — Thông báo</p>
-                <h4 className="font-semibold text-foreground mb-2">Nội dung Email sẽ gửi cho Mentor</h4>
-                <Textarea
-                  rows={5}
-                  placeholder="Chọn hình thức xử lý ở trên để hệ thống tự sinh nội dung email…"
-                  value={emailContent}
-                  onChange={(e) => setEmailContent(e.target.value)}
-                />
-                <p className="text-[11px] text-muted-foreground/80 italic mt-1">
-                  Nội dung email sẽ tự động sinh ra dựa trên hình thức phạt bạn chọn ở trên.
-                </p>
+                <p className="text-sm font-semibold text-foreground mb-2">Nội dung email gửi Mentor</p>
+                <Textarea rows={4} value={emailContent} onChange={(e) => setEmailContent(e.target.value)} placeholder="Chọn hình thức xử lý để tự sinh nội dung..." />
               </div>
             </div>
           )}
-
-          <DialogFooter className="gap-2">
-            <Button variant="outline" className="rounded-lg" onClick={() => setActiveReport(null)}>Hủy thao tác</Button>
-            <Button
-              className="gradient-primary border-0 text-primary-foreground rounded-lg"
-              disabled={!strikeChoice}
-              onClick={submitVerdict}
-            >
-              <Send className="h-4 w-4" />
-              Xác nhận & Gửi thông báo
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setActiveReport(null)} className="rounded-lg">Hủy</Button>
+            <Button disabled={!strikeChoice || updateReportStatus.isPending} onClick={submitVerdict} className="gradient-primary border-0 text-primary-foreground rounded-lg">
+              {updateReportStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Send className="mr-1 h-4 w-4" />Xác nhận & Gửi</>}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </MainLayout>
-
   );
 }
