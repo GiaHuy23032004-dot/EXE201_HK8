@@ -314,7 +314,7 @@ export default function AdminDashboard() {
   });
 
   const updateReportStatus = useMutation({
-    mutationFn: async ({ id, status, verdict, email }: { id: string; status: string; verdict?: string; email?: string }) => {
+    mutationFn: async ({ id, status, verdict, email }: { id: string; status: "pending" | "resolved" | "dismissed" | "appealed"; verdict?: string; email?: string }) => {
       const { error } = await supabase.from("reports").update({
         status,
         admin_verdict: verdict,
