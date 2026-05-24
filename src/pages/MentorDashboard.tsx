@@ -136,12 +136,6 @@ export default function MentorDashboard() {
               Chào mừng trở lại! Đây là tình hình hoạt động của bạn.
             </p>
           </div>
-          <Link to="/mentor/create-course">
-            <Button className="gradient-primary border-0 text-primary-foreground rounded-xl shadow-lg shadow-primary/20">
-              <Plus className="mr-2 h-4 w-4" />
-              Tạo khóa học mới
-            </Button>
-          </Link>
         </div>
 
         {/* ── Pending bookings alert ── */}

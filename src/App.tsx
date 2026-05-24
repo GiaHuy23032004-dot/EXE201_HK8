@@ -17,6 +17,7 @@ import CourseDetailPage from "./pages/CourseDetailPage";
 import BookingPage from "./pages/BookingPage";
 import LearnerDashboard from "./pages/LearnerDashboard";
 import MentorDashboard from "./pages/MentorDashboard";
+import MentorCourses from "./pages/MentorCourses";
 import MentorProfilePage from "./pages/MentorProfilePage";
 import CreateCoursePage from "./pages/CreateCoursePage";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -44,7 +45,7 @@ const App = () => (
             <Route path="/booking/:id" element={<BookingPage />} />
             <Route path="/learner/dashboard" element={<LearnerDashboard />} />
             <Route path="/mentor/dashboard" element={<MentorGuard><MentorDashboard /></MentorGuard>} />
-            <Route path="/mentor/courses"   element={<MentorGuard><MentorDashboard /></MentorGuard>} />
+            <Route path="/mentor/courses"   element={<MentorGuard><MentorCourses /></MentorGuard>} />
             <Route path="/mentor/schedule"  element={<MentorGuard><MentorDashboard /></MentorGuard>} />
             <Route path="/mentor/wallet"    element={<MentorGuard><MentorDashboard /></MentorGuard>} />
             <Route path="/mentor/students"  element={<MentorGuard><MentorDashboard /></MentorGuard>} />

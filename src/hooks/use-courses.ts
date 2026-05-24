@@ -100,6 +100,60 @@ export function useMentorCourses(mentorId: string | undefined) {
   });
 }
 
+// Xóa course
+export function useDeleteCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (courseId: string) => {
+      const { error } = await supabase
+        .from("courses")
+        .delete()
+        .eq("id", courseId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["courses"] });
+      qc.invalidateQueries({ queryKey: ["mentor-courses"] });
+    },
+  });
+}
+
+// Cập nhật course (chỉ các trường mentor được phép sửa)
+export interface UpdateCoursePayload {
+  id: string;
+  mentor_id: string; // dùng để xác thực ownership trong WHERE clause
+  title: string;
+  description: string | null;
+  category: string;
+  format: "online" | "offline";
+  price: number;
+  location: string | null;
+  meeting_link: string | null;
+  image_url: string | null;
+}
+
+export function useUpdateCourse() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, mentor_id, ...fields }: UpdateCoursePayload) => {
+      const { data, error } = await supabase
+        .from("courses")
+        .update(fields)
+        .eq("id", id)
+        .eq("mentor_id", mentor_id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Course;
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["courses"] });
+      qc.invalidateQueries({ queryKey: ["mentor-courses", vars.mentor_id] });
+      qc.invalidateQueries({ queryKey: ["course", vars.id] });
+    },
+  });
+}
+
 // Tạo course mới
 export function useCreateCourse() {
   const qc = useQueryClient();
