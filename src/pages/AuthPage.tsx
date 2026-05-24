@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, Loader2, BookOpen, Users, Star, AtSign, IdCard } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, Loader2, BookOpen, Users, Star, IdCard } from "lucide-react";
 import logoImg from "@/assets/logo.png";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,30 +10,27 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 
-const USERNAME_REGEX = /^[a-zA-Z0-9_]{3,20}$/;
-
 export default function AuthPage() {
   const [params] = useSearchParams();
   const initialTab = params.get("tab") === "register" || params.get("role") === "mentor" ? "register" : "login";
   const initialRole: "learner" | "mentor" = params.get("role") === "mentor" ? "mentor" : "learner";
 
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword]       = useState(false);
   const [showRegPassword, setShowRegPassword] = useState(false);
-  const [role, setRole] = useState<"learner" | "mentor">(initialRole);
-  const [forgotPassword, setForgotPassword] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotSent, setForgotSent] = useState(false);
+  const [role, setRole]                       = useState<"learner" | "mentor">(initialRole);
+  const [forgotPassword, setForgotPassword]   = useState(false);
+  const [forgotEmail, setForgotEmail]         = useState("");
+  const [forgotSent, setForgotSent]           = useState(false);
 
-  // Login form
-  const [loginIdentifier, setLoginIdentifier] = useState("");
+  // Login
+  const [loginEmail, setLoginEmail]       = useState("");
   const [loginPassword, setLoginPassword] = useState("");
 
-  // Register form
-  const [regUsername, setRegUsername] = useState("");
-  const [regName, setRegName] = useState("");
-  const [regEmail, setRegEmail] = useState("");
+  // Register
+  const [regName, setRegName]         = useState("");
+  const [regEmail, setRegEmail]       = useState("");
   const [regPassword, setRegPassword] = useState("");
-  const [regConfirm, setRegConfirm] = useState("");
+  const [regConfirm, setRegConfirm]   = useState("");
 
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -42,36 +39,26 @@ export default function AuthPage() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginIdentifier.trim() || !loginPassword) {
-      toast({ title: "Thiếu thông tin", description: "Vui lòng nhập tài khoản và mật khẩu.", variant: "destructive" });
+    if (!loginEmail.trim() || !loginPassword) {
+      toast({ title: "Thiếu thông tin", description: "Vui lòng nhập email và mật khẩu.", variant: "destructive" });
       return;
     }
     setLoading(true);
-    const result = await login(loginIdentifier.trim(), loginPassword);
+    const result = await login(loginEmail.trim(), loginPassword);
     setLoading(false);
     if (result.error) {
       const message = result.error.toLowerCase().includes("invalid login credentials")
-        ? "Tài khoản hoặc mật khẩu chưa đúng."
+        ? "Email hoặc mật khẩu chưa đúng."
         : result.error;
       toast({ title: "Lỗi đăng nhập", description: message, variant: "destructive" });
       return;
     }
     toast({ title: "Đăng nhập thành công!", description: "Chào mừng bạn trở lại." });
-    // Admin sẽ được điều hướng vào /admin nhờ check ở Index/AuthGuard về sau; tạm route theo role
     navigate("/");
   };
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!USERNAME_REGEX.test(regUsername.trim())) {
-      toast({
-        title: "Tên tài khoản không hợp lệ",
-        description: "Username 3–20 ký tự, chỉ chứa chữ, số và dấu gạch dưới (_).",
-        variant: "destructive",
-      });
-      return;
-    }
     if (regName.trim().length < 2) {
       toast({ title: "Lỗi", description: "Tên hiển thị quá ngắn.", variant: "destructive" });
       return;
@@ -87,7 +74,6 @@ export default function AuthPage() {
 
     setLoading(true);
     const result = await register({
-      username: regUsername.trim(),
       name: regName.trim(),
       email: regEmail.trim(),
       password: regPassword,
@@ -100,10 +86,10 @@ export default function AuthPage() {
     } else if (result.needsEmailConfirmation) {
       toast({
         title: "Đăng ký thành công!",
-        description: "Mình đã gửi email xác nhận. Vui lòng xác nhận email rồi đăng nhập bằng username.",
+        description: "Vui lòng kiểm tra email để xác nhận tài khoản rồi đăng nhập.",
       });
     } else {
-      toast({ title: "Đăng ký thành công!", description: "Tài khoản đã sẵn sàng, bạn có thể đăng nhập ngay." });
+      toast({ title: "Đăng ký thành công!", description: "Tài khoản đã sẵn sàng." });
       navigate("/");
     }
   };
@@ -117,7 +103,6 @@ export default function AuthPage() {
       toast({ title: "Lỗi", description: result.error, variant: "destructive" });
     } else {
       setForgotSent(true);
-      toast({ title: "Đã gửi email", description: "Vui lòng kiểm tra hộp thư để đặt lại mật khẩu." });
     }
   };
 
@@ -127,18 +112,12 @@ export default function AuthPage() {
       <div className="hidden w-1/2 items-center justify-center lg:flex relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-accent to-secondary" />
         <div className="absolute inset-0 gradient-hero-mesh" />
-        <div className="absolute top-20 left-10 h-32 w-32 rounded-full bg-primary/8 blur-2xl" />
-        <div className="absolute bottom-20 right-10 h-40 w-40 rounded-full bg-emerald-400/6 blur-2xl" />
-        <div className="absolute top-1/2 right-1/4 h-24 w-24 rounded-2xl bg-amber-400/6 blur-xl" />
-
         <motion.div initial={{ opacity: 0, x: -30 }} animate={{ opacity: 1, x: 0 }} className="relative max-w-md px-12 text-foreground">
           <Link to="/" className="mb-8 flex items-center gap-2">
             <img src={logoImg} alt="VET" className="h-10 w-auto" />
           </Link>
           <h2 className="mb-4 text-3xl font-bold leading-tight">Marketplace kết nối<br />người học &amp; người dạy</h2>
-          <p className="text-muted-foreground">
-            Tham gia cộng đồng hơn 50,000 người học và 2,500 mentor chất lượng trên khắp Việt Nam.
-          </p>
+          <p className="text-muted-foreground">Tham gia cộng đồng hơn 50,000 người học và 2,500 mentor chất lượng trên khắp Việt Nam.</p>
           <div className="mt-8 grid grid-cols-2 gap-4">
             <div className="rounded-xl border border-border/60 bg-background p-4 shadow-card">
               <div className="flex items-center gap-2 mb-1">
@@ -179,19 +158,14 @@ export default function AuthPage() {
                   <ArrowLeft className="h-4 w-4" /> Quay lại đăng nhập
                 </button>
                 <h2 className="mb-2 text-2xl font-bold text-foreground">Quên mật khẩu</h2>
-                <p className="mb-6 text-sm text-muted-foreground">
-                  Nhập <strong>email</strong> bạn đã đăng ký để nhận liên kết đặt lại mật khẩu.
-                </p>
-
+                <p className="mb-6 text-sm text-muted-foreground">Nhập email để nhận liên kết đặt lại mật khẩu.</p>
                 {forgotSent ? (
                   <div className="rounded-xl border bg-background p-6 text-center shadow-card">
                     <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
                       <Mail className="h-6 w-6 text-primary" />
                     </div>
                     <h3 className="mb-1 font-semibold text-foreground">Đã gửi email!</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Liên kết đặt lại mật khẩu đã được gửi đến <strong>{forgotEmail}</strong>. Vui lòng kiểm tra hộp thư (kể cả Spam).
-                    </p>
+                    <p className="text-sm text-muted-foreground">Kiểm tra hộp thư <strong>{forgotEmail}</strong> (kể cả Spam).</p>
                     <Button onClick={() => { setForgotPassword(false); setForgotSent(false); }} className="mt-4 gradient-primary border-0 text-primary-foreground">
                       Quay lại đăng nhập
                     </Button>
@@ -223,21 +197,13 @@ export default function AuthPage() {
                   {/* LOGIN */}
                   <TabsContent value="login">
                     <h2 className="mb-2 text-2xl font-bold text-foreground">Chào mừng trở lại!</h2>
-                    <p className="mb-6 text-sm text-muted-foreground">Đăng nhập bằng <strong>tên tài khoản</strong> (username) và mật khẩu.</p>
-
+                    <p className="mb-6 text-sm text-muted-foreground">Đăng nhập bằng <strong>email</strong> và mật khẩu.</p>
                     <form onSubmit={handleLogin} className="space-y-4">
                       <div>
-                        <Label>Tên tài khoản</Label>
+                        <Label>Email</Label>
                         <div className="relative mt-1">
-                          <AtSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            value={loginIdentifier}
-                            onChange={(e) => setLoginIdentifier(e.target.value)}
-                            placeholder="username của bạn"
-                            className="pl-10"
-                            required
-                            autoComplete="username"
-                          />
+                          <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                          <Input value={loginEmail} onChange={(e) => setLoginEmail(e.target.value)} placeholder="email@example.com" className="pl-10" required type="email" autoComplete="email" />
                         </div>
                       </div>
                       <div>
@@ -249,15 +215,7 @@ export default function AuthPage() {
                         </div>
                         <div className="relative mt-1">
                           <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            value={loginPassword}
-                            onChange={(e) => setLoginPassword(e.target.value)}
-                            type={showPassword ? "text" : "password"}
-                            placeholder="••••••••"
-                            className="pl-10 pr-10"
-                            required
-                            autoComplete="current-password"
-                          />
+                          <Input value={loginPassword} onChange={(e) => setLoginPassword(e.target.value)} type={showPassword ? "text" : "password"} placeholder="••••••••" className="pl-10 pr-10" required autoComplete="current-password" />
                           <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
@@ -268,7 +226,6 @@ export default function AuthPage() {
                         Đăng nhập
                       </Button>
                     </form>
-
                     <p className="mt-6 text-center text-xs text-muted-foreground">
                       Chưa có tài khoản? Chuyển sang tab <strong>Đăng ký</strong> phía trên.
                     </p>
@@ -278,7 +235,6 @@ export default function AuthPage() {
                   <TabsContent value="register">
                     <h2 className="mb-2 text-2xl font-bold text-foreground">Tạo tài khoản mới</h2>
                     <p className="mb-6 text-sm text-muted-foreground">Bắt đầu hành trình của bạn trên VET</p>
-
                     <div className="mb-6 flex gap-2">
                       <button type="button" onClick={() => setRole("learner")} className={`flex-1 rounded-xl border-2 p-3 text-center text-sm font-medium transition-colors ${role === "learner" ? "border-primary bg-accent text-accent-foreground" : "border-border text-muted-foreground hover:border-primary/30"}`}>
                         🎓 Người học
@@ -287,7 +243,6 @@ export default function AuthPage() {
                         👨‍🏫 Mentor
                       </button>
                     </div>
-
                     <form onSubmit={handleRegister} className="space-y-4">
                       <div>
                         <Label>Tên hiển thị</Label>
@@ -297,44 +252,17 @@ export default function AuthPage() {
                         </div>
                       </div>
                       <div>
-                        <Label>Tên tài khoản (username)</Label>
-                        <div className="relative mt-1">
-                          <AtSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            value={regUsername}
-                            onChange={(e) => setRegUsername(e.target.value.replace(/\s/g, ""))}
-                            placeholder="nguyenvana"
-                            className="pl-10"
-                            required
-                            minLength={3}
-                            maxLength={20}
-                            autoComplete="username"
-                          />
-                        </div>
-                        <p className="mt-1 text-[11px] text-muted-foreground">3–20 ký tự, chỉ chứa chữ, số và dấu gạch dưới. Đây là tên bạn dùng để đăng nhập.</p>
-                      </div>
-                      <div>
                         <Label>Email</Label>
                         <div className="relative mt-1">
                           <Mail className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input value={regEmail} onChange={(e) => setRegEmail(e.target.value)} placeholder="email@example.com" className="pl-10" required type="email" />
+                          <Input value={regEmail} onChange={(e) => setRegEmail(e.target.value)} placeholder="email@example.com" className="pl-10" required type="email" autoComplete="email" />
                         </div>
-                        <p className="mt-1 text-[11px] text-muted-foreground">Email chỉ dùng để khôi phục mật khẩu nếu bạn quên.</p>
                       </div>
                       <div>
                         <Label>Mật khẩu</Label>
                         <div className="relative mt-1">
                           <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            value={regPassword}
-                            onChange={(e) => setRegPassword(e.target.value)}
-                            type={showRegPassword ? "text" : "password"}
-                            placeholder="Tối thiểu 6 ký tự"
-                            className="pl-10 pr-10"
-                            required
-                            minLength={6}
-                            autoComplete="new-password"
-                          />
+                          <Input value={regPassword} onChange={(e) => setRegPassword(e.target.value)} type={showRegPassword ? "text" : "password"} placeholder="Tối thiểu 6 ký tự" className="pl-10 pr-10" required minLength={6} autoComplete="new-password" />
                           <button type="button" onClick={() => setShowRegPassword(!showRegPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
                             {showRegPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
@@ -344,16 +272,7 @@ export default function AuthPage() {
                         <Label>Xác nhận mật khẩu</Label>
                         <div className="relative mt-1">
                           <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <Input
-                            value={regConfirm}
-                            onChange={(e) => setRegConfirm(e.target.value)}
-                            type={showRegPassword ? "text" : "password"}
-                            placeholder="Nhập lại mật khẩu"
-                            className="pl-10"
-                            required
-                            minLength={6}
-                            autoComplete="new-password"
-                          />
+                          <Input value={regConfirm} onChange={(e) => setRegConfirm(e.target.value)} type={showRegPassword ? "text" : "password"} placeholder="Nhập lại mật khẩu" className="pl-10" required minLength={6} autoComplete="new-password" />
                         </div>
                       </div>
                       <Button type="submit" disabled={loading} className="w-full gradient-primary border-0 text-primary-foreground shadow-lg shadow-primary/25">

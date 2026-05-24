@@ -21,7 +21,6 @@ interface AuthContextType {
   /** Login by username OR email + password */
   login: (identifier: string, password: string) => Promise<{ error?: string }>;
   register: (params: {
-    username: string;
     name: string;
     email: string;
     password: string;
@@ -93,18 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (identifier: string, password: string) => {
-    const id = identifier.trim();
-    let email = id.toLowerCase();
-
-    // If not an email, treat as username and look up the email
-    if (!isEmail(id)) {
-      const { data, error } = await supabase.rpc("get_email_by_username", { _username: id });
-      if (error || !data) {
-        return { error: "Tên tài khoản không tồn tại." };
-      }
-      email = String(data).toLowerCase();
-    }
-
+    const email = identifier.trim().toLowerCase();
     const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
 
@@ -125,19 +113,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return {};
   };
 
-  const register = async ({ username, name, email, password, role }: {
-    username: string;
+  const register = async ({ name, email, password, role }: {
     name: string;
     email: string;
     password: string;
     role: "learner" | "mentor";
   }) => {
     const normalizedEmail = email.trim().toLowerCase();
-    const normalizedUsername = username.trim();
-
-    // Check username availability
-    const { data: taken } = await supabase.rpc("get_email_by_username", { _username: normalizedUsername });
-    if (taken) return { error: "Tên tài khoản đã có người sử dụng." };
 
     const { data, error } = await supabase.auth.signUp({
       email: normalizedEmail,
@@ -145,7 +127,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: {
         data: {
           full_name: name.trim(),
-          username: normalizedUsername,
           role,
         },
         emailRedirectTo: `${window.location.origin}/`,
