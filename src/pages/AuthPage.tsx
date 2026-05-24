@@ -54,7 +54,11 @@ export default function AuthPage() {
       return;
     }
     toast({ title: "Đăng nhập thành công!", description: "Chào mừng bạn trở lại." });
-    navigate("/");
+    if (result.role === "mentor") {
+      navigate("/mentor/dashboard");
+    } else {
+      navigate("/");
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -90,7 +94,11 @@ export default function AuthPage() {
       });
     } else {
       toast({ title: "Đăng ký thành công!", description: "Tài khoản đã sẵn sàng." });
-      navigate("/");
+      if (role === "mentor") {
+        navigate("/mentor/dashboard");
+      } else {
+        navigate("/");
+      }
     }
   };
 

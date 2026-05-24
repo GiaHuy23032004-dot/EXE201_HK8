@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { AiChatAssistant } from "@/components/AiChatAssistant";
 import { AdminGuard } from "@/components/AdminGuard";
+import { MentorGuard } from "@/components/MentorGuard";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -42,7 +43,12 @@ const App = () => (
             <Route path="/course/:id" element={<CourseDetailPage />} />
             <Route path="/booking/:id" element={<BookingPage />} />
             <Route path="/learner/dashboard" element={<LearnerDashboard />} />
-            <Route path="/mentor/dashboard" element={<MentorDashboard />} />
+            <Route path="/mentor/dashboard" element={<MentorGuard><MentorDashboard /></MentorGuard>} />
+            <Route path="/mentor/courses"   element={<MentorGuard><MentorDashboard /></MentorGuard>} />
+            <Route path="/mentor/schedule"  element={<MentorGuard><MentorDashboard /></MentorGuard>} />
+            <Route path="/mentor/wallet"    element={<MentorGuard><MentorDashboard /></MentorGuard>} />
+            <Route path="/mentor/students"  element={<MentorGuard><MentorDashboard /></MentorGuard>} />
+            <Route path="/mentor/settings"  element={<MentorGuard><MentorDashboard /></MentorGuard>} />
             <Route path="/mentor/create-course" element={<CreateCoursePage />} />
             <Route path="/mentor/:id" element={<MentorProfilePage />} />
             <Route path="/admin" element={<AdminGuard><AdminDashboard /></AdminGuard>} />

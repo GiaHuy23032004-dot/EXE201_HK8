@@ -19,7 +19,7 @@ interface AuthContextType {
   isLoggedIn: boolean;
   isLoading: boolean;
   /** Login by username OR email + password */
-  login: (identifier: string, password: string) => Promise<{ error?: string }>;
+  login: (identifier: string, password: string) => Promise<{ error?: string; role?: "learner" | "mentor" | "admin" }>;
   register: (params: {
     name: string;
     email: string;
@@ -100,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (userId) {
       const { data: profile } = await supabase
         .from("profiles")
-        .select("is_blocked")
+        .select("is_blocked, role")
         .eq("user_id", userId)
         .single();
 
@@ -108,6 +108,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
         return { error: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên." };
       }
+
+      return { role: (profile?.role ?? "learner") as "learner" | "mentor" | "admin" };
     }
 
     return {};

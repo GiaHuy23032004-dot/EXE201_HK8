@@ -23,13 +23,6 @@ const categoryIcons = [
   { icon: Pencil, label: "Thiết kế", slug: "design" },
 ];
 
-const stats = [
-  { label: "Mentor đã xác minh", value: "2,500+", icon: "👨‍🏫" },
-  { label: "Khóa học hoạt động", value: "15,000+", icon: "📚" },
-  { label: "Học viên hài lòng", value: "50,000+", icon: "🎓" },
-  { label: "Đánh giá 5 sao", value: "12,000+", icon: "⭐" },
-];
-
 // Helper map course từ Supabase sang CourseCard props
 function mapCourse(c: any) {
   return {
@@ -87,28 +80,8 @@ export default function HomePage() {
     <MainLayout>
       <SearchHero />
 
-      {/* Stats */}
-      <section className="relative border-y border-border/40 section-blue py-10">
-        <div className="container grid grid-cols-2 gap-6 md:grid-cols-4">
-          {stats.map((s, i) => (
-            <motion.div
-              key={s.label}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              className="text-center"
-            >
-              <div className="mb-1 text-2xl">{s.icon}</div>
-              <p className="text-2xl font-bold text-gradient">{s.value}</p>
-              <p className="text-xs text-muted-foreground">{s.label}</p>
-            </motion.div>
-          ))}
-        </div>
-      </section>
-
       {/* Categories */}
-      <section className="bg-background py-14">
+      <section className="bg-background py-14 pt-16">
         <div className="container">
           <div className="mb-8 flex items-center justify-between">
             <h2 className="text-2xl font-bold text-foreground">Danh mục phổ biến</h2>

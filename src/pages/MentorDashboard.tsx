@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { MainLayout } from "@/components/layout/MainLayout";
+import { Link } from "react-router-dom";
+import { MentorLayout } from "@/components/layout/MentorLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMentorCourses } from "@/hooks/use-courses";
 import { useMentorBookings, useUpdateBookingStatus } from "@/hooks/use-bookings";
@@ -7,55 +8,66 @@ import { useMentorWallet, useWalletTransactions, useMentorTransactions, useCreat
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Plus, BookOpen, Calendar, DollarSign, Star, Users, Eye,
+  Plus, BookOpen, Calendar, DollarSign, Star, Users,
   Check, X, Wallet, Clock, ArrowDownToLine, TrendingDown,
-  ArrowUpRight, ArrowDownLeft, RotateCcw, Loader2
+  ArrowUpRight, ArrowDownLeft, RotateCcw, Loader2,
+  TrendingUp, Eye, ChevronRight, AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Link } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { motion } from "framer-motion";
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
 
 const FEE_RATE = 0.15;
 const fmt = (n: number) => n.toLocaleString("vi-VN") + "đ";
 
-const typeBadge = (t: string) => {
-  if (t === "online")  return <Badge className="bg-primary/10 text-primary border-0 text-[10px]">Online</Badge>;
-  if (t === "offline") return <Badge className="bg-secondary/10 text-secondary border-0 text-[10px]">Offline</Badge>;
-  return <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Sản phẩm</Badge>;
+const statusConfig: Record<string, { label: string; cls: string }> = {
+  pending:   { label: "Chờ xác nhận", cls: "bg-warning/10 text-warning border-0" },
+  upcoming:  { label: "Đã xác nhận",  cls: "bg-primary/10 text-primary border-0" },
+  completed: { label: "Hoàn thành",   cls: "bg-success/10 text-success border-0" },
+  declined:  { label: "Đã từ chối",   cls: "bg-destructive/10 text-destructive border-0" },
+  cancelled: { label: "Đã hủy",       cls: "bg-muted text-muted-foreground border-0" },
 };
 
-const kindLabel = (kind: string) => {
-  if (kind === "sale")     return { label: "Bán khóa học", icon: <ArrowDownLeft className="h-3 w-3" />, cls: "bg-success/10 text-success" };
-  if (kind === "withdraw") return { label: "Rút tiền",     icon: <ArrowUpRight  className="h-3 w-3" />, cls: "bg-primary/10 text-primary" };
-  return                          { label: "Bị hoàn tiền", icon: <RotateCcw     className="h-3 w-3" />, cls: "bg-destructive/10 text-destructive" };
-};
+// Build a simple monthly revenue chart from transactions
+function buildChartData(txns: any[]) {
+  const map: Record<string, number> = {};
+  txns.forEach((t) => {
+    const d = new Date(t.created_at);
+    const key = `${d.getMonth() + 1}/${d.getFullYear()}`;
+    map[key] = (map[key] ?? 0) + (t.amount * (1 - FEE_RATE));
+  });
+  return Object.entries(map)
+    .slice(-6)
+    .map(([month, revenue]) => ({ month, revenue }));
+}
 
 export default function MentorDashboard() {
   const { session } = useAuth();
   const { toast } = useToast();
   const mentorId = session?.user?.id;
 
-  const { data: courses = [],      isLoading: coursesLoading  } = useMentorCourses(mentorId);
-  const { data: bookings = [],     isLoading: bookingsLoading } = useMentorBookings(mentorId);
-  const { data: wallet }                                        = useMentorWallet(mentorId);
-  const { data: walletTxns = [] }                               = useWalletTransactions(mentorId);
-  const { data: txns = [] }                                     = useMentorTransactions(mentorId);
+  const { data: courses  = [], isLoading: coursesLoading  } = useMentorCourses(mentorId);
+  const { data: bookings = [], isLoading: bookingsLoading } = useMentorBookings(mentorId);
+  const { data: wallet }                                    = useMentorWallet(mentorId);
+  const { data: walletTxns = [] }                           = useWalletTransactions(mentorId);
+  const { data: txns = [] }                                 = useMentorTransactions(mentorId);
   const updateStatus   = useUpdateBookingStatus();
   const createWithdraw = useCreateWithdrawal();
 
   const [withdrawOpen,   setWithdrawOpen]   = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState(0);
-  const [bankName,       setBankName]       = useState(wallet?.bank_name   || "");
-  const [bankAccount,    setBankAccount]    = useState(wallet?.bank_account || "");
-  const [bankHolder,     setBankHolder]     = useState(wallet?.bank_holder  || "");
+  const [bankName,       setBankName]       = useState("");
+  const [bankAccount,    setBankAccount]    = useState("");
+  const [bankHolder,     setBankHolder]     = useState("");
 
-  // Reviews cho tất cả courses của mentor
   const { data: reviews = [] } = useQuery({
     queryKey: ["mentor-dashboard-reviews", mentorId],
     enabled: courses.length > 0,
@@ -70,26 +82,28 @@ export default function MentorDashboard() {
     },
   });
 
-  const pendingBookings = bookings.filter((b) => b.status === "pending");
-  const avgRating = reviews.length > 0
+  const pendingBookings  = bookings.filter((b) => b.status === "pending");
+  const recentBookings   = bookings.slice(0, 5);
+  const totalStudents    = courses.reduce((s, c) => s + c.students_count, 0);
+  const avgRating        = reviews.length > 0
     ? (reviews.reduce((s: number, r: any) => s + r.rating, 0) / reviews.length).toFixed(1)
     : "—";
-
-  const totalRevenue = wallet?.total_earned ?? 0;
-  const available    = wallet?.balance      ?? 0;
-  const held         = wallet?.held_balance ?? 0;
+  const totalRevenue     = wallet?.total_earned ?? 0;
+  const available        = wallet?.balance      ?? 0;
+  const held             = wallet?.held_balance ?? 0;
+  const chartData        = buildChartData(txns as any[]);
 
   const handleBookingAction = async (id: string, action: "upcoming" | "declined") => {
     if (!mentorId) return;
     await updateStatus.mutateAsync({ id, status: action, mentorId });
-    toast({ title: action === "upcoming" ? "Đã chấp nhận booking" : "Đã từ chối booking" });
+    toast({ title: action === "upcoming" ? "✅ Đã chấp nhận booking" : "❌ Đã từ chối booking" });
   };
 
   const openWithdraw = () => {
     setWithdrawAmount(available);
-    setBankName(wallet?.bank_name   || "");
-    setBankAccount(wallet?.bank_account || "");
-    setBankHolder(wallet?.bank_holder  || "");
+    setBankName(wallet?.bank_name    ?? "");
+    setBankAccount(wallet?.bank_account ?? "");
+    setBankHolder(wallet?.bank_holder  ?? "");
     setWithdrawOpen(true);
   };
 
@@ -99,299 +113,376 @@ export default function MentorDashboard() {
       return;
     }
     try {
-      await createWithdraw.mutateAsync({ mentor_id: mentorId, amount: withdrawAmount, bank_name: bankName, bank_account: bankAccount, bank_holder: bankHolder });
+      await createWithdraw.mutateAsync({
+        mentor_id: mentorId, amount: withdrawAmount,
+        bank_name: bankName, bank_account: bankAccount, bank_holder: bankHolder,
+      });
       setWithdrawOpen(false);
-      toast({ title: "Yêu cầu rút tiền đã gửi", description: `${fmt(withdrawAmount)} sẽ được chuyển trong 24-48h làm việc.` });
+      toast({ title: "Yêu cầu rút tiền đã gửi", description: `${fmt(withdrawAmount)} sẽ được chuyển trong 24-48h.` });
     } catch (err: any) {
       toast({ title: "Lỗi", description: err.message, variant: "destructive" });
     }
   };
 
   return (
-    <MainLayout>
-      <div className="container py-8">
-        <div className="mb-8 flex items-center justify-between">
+    <MentorLayout>
+      <div className="p-6 lg:p-8 space-y-8">
+
+        {/* ── Page header ── */}
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Dashboard Mentor</h1>
-            <p className="text-sm text-muted-foreground mt-1">Quản lý khóa học và đặt lịch</p>
+            <h1 className="text-2xl font-bold text-foreground">Tổng quan</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Chào mừng trở lại! Đây là tình hình hoạt động của bạn.
+            </p>
           </div>
           <Link to="/mentor/create-course">
-            <Button className="gradient-primary border-0 text-primary-foreground rounded-xl">
-              <Plus className="mr-2 h-4 w-4" />Tạo khóa học mới
+            <Button className="gradient-primary border-0 text-primary-foreground rounded-xl shadow-lg shadow-primary/20">
+              <Plus className="mr-2 h-4 w-4" />
+              Tạo khóa học mới
             </Button>
           </Link>
         </div>
 
-        {/* Stats */}
-        <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
+        {/* ── Pending bookings alert ── */}
+        {pendingBookings.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex items-center gap-3 rounded-2xl border border-warning/30 bg-warning/5 px-5 py-4"
+          >
+            <AlertCircle className="h-5 w-5 shrink-0 text-warning" />
+            <p className="text-sm font-medium text-foreground">
+              Bạn có <span className="text-warning font-bold">{pendingBookings.length}</span> booking đang chờ xác nhận.
+            </p>
+            <Link to="/mentor/dashboard#bookings" className="ml-auto text-xs font-semibold text-primary hover:underline whitespace-nowrap">
+              Xem ngay →
+            </Link>
+          </motion.div>
+        )}
+
+        {/* ── Stat cards ── */}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[
-            { icon: BookOpen,   label: "Khóa học",   value: courses.length,          color: "text-accent-foreground", bg: "bg-accent" },
-            { icon: Calendar,   label: "Booking mới", value: pendingBookings.length,  color: "text-secondary",         bg: "bg-secondary/10" },
-            { icon: DollarSign, label: "Doanh thu",   value: fmt(totalRevenue),       color: "text-success",           bg: "bg-success/10" },
-            { icon: Star,       label: "Đánh giá",    value: avgRating,               color: "text-warning",           bg: "bg-warning/10" },
-          ].map((s) => (
-            <div key={s.label} className="rounded-2xl border bg-card p-5 shadow-card">
-              <div className="flex items-center gap-3 mb-2">
-                <div className={`rounded-xl ${s.bg} p-2`}><s.icon className={`h-5 w-5 ${s.color}`} /></div>
-                <span className="text-xs text-muted-foreground">{s.label}</span>
+            {
+              icon: DollarSign, label: "Tổng doanh thu",
+              value: fmt(totalRevenue),
+              sub: `Khả dụng: ${fmt(available)}`,
+              color: "text-success", bg: "bg-success/10",
+              action: available > 0 ? (
+                <button onClick={openWithdraw} className="mt-3 flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+                  <ArrowDownToLine className="h-3 w-3" /> Rút tiền
+                </button>
+              ) : null,
+            },
+            {
+              icon: Users, label: "Tổng học viên",
+              value: totalStudents,
+              sub: `${courses.length} khóa học`,
+              color: "text-primary", bg: "bg-primary/10",
+            },
+            {
+              icon: BookOpen, label: "Khóa học đang hoạt động",
+              value: courses.filter((c) => c.status === "approved").length,
+              sub: `${courses.filter((c) => c.status === "pending").length} chờ duyệt`,
+              color: "text-secondary-foreground", bg: "bg-accent",
+            },
+            {
+              icon: Star, label: "Đánh giá trung bình",
+              value: avgRating,
+              sub: `${reviews.length} lượt đánh giá`,
+              color: "text-warning", bg: "bg-warning/10",
+            },
+          ].map((s, i) => (
+            <motion.div
+              key={s.label}
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.07 }}
+              className="rounded-2xl border bg-card p-5 shadow-card"
+            >
+              <div className="flex items-center justify-between">
+                <div className={`rounded-xl ${s.bg} p-2.5`}>
+                  <s.icon className={`h-5 w-5 ${s.color}`} />
+                </div>
+                <TrendingUp className="h-4 w-4 text-muted-foreground/40" />
               </div>
-              <p className="text-2xl font-bold text-foreground">{s.value}</p>
-            </div>
+              <p className="mt-3 text-2xl font-bold text-foreground">{s.value}</p>
+              <p className="mt-0.5 text-xs text-muted-foreground">{s.label}</p>
+              {s.sub && <p className="mt-1 text-[11px] text-muted-foreground/70">{s.sub}</p>}
+              {(s as any).action}
+            </motion.div>
           ))}
         </div>
 
-        <Tabs defaultValue="courses">
-          <TabsList className="mb-6 flex-wrap h-auto">
-            <TabsTrigger value="courses">Khóa học</TabsTrigger>
-            <TabsTrigger value="bookings">Đặt lịch ({pendingBookings.length})</TabsTrigger>
-            <TabsTrigger value="reviews">Đánh giá</TabsTrigger>
-            <TabsTrigger value="revenue">💰 Ví & Doanh thu</TabsTrigger>
-          </TabsList>
-
-          {/* COURSES TAB */}
-          <TabsContent value="courses" className="space-y-3">
-            {coursesLoading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-              : courses.length > 0 ? courses.map((c) => (
-                <div key={c.id} className="flex gap-4 rounded-2xl border bg-card p-4 shadow-card">
-                  <img src={c.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&h=400&fit=crop"} alt={c.title} className="h-24 w-32 rounded-xl object-cover" />
-                  <div className="flex-1">
-                    <div className="flex items-start justify-between">
-                      <h3 className="font-semibold text-card-foreground">{c.title}</h3>
-                      <div className="flex gap-1">
-                        <Badge variant="secondary" className="text-xs">{c.format}</Badge>
-                        <Badge className={c.status === "approved" ? "bg-success/10 text-success border-0 text-xs" : c.status === "pending" ? "bg-warning/10 text-warning border-0 text-xs" : "bg-destructive/10 text-destructive border-0 text-xs"}>
-                          {c.status === "approved" ? "Đã duyệt" : c.status === "pending" ? "Chờ duyệt" : "Từ chối"}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1"><Star className="h-3 w-3 fill-warning text-warning" />{c.rating}</span>
-                      <span className="flex items-center gap-1"><Users className="h-3 w-3" />{c.students_count} học viên</span>
-                      <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.review_count} đánh giá</span>
-                    </div>
-                    <p className="mt-2 text-lg font-bold text-primary">{c.price.toLocaleString("vi-VN")}đ/buổi</p>
-                  </div>
-                </div>
-              )) : (
-                <div className="flex flex-col items-center py-16 text-center">
-                  <BookOpen className="h-12 w-12 text-muted mb-3" />
-                  <p className="font-semibold text-foreground">Chưa có khóa học nào</p>
-                  <Link to="/mentor/create-course">
-                    <Button className="mt-4 gradient-primary border-0 text-primary-foreground">Tạo khóa học đầu tiên</Button>
-                  </Link>
-                </div>
-              )}
-          </TabsContent>
-
-          {/* BOOKINGS TAB */}
-          <TabsContent value="bookings" className="space-y-3">
-            {bookingsLoading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-              : bookings.length > 0 ? bookings.map((b) => (
-                <div key={b.id} className="flex items-center gap-4 rounded-2xl border bg-card p-4 shadow-card">
-                  <div className="flex-1">
-                    <p className="font-semibold text-card-foreground">{b.learner?.name || "Học viên"}</p>
-                    <p className="text-xs text-muted-foreground">{b.course?.title}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {new Date(b.booking_date).toLocaleDateString("vi-VN")} • {b.start_time} - {b.end_time}
-                    </p>
-                  </div>
-                  {b.status === "pending" ? (
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={() => handleBookingAction(b.id, "upcoming")} disabled={updateStatus.isPending} className="gradient-primary border-0 text-primary-foreground rounded-lg">
-                        <Check className="mr-1 h-4 w-4" />Chấp nhận
-                      </Button>
-                      <Button size="sm" variant="outline" onClick={() => handleBookingAction(b.id, "declined")} disabled={updateStatus.isPending} className="rounded-lg">
-                        <X className="mr-1 h-4 w-4" />Từ chối
-                      </Button>
-                    </div>
-                  ) : (
-                    <Badge className={
-                      b.status === "upcoming"  ? "bg-secondary/10 text-secondary border-0" :
-                      b.status === "completed" ? "bg-success/10 text-success border-0" :
-                      b.status === "declined"  ? "bg-destructive/10 text-destructive border-0" :
-                      "bg-muted text-muted-foreground border-0"
-                    }>
-                      {b.status === "upcoming" ? "Đã chấp nhận" : b.status === "completed" ? "Hoàn thành" : b.status === "declined" ? "Đã từ chối" : "Đã hủy"}
-                    </Badge>
-                  )}
-                </div>
-              )) : <p className="text-center text-muted-foreground py-8">Chưa có booking nào</p>}
-          </TabsContent>
-
-          {/* REVIEWS TAB */}
-          <TabsContent value="reviews" className="space-y-3">
-            {reviews.length > 0 ? (reviews as any[]).map((r) => (
-              <div key={r.id} className="rounded-2xl border bg-card p-4 shadow-card">
-                <div className="flex items-center gap-3 mb-2">
-                  <img src={r.learner?.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face"} alt={r.learner?.name} className="h-8 w-8 rounded-full object-cover" />
-                  <div>
-                    <p className="text-sm font-medium text-card-foreground">{r.learner?.name || "Học viên"}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(r.created_at).toLocaleDateString("vi-VN")}</p>
-                  </div>
-                  <div className="ml-auto flex items-center gap-0.5">
-                    {Array.from({ length: r.rating }).map((_: unknown, i: number) => (
-                      <Star key={i} className="h-3 w-3 fill-warning text-warning" />
-                    ))}
-                  </div>
-                </div>
-                <p className="text-sm text-muted-foreground">{r.comment}</p>
+        {/* ── Revenue chart + Wallet summary ── */}
+        <div className="grid gap-6 lg:grid-cols-3">
+          {/* Chart */}
+          <div className="lg:col-span-2 rounded-2xl border bg-card p-6 shadow-card">
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-foreground">Doanh thu theo tháng</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Sau khi trừ phí nền tảng 15%</p>
               </div>
-            )) : <p className="text-center text-muted-foreground py-8">Chưa có đánh giá nào</p>}
-          </TabsContent>
+            </div>
+            {chartData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={chartData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="hsl(200 95% 48%)" stopOpacity={0.18} />
+                      <stop offset="95%" stopColor="hsl(200 95% 48%)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(214 20% 92%)" />
+                  <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(215 14% 46%)" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(215 14% 46%)" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} />
+                  <Tooltip
+                    formatter={(v: number) => [fmt(v), "Thực nhận"]}
+                    contentStyle={{ borderRadius: "12px", border: "1px solid hsl(214 20% 92%)", fontSize: 12 }}
+                  />
+                  <Area type="monotone" dataKey="revenue" stroke="hsl(200 95% 48%)" strokeWidth={2} fill="url(#revenueGrad)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[200px] items-center justify-center rounded-xl bg-muted/40">
+                <p className="text-sm text-muted-foreground">Chưa có dữ liệu doanh thu</p>
+              </div>
+            )}
+          </div>
 
-          {/* REVENUE TAB */}
-          <TabsContent value="revenue" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="rounded-2xl border bg-card p-5 shadow-card">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="rounded-lg bg-primary/10 p-2"><DollarSign className="h-4 w-4 text-primary" /></div>
-                  <span className="text-xs text-muted-foreground">Tổng doanh thu</span>
-                </div>
-                <p className="text-2xl font-bold text-foreground">{fmt(totalRevenue)}</p>
+          {/* Wallet summary */}
+          <div className="rounded-2xl border bg-card p-6 shadow-card flex flex-col gap-4">
+            <div className="flex items-center gap-2">
+              <div className="rounded-xl bg-primary/10 p-2.5">
+                <Wallet className="h-5 w-5 text-primary" />
               </div>
-              <div className="rounded-2xl border bg-card p-5 shadow-card">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="rounded-lg bg-destructive/10 p-2"><TrendingDown className="h-4 w-4 text-destructive" /></div>
-                  <span className="text-xs text-muted-foreground">Phí nền tảng (15%)</span>
+              <h2 className="font-semibold text-foreground">Ví của tôi</h2>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                { label: "Tổng đã kiếm",   value: fmt(totalRevenue), cls: "text-foreground" },
+                { label: "Phí nền tảng (15%)", value: `−${fmt(totalRevenue * FEE_RATE)}`, cls: "text-destructive/80" },
+                { label: "Đang tạm giữ",   value: fmt(held),         cls: "text-warning" },
+              ].map((row) => (
+                <div key={row.label} className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">{row.label}</span>
+                  <span className={`font-semibold ${row.cls}`}>{row.value}</span>
                 </div>
-                <p className="text-2xl font-bold text-destructive/90">−{fmt(totalRevenue * FEE_RATE)}</p>
-              </div>
-              <div className="rounded-2xl border bg-card p-5 shadow-card">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="rounded-lg bg-warning/10 p-2"><Clock className="h-4 w-4 text-warning" /></div>
-                  <span className="text-xs text-muted-foreground">Đang tạm giữ</span>
-                </div>
-                <p className="text-2xl font-bold text-foreground">{fmt(held)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Chờ qua mốc 7 ngày</p>
-              </div>
-              <div className="rounded-2xl border-2 border-secondary/40 bg-gradient-to-br from-secondary/5 to-primary/5 p-5 shadow-card">
-                <div className="flex items-center gap-2 mb-2">
-                  <div className="rounded-lg bg-secondary/15 p-2"><Wallet className="h-4 w-4 text-secondary" /></div>
-                  <span className="text-xs text-muted-foreground">Số dư khả dụng</span>
-                </div>
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-2xl font-extrabold text-secondary">{fmt(available)}</p>
-                  <Button size="sm" onClick={openWithdraw} disabled={available <= 0} className="gradient-primary border-0 text-primary-foreground rounded-lg shrink-0">
-                    <ArrowDownToLine className="mr-1 h-4 w-4" />Rút tiền
-                  </Button>
-                </div>
+              ))}
+              <div className="border-t border-border/60 pt-3 flex items-center justify-between">
+                <span className="text-sm font-semibold text-foreground">Khả dụng</span>
+                <span className="text-lg font-extrabold text-primary">{fmt(available)}</span>
               </div>
             </div>
 
-            <Tabs defaultValue="sales">
-              <TabsList>
-                <TabsTrigger value="sales">Chi tiết doanh thu</TabsTrigger>
-                <TabsTrigger value="wallet">Lịch sử giao dịch ví</TabsTrigger>
-              </TabsList>
+            <Button
+              onClick={openWithdraw}
+              disabled={available <= 0}
+              className="mt-auto gradient-primary border-0 text-primary-foreground rounded-xl"
+            >
+              <ArrowDownToLine className="mr-2 h-4 w-4" />
+              Rút tiền
+            </Button>
 
-              <TabsContent value="sales">
-                <div className="rounded-2xl border bg-card shadow-card overflow-hidden mt-2">
-                  <div className="p-5 border-b">
-                    <h3 className="font-semibold text-foreground">Chi tiết doanh thu</h3>
-                    <p className="text-xs text-muted-foreground mt-1">Lịch sử các giao dịch và trạng thái thanh toán</p>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Khóa học</TableHead>
-                        <TableHead>Loại</TableHead>
-                        <TableHead className="text-right">Giá gốc</TableHead>
-                        <TableHead className="text-right">Khấu trừ (15%)</TableHead>
-                        <TableHead className="text-right">Thực nhận</TableHead>
-                        <TableHead>Trạng thái</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {txns.length > 0 ? (txns as any[]).map((t) => {
-                        const fee = t.amount * FEE_RATE;
-                        const net = t.amount - fee;
-                        return (
-                          <TableRow key={t.id}>
-                            <TableCell>
-                              <div className="flex items-center gap-3">
-                                <img src={t.course?.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=60&h=60&fit=crop"} alt="" className="h-9 w-9 rounded-full object-cover" />
-                                <span className="text-sm font-medium text-foreground">{t.course?.title || "Khóa học"}</span>
-                              </div>
-                            </TableCell>
-                            <TableCell>{typeBadge(t.txn_type)}</TableCell>
-                            <TableCell className="text-right text-sm">{fmt(t.amount)}</TableCell>
-                            <TableCell className="text-right text-sm text-destructive/80">−{fmt(fee)}</TableCell>
-                            <TableCell className="text-right text-sm font-bold text-secondary">{fmt(net)}</TableCell>
-                            <TableCell>
-                              <Badge className={t.status === "success" ? "bg-success/10 text-success border-0 text-[10px]" : "bg-warning/10 text-warning border-0 text-[10px]"}>
-                                {t.status === "success" ? <><Check className="h-3 w-3 mr-1" />Đã vào ví</> : <><Clock className="h-3 w-3 mr-1" />Đang xử lý</>}
-                              </Badge>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      }) : (
-                        <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Chưa có giao dịch nào</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </TabsContent>
+            {walletTxns.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-muted-foreground">Giao dịch gần đây</p>
+                {(walletTxns as any[]).slice(0, 3).map((w) => {
+                  const positive = w.delta > 0;
+                  return (
+                    <div key={w.id} className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2">
+                        <div className={`rounded-full p-1 ${positive ? "bg-success/10" : "bg-destructive/10"}`}>
+                          {positive
+                            ? <ArrowDownLeft className="h-3 w-3 text-success" />
+                            : <ArrowUpRight  className="h-3 w-3 text-destructive" />}
+                        </div>
+                        <span className="text-muted-foreground truncate max-w-[120px]">{w.description}</span>
+                      </div>
+                      <span className={`font-semibold ${positive ? "text-success" : "text-destructive"}`}>
+                        {positive ? "+" : "−"}{Math.abs(w.delta).toLocaleString("vi-VN")}đ
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
 
-              <TabsContent value="wallet">
-                <div className="rounded-2xl border bg-card shadow-card overflow-hidden mt-2">
-                  <div className="p-5 border-b">
-                    <h3 className="font-semibold text-foreground">Lịch sử giao dịch ví</h3>
-                    <p className="text-xs text-muted-foreground mt-1">Mọi biến động số dư ví của bạn</p>
+        {/* ── Recent bookings ── */}
+        <div className="rounded-2xl border bg-card shadow-card overflow-hidden" id="bookings">
+          <div className="flex items-center justify-between border-b border-border/60 px-6 py-4">
+            <div>
+              <h2 className="font-semibold text-foreground">Booking gần đây</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Các buổi học sắp tới và đang chờ xác nhận</p>
+            </div>
+            <Link to="/mentor/dashboard" className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              Xem tất cả <ChevronRight className="h-3.5 w-3.5" />
+            </Link>
+          </div>
+
+          {bookingsLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : recentBookings.length > 0 ? (
+            <div className="divide-y divide-border/60">
+              {recentBookings.map((b) => (
+                <div key={b.id} className="flex items-center gap-4 px-6 py-4 hover:bg-muted/30 transition-colors">
+                  <Avatar className="h-10 w-10 shrink-0">
+                    <AvatarImage src={b.learner?.avatar_url ?? undefined} />
+                    <AvatarFallback className="bg-accent text-accent-foreground text-xs">
+                      {b.learner?.name?.charAt(0) ?? "?"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {b.learner?.name ?? "Học viên"}
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">{b.course?.title}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      <Calendar className="mr-1 inline h-3 w-3" />
+                      {new Date(b.booking_date).toLocaleDateString("vi-VN")} • {b.start_time} – {b.end_time}
+                    </p>
                   </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Thời gian</TableHead>
-                        <TableHead>Mã GD</TableHead>
-                        <TableHead>Loại</TableHead>
-                        <TableHead>Nội dung</TableHead>
-                        <TableHead className="text-right">Biến động</TableHead>
-                        <TableHead className="text-right">Số dư cuối</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {walletTxns.length > 0 ? (walletTxns as any[]).map((w) => {
-                        const kl = kindLabel(w.kind);
-                        const positive = w.delta > 0;
-                        return (
-                          <TableRow key={w.id}>
-                            <TableCell className="text-xs text-muted-foreground whitespace-nowrap">{new Date(w.created_at).toLocaleString("vi-VN")}</TableCell>
-                            <TableCell className="font-mono text-xs">{w.reference_code || w.id.slice(0, 8)}</TableCell>
-                            <TableCell><Badge className={`${kl.cls} border-0 text-[10px] gap-1`}>{kl.icon}{kl.label}</Badge></TableCell>
-                            <TableCell className="text-sm max-w-[260px] truncate">{w.description}</TableCell>
-                            <TableCell className={`text-right font-bold text-sm ${positive ? "text-success" : "text-destructive"}`}>
-                              {positive ? "+ " : "− "}{Math.abs(w.delta).toLocaleString("vi-VN")}đ
-                            </TableCell>
-                            <TableCell className="text-right text-sm font-medium">{w.balance_after.toLocaleString("vi-VN")}đ</TableCell>
-                          </TableRow>
-                        );
-                      }) : (
-                        <TableRow><TableCell colSpan={6} className="text-center text-muted-foreground py-8">Chưa có giao dịch ví nào</TableCell></TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <p className="hidden text-sm font-bold text-primary sm:block">
+                      {b.total_price.toLocaleString("vi-VN")}đ
+                    </p>
+                    {b.status === "pending" ? (
+                      <div className="flex gap-1.5">
+                        <Button
+                          size="sm"
+                          onClick={() => handleBookingAction(b.id, "upcoming")}
+                          disabled={updateStatus.isPending}
+                          className="gradient-primary border-0 text-primary-foreground rounded-lg h-8 px-3 text-xs"
+                        >
+                          <Check className="mr-1 h-3.5 w-3.5" />Chấp nhận
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleBookingAction(b.id, "declined")}
+                          disabled={updateStatus.isPending}
+                          className="rounded-lg h-8 px-3 text-xs"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    ) : (
+                      <Badge className={statusConfig[b.status]?.cls ?? ""}>
+                        {statusConfig[b.status]?.label ?? b.status}
+                      </Badge>
+                    )}
+                  </div>
                 </div>
-              </TabsContent>
-            </Tabs>
-          </TabsContent>
-        </Tabs>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center py-14 text-center">
+              <Calendar className="h-10 w-10 text-muted mb-3" />
+              <p className="font-semibold text-foreground">Chưa có booking nào</p>
+              <p className="mt-1 text-sm text-muted-foreground">Học viên sẽ xuất hiện ở đây khi đặt lịch</p>
+            </div>
+          )}
+        </div>
+
+        {/* ── My courses quick view ── */}
+        <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
+          <div className="flex items-center justify-between border-b border-border/60 px-6 py-4">
+            <div>
+              <h2 className="font-semibold text-foreground">Khóa học của tôi</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">{courses.length} khóa học</p>
+            </div>
+            <Link to="/mentor/create-course" className="flex items-center gap-1 text-xs font-medium text-primary hover:underline">
+              <Plus className="h-3.5 w-3.5" /> Thêm mới
+            </Link>
+          </div>
+
+          {coursesLoading ? (
+            <div className="flex justify-center py-10">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : courses.length > 0 ? (
+            <div className="divide-y divide-border/60">
+              {courses.slice(0, 4).map((c) => (
+                <div key={c.id} className="flex items-center gap-4 px-6 py-4 hover:bg-muted/30 transition-colors">
+                  <img
+                    src={c.image_url ?? "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=120&h=80&fit=crop"}
+                    alt={c.title}
+                    className="h-14 w-20 shrink-0 rounded-xl object-cover"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-foreground">{c.title}</p>
+                    <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Star className="h-3 w-3 fill-warning text-warning" />{c.rating}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />{c.students_count}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Eye className="h-3 w-3" />{c.review_count}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-bold text-primary">{c.price.toLocaleString("vi-VN")}đ</p>
+                    <Badge
+                      className={
+                        c.status === "approved"
+                          ? "bg-success/10 text-success border-0 text-[10px] mt-1"
+                          : c.status === "pending"
+                          ? "bg-warning/10 text-warning border-0 text-[10px] mt-1"
+                          : "bg-destructive/10 text-destructive border-0 text-[10px] mt-1"
+                      }
+                    >
+                      {c.status === "approved" ? "Đã duyệt" : c.status === "pending" ? "Chờ duyệt" : "Từ chối"}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-col items-center py-14 text-center">
+              <BookOpen className="h-10 w-10 text-muted mb-3" />
+              <p className="font-semibold text-foreground">Chưa có khóa học nào</p>
+              <Link to="/mentor/create-course">
+                <Button className="mt-4 gradient-primary border-0 text-primary-foreground rounded-xl">
+                  Tạo khóa học đầu tiên
+                </Button>
+              </Link>
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* Withdraw Modal */}
+      {/* ── Withdraw Modal ── */}
       <Dialog open={withdrawOpen} onOpenChange={setWithdrawOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ArrowDownToLine className="h-5 w-5 text-secondary" />Rút tiền về ngân hàng
+              <ArrowDownToLine className="h-5 w-5 text-primary" />
+              Rút tiền về ngân hàng
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="rounded-xl bg-muted/50 p-3 text-sm">
-              <div className="flex justify-between"><span className="text-muted-foreground">Số dư khả dụng</span><span className="font-bold text-secondary">{fmt(available)}</span></div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Số dư khả dụng</span>
+                <span className="font-bold text-primary">{fmt(available)}</span>
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Số tiền muốn rút</Label>
-              <Input type="number" value={withdrawAmount} onChange={(e) => setWithdrawAmount(Math.min(available, Math.max(0, Number(e.target.value))))} />
+              <Input
+                type="number"
+                value={withdrawAmount}
+                onChange={(e) => setWithdrawAmount(Math.min(available, Math.max(0, Number(e.target.value))))}
+              />
             </div>
             <div className="space-y-2">
               <Label>Ngân hàng</Label>
@@ -405,16 +496,26 @@ export default function MentorDashboard() {
               <Label>Tên chủ tài khoản</Label>
               <Input placeholder="NGUYEN VAN A" value={bankHolder} onChange={(e) => setBankHolder(e.target.value)} />
             </div>
-            <p className="text-[11px] text-muted-foreground italic">Tiền sẽ được chuyển trong 24-48h làm việc.</p>
+            <p className="text-[11px] text-muted-foreground italic">
+              Tiền sẽ được chuyển trong 24-48h làm việc.
+            </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setWithdrawOpen(false)} className="rounded-lg">Hủy</Button>
-            <Button onClick={confirmWithdraw} disabled={withdrawAmount <= 0 || createWithdraw.isPending} className="gradient-primary border-0 text-primary-foreground rounded-lg">
-              {createWithdraw.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : `Xác nhận rút ${fmt(withdrawAmount)}`}
+            <Button variant="outline" onClick={() => setWithdrawOpen(false)} className="rounded-lg">
+              Hủy
+            </Button>
+            <Button
+              onClick={confirmWithdraw}
+              disabled={withdrawAmount <= 0 || createWithdraw.isPending}
+              className="gradient-primary border-0 text-primary-foreground rounded-lg"
+            >
+              {createWithdraw.isPending
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : `Xác nhận rút ${fmt(withdrawAmount)}`}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </MainLayout>
+    </MentorLayout>
   );
 }

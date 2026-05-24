@@ -151,7 +151,7 @@ export function SearchHero() {
                     {aiSuggestions.slice(0, 4).map((s) => (
                       <button
                         key={s}
-                        onMouseDown={() => { setQuery(s); navigate(`/search?q=${encodeURIComponent(s)}`); }}
+                        onMouseDown={() => { setQuery(s); setShowSuggestions(false); navigate(`/search?q=${encodeURIComponent(s)}`); }}
                         className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-accent transition-colors"
                       >
                         <Search className="h-3.5 w-3.5 text-muted-foreground" />
