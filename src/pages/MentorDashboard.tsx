@@ -268,7 +268,7 @@ export default function MentorDashboard() {
               </p>
             </div>
             {verificationCopy.button && (
-              <Link to="/mentor/verification">
+              <Link to="/mentor/profile?tab=verification">
                 <Button
                   className="rounded-xl border-0 text-primary-foreground gradient-primary"
                 >

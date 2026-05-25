@@ -348,19 +348,11 @@ export default function MentorCourses() {
       <div className="p-6 lg:p-8 space-y-6">
 
         {/* Header */}
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Khóa học của tôi</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Quản lý toàn bộ {courses.length} khóa học của bạn
-            </p>
-          </div>
-          <Link to="/mentor/create-course">
-            <Button className="gradient-primary border-0 text-primary-foreground rounded-xl shadow-lg shadow-primary/20 shrink-0">
-              <Plus className="mr-2 h-4 w-4" />
-              Tạo khóa học mới
-            </Button>
-          </Link>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Khóa học của tôi</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Quản lý toàn bộ {courses.length} khóa học của bạn
+          </p>
         </div>
 
         {/* Filter bar */}

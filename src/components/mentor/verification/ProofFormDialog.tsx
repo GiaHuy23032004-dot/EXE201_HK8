@@ -43,8 +43,7 @@ type FormErrors = Partial<Record<FormErrorKey, string>>;
 
 const SOCIAL_PLATFORMS = Object.keys(SOCIAL_PLATFORM_LABELS) as SocialPlatform[];
 const IMAGE_AND_PDF_ACCEPT = "image/png,image/jpeg,image/webp,application/pdf";
-const CERTIFICATE_MAX_FILE_SIZE = 5 * 1024 * 1024;
-const PORTFOLIO_MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_PROOF_FILE_SIZE = 5 * 1024 * 1024;
 
 const EMPTY_FORM: ProofFormValues = {
   proof_type: "",
@@ -78,11 +77,8 @@ function validateFile(file: File, type: ProofType) {
     return "Chỉ hỗ trợ PNG, JPG, JPEG, WEBP hoặc PDF.";
   }
 
-  const maxSize = type === "portfolio" ? PORTFOLIO_MAX_FILE_SIZE : CERTIFICATE_MAX_FILE_SIZE;
-  if (file.size > maxSize) {
-    return type === "portfolio"
-      ? "Tệp portfolio không được vượt quá 10MB."
-      : "Tệp chứng chỉ không được vượt quá 5MB.";
+  if (file.size > MAX_PROOF_FILE_SIZE) {
+    return "Tệp bằng chứng không được vượt quá 5MB.";
   }
 
   return null;
@@ -98,7 +94,6 @@ function validateForm(values: ProofFormValues, editing?: MentorVerificationProof
   }
 
   if (values.proof_type === "social") {
-    if (!values.platform) errors.platform = "Vui lòng chọn nền tảng.";
     if (!values.url.trim()) {
       errors.url = "URL là bắt buộc.";
     } else if (!isValidUrl(values.url)) {
@@ -109,7 +104,9 @@ function validateForm(values: ProofFormValues, editing?: MentorVerificationProof
 
   if (values.proof_type === "certificate") {
     if (!values.title.trim()) errors.title = "Vui lòng nhập tên chứng chỉ / bằng cấp.";
-    if (!values.file && !existingFile) errors.file = "Vui lòng tải lên tệp chứng chỉ / bằng cấp.";
+    if (!values.url.trim() && !values.file && !existingFile) {
+      errors.file = "Vui lòng thêm URL hoặc tải lên tệp chứng chỉ / bằng cấp.";
+    }
     if (values.url.trim() && !isValidUrl(values.url)) errors.url = "URL xác thực không hợp lệ.";
     if (values.issued_year.trim() && Number.isNaN(Number(values.issued_year))) {
       errors.issued_year = "Năm cấp phải là số.";
@@ -117,9 +114,9 @@ function validateForm(values: ProofFormValues, editing?: MentorVerificationProof
     return errors;
   }
 
-  if (values.url.trim() && !isValidUrl(values.url)) errors.url = "URL portfolio không hợp lệ.";
+  if (values.url.trim() && !isValidUrl(values.url)) errors.url = "URL không hợp lệ.";
   if (!values.url.trim() && !values.file && !existingFile) {
-    errors.file = "Vui lòng thêm URL hoặc tải lên tệp portfolio.";
+    errors.file = "Vui lòng thêm URL hoặc tải lên tệp bằng chứng.";
   }
 
   return errors;
@@ -180,11 +177,8 @@ export function ProofFormDialog({ open, onClose, editing, isBusy, onSubmit }: Pr
   };
 
   const selectedType = form.proof_type || null;
-  const showFileUpload = selectedType === "certificate" || selectedType === "portfolio";
-  const fileHelper =
-    selectedType === "portfolio"
-      ? "PDF, PNG, JPG, JPEG hoặc WEBP tối đa 10MB"
-      : "PNG, JPG, JPEG, WEBP hoặc PDF tối đa 5MB";
+  const showFileUpload = selectedType === "certificate" || selectedType === "portfolio" || selectedType === "teaching_evidence";
+  const fileHelper = "PNG, JPG, JPEG, WEBP hoặc PDF tối đa 5MB";
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
@@ -223,7 +217,7 @@ export function ProofFormDialog({ open, onClose, editing, isBusy, onSubmit }: Pr
           {selectedType === "social" && (
             <>
               <div className="space-y-2">
-                <Label>Nền tảng</Label>
+                <Label>Nền tảng (không bắt buộc)</Label>
                 <Select value={form.platform} onValueChange={(value) => set("platform", value as SocialPlatform)}>
                   <SelectTrigger className="rounded-xl">
                     <SelectValue placeholder="Chọn nền tảng" />
@@ -301,14 +295,14 @@ export function ProofFormDialog({ open, onClose, editing, isBusy, onSubmit }: Pr
             </>
           )}
 
-          {selectedType === "portfolio" && (
+          {(selectedType === "portfolio" || selectedType === "teaching_evidence") && (
             <>
               <div className="space-y-2">
-                <Label>Tiêu đề portfolio / sản phẩm</Label>
+                <Label>{selectedType === "portfolio" ? "Tiêu đề portfolio / sản phẩm" : "Tiêu đề minh chứng"}</Label>
                 <Input
                   value={form.title}
                   onChange={(event) => set("title", event.target.value)}
-                  placeholder="VD: Bộ dự án GitHub, video biểu diễn..."
+                  placeholder={selectedType === "portfolio" ? "VD: Bộ dự án GitHub, video biểu diễn..." : "VD: Video buổi dạy thử, phản hồi học viên..."}
                   className="rounded-xl"
                 />
               </div>
@@ -328,7 +322,13 @@ export function ProofFormDialog({ open, onClose, editing, isBusy, onSubmit }: Pr
 
           {showFileUpload && (
             <div className="space-y-2">
-              <Label>{selectedType === "certificate" ? "Tệp chứng chỉ / bằng cấp" : "Tệp portfolio"}</Label>
+              <Label>
+                {selectedType === "certificate"
+                  ? "Tệp chứng chỉ / bằng cấp"
+                  : selectedType === "portfolio"
+                  ? "Tệp portfolio"
+                  : "Tệp minh chứng giảng dạy"}
+              </Label>
               <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed p-4 text-sm text-muted-foreground transition-colors hover:border-primary/40">
                 <FileUp className="h-5 w-5 text-primary" />
                 <span className="truncate">{fileName || editing?.file_path || fileHelper}</span>

@@ -43,6 +43,10 @@ function getSubtitle(proof: MentorVerificationProof) {
     return "Portfolio / sản phẩm cá nhân";
   }
 
+  if (proof.proof_type === "teaching_evidence") {
+    return "Minh chứng giảng dạy";
+  }
+
   return "Loại bằng chứng cũ";
 }
 

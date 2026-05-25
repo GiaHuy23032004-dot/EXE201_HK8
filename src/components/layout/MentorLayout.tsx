@@ -7,6 +7,7 @@ import {
   Wallet,
   Users,
   Settings,
+  UserCheck,
   Plus,
   LogOut,
   Menu,
@@ -26,6 +27,7 @@ const navItems = [
   { label: "Lịch dạy",          path: "/mentor/schedule",   icon: Calendar },
   { label: "Doanh thu & Ví",    path: "/mentor/wallet",     icon: Wallet },
   { label: "Quản lý học viên",  path: "/mentor/students",   icon: Users },
+  { label: "Hồ sơ & xác minh",  path: "/mentor/profile",    icon: UserCheck },
   { label: "Cài đặt",           path: "/mentor/settings",   icon: Settings },
 ];
 

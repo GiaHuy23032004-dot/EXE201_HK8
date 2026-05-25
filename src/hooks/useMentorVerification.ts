@@ -52,6 +52,18 @@ const VALID_STATUSES: MentorVerificationStatus[] = [
 ];
 const SUBMITTABLE_STATUSES: MentorVerificationStatus[] = ["unverified", "draft", "rejected"];
 
+function devLog(label: string, value: unknown) {
+  if (import.meta.env.DEV) {
+    console.log(label, value);
+  }
+}
+
+function devLogError(label: string, value: unknown) {
+  if (import.meta.env.DEV) {
+    console.log(label, value);
+  }
+}
+
 function normalizeVerificationStatus(status: string | null | undefined): MentorVerificationStatus {
   return VALID_STATUSES.includes(status as MentorVerificationStatus)
     ? (status as MentorVerificationStatus)
@@ -77,12 +89,27 @@ function toSafeVerification(
 
 function buildProfileChecklist(profile: MentorProfile): ProfileChecklistItem[] {
   return [
+    {
+      key: "real_name",
+      label: "Họ tên thật",
+      complete: Boolean(profile.real_name?.trim() || profile.name?.trim()),
+    },
     { key: "avatar_url", label: "Ảnh đại diện", complete: Boolean(profile.avatar_url?.trim()) },
     { key: "phone", label: "Số điện thoại", complete: Boolean(profile.phone?.trim()) },
     {
       key: "bio",
       label: "Bio từ 80 ký tự trở lên",
       complete: (profile.bio?.trim().length ?? 0) >= 80,
+    },
+    {
+      key: "teaching_fields",
+      label: "Lĩnh vực giảng dạy",
+      complete: (profile.teaching_fields?.length ?? 0) >= 1,
+    },
+    {
+      key: "experience_years",
+      label: "Số năm kinh nghiệm",
+      complete: profile.experience_years !== null && profile.experience_years >= 0,
     },
   ];
 }
@@ -97,7 +124,7 @@ function buildCompletion(
   const distinctProofTypes = new Set(validProofs.map((proof) => proof.proof_type)).size;
   const validProofCount = validProofs.length;
   const profileComplete = profileItems.every((item) => item.complete);
-  const proofsComplete = validProofCount >= 2;
+  const proofsComplete = distinctProofTypes >= 2;
 
   return {
     profileItems,
@@ -143,6 +170,9 @@ async function getVerificationRow(userId: string) {
     .eq("mentor_id", userId)
     .maybeSingle();
 
+  devLog("mentor verification", data);
+  if (error) devLogError("verification error", error);
+
   if (error) throw error;
   return data ? toSafeVerification(data as MentorVerification, userId) : null;
 }
@@ -155,29 +185,43 @@ async function ensureVerification(userId: string, profile: MentorProfile) {
     return toSafeVerification({ mentor_id: userId, status: "unverified" }, userId);
   }
 
-  const { error } = await supabase
+  const { data: created, error } = await supabase
     .from("mentor_verifications")
-    .insert({ mentor_id: userId, status: "unverified" });
+    .insert({ mentor_id: userId, status: "unverified" })
+    .select("*")
+    .single();
 
   if (error) {
+    devLogError("verification error", error);
     const refetched = await getVerificationRow(userId);
     if (refetched) return refetched;
     throw error;
   }
 
-  return (await getVerificationRow(userId)) ?? toSafeVerification({ mentor_id: userId, status: "unverified" }, userId);
+  devLog("mentor verification", created);
+  return (await getVerificationRow(userId)) ?? toSafeVerification(created as MentorVerification, userId);
 }
 
 async function fetchVerificationContext(userId: string): Promise<VerificationQueryResult> {
-  const profile = await fetchProfile(userId);
-  const verification = await ensureVerification(userId, profile);
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw authError;
+
+  const currentUserId = authData.user?.id;
+  if (!currentUserId) throw new Error("Vui lòng đăng nhập.");
+
+  const profile = await fetchProfile(currentUserId);
+  devLog("mentor profile", profile);
+
+  const verification = await ensureVerification(currentUserId, profile);
 
   const { data: proofs, error: proofError } = await supabase
     .from("mentor_verification_proofs")
     .select("id, mentor_id, proof_type, title, url, file_path, description, metadata, created_at, updated_at")
-    .eq("mentor_id", userId);
+    .eq("mentor_id", currentUserId);
 
-  if (proofError) throw proofError;
+  if (proofError) {
+    devLogError("verification error", proofError);
+  }
 
   return {
     profile,
@@ -199,6 +243,7 @@ export function useMentorVerification(userId: string | undefined) {
     mutationFn: async () => {
       if (!userId) throw new Error("Vui lòng đăng nhập.");
       const context = await fetchVerificationContext(userId);
+      const currentUserId = context.profile.user_id;
 
       if (!context.completion.profileComplete) {
         throw new Error("Hồ sơ của bạn chưa đủ điều kiện gửi xác minh.");
@@ -213,22 +258,31 @@ export function useMentorVerification(userId: string | undefined) {
       const { data, error } = await supabase
         .from("mentor_verifications")
         .update({ status: "pending", submitted_at: new Date().toISOString() })
-        .eq("mentor_id", userId)
+        .eq("mentor_id", currentUserId)
         .in("status", SUBMITTABLE_STATUSES)
         .select("*")
         .single();
 
       if (error) throw error;
-      return toSafeVerification(data as MentorVerification, userId);
+      return toSafeVerification(data as MentorVerification, currentUserId);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mentor-verification", userId] });
       queryClient.invalidateQueries({ queryKey: ["mentor-verification-proofs", userId] });
+      queryClient.invalidateQueries({ queryKey: ["mentor-profile", userId] });
     },
   });
 
   return {
     ...query,
+    profile: query.data?.profile,
+    verification: query.data?.verification,
+    status: query.data?.verification.status ?? "unverified",
+    isVerified: query.data?.verification.status === "approved",
+    checklist: query.data?.completion,
+    canSubmit: query.data?.completion.canSubmit ?? false,
+    loading: query.isLoading,
+    error: query.error,
     submitVerification,
   };
 }
