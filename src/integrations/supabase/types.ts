@@ -19,6 +19,12 @@ export type Database = {
           phone: string | null
           avatar_url: string | null
           bio: string | null
+          real_name: string | null
+          mentor_headline: string | null
+          teaching_fields: string[] | null
+          experience_years: number | null
+          city: string | null
+          portfolio_url: string | null
           role: string
           is_blocked: boolean
           created_at: string
@@ -33,6 +39,12 @@ export type Database = {
           phone?: string | null
           avatar_url?: string | null
           bio?: string | null
+          real_name?: string | null
+          mentor_headline?: string | null
+          teaching_fields?: string[] | null
+          experience_years?: number | null
+          city?: string | null
+          portfolio_url?: string | null
           role?: string
           is_blocked?: boolean
           created_at?: string
@@ -47,6 +59,12 @@ export type Database = {
           phone?: string | null
           avatar_url?: string | null
           bio?: string | null
+          real_name?: string | null
+          mentor_headline?: string | null
+          teaching_fields?: string[] | null
+          experience_years?: number | null
+          city?: string | null
+          portfolio_url?: string | null
           role?: string
           is_blocked?: boolean
           created_at?: string
@@ -92,6 +110,7 @@ export type Database = {
           students_count: number
           rating: number
           review_count: number
+          start_date: string | null
           created_at: string
           updated_at: string
         }
@@ -111,6 +130,7 @@ export type Database = {
           students_count?: number
           rating?: number
           review_count?: number
+          start_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -130,6 +150,7 @@ export type Database = {
           students_count?: number
           rating?: number
           review_count?: number
+          start_date?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -370,6 +391,85 @@ export type Database = {
           { foreignKeyName: "mentor_wallets_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] }
         ]
       }
+      mentor_verifications: {
+        Row: {
+          id: string
+          mentor_id: string
+          status: Database["public"]["Enums"]["mentor_verification_status"]
+          submitted_at: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          admin_note: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          mentor_id: string
+          status?: Database["public"]["Enums"]["mentor_verification_status"]
+          submitted_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          admin_note?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          mentor_id?: string
+          status?: Database["public"]["Enums"]["mentor_verification_status"]
+          submitted_at?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          admin_note?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "mentor_verifications_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] }
+        ]
+      }
+      mentor_verification_proofs: {
+        Row: {
+          id: string
+          mentor_id: string
+          proof_type: Database["public"]["Enums"]["mentor_verification_proof_type"]
+          title: string
+          url: string | null
+          file_path: string | null
+          description: string | null
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          mentor_id: string
+          proof_type: Database["public"]["Enums"]["mentor_verification_proof_type"]
+          title: string
+          url?: string | null
+          file_path?: string | null
+          description?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          mentor_id?: string
+          proof_type?: Database["public"]["Enums"]["mentor_verification_proof_type"]
+          title?: string
+          url?: string | null
+          file_path?: string | null
+          description?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "mentor_verification_proofs_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] }
+        ]
+      }
       wallet_transactions: {
         Row: {
           id: string
@@ -575,6 +675,8 @@ export type Database = {
       course_format: "online" | "offline"
       course_status: "pending" | "approved" | "rejected"
       booking_status: "pending" | "upcoming" | "completed" | "cancelled" | "declined"
+      mentor_verification_status: "unverified" | "draft" | "pending" | "approved" | "rejected"
+      mentor_verification_proof_type: "social" | "certificate" | "portfolio" | "teaching_evidence"
       payment_method: "later" | "platform" | "credit_card" | "bank_transfer" | "e_wallet"
       txn_status: "success" | "refunded" | "pending" | "failed"
       txn_type: "online" | "offline" | "product"
@@ -615,6 +717,8 @@ export const Constants = {
       course_format: ["online", "offline"],
       course_status: ["pending", "approved", "rejected"],
       booking_status: ["pending", "upcoming", "completed", "cancelled", "declined"],
+      mentor_verification_status: ["unverified", "draft", "pending", "approved", "rejected"],
+      mentor_verification_proof_type: ["social", "certificate", "portfolio", "teaching_evidence"],
       payment_method: ["later", "platform", "credit_card", "bank_transfer", "e_wallet"],
       txn_status: ["success", "refunded", "pending", "failed"],
       txn_type: ["online", "offline", "product"],

@@ -15,7 +15,7 @@ export interface Booking {
   total_price: number;
   note: string | null;
   created_at: string;
-  course?: { title: string; image_url: string | null; price: number };
+  course?: { title: string; image_url: string | null; price: number; start_date: string | null };
   mentor?: { name: string | null; avatar_url: string | null };
   learner?: { name: string | null; avatar_url: string | null };
 }
@@ -30,7 +30,7 @@ export function useLearnerBookings(learnerId: string | undefined) {
         .from("bookings")
         .select(`
           *,
-          course:courses(title, image_url, price),
+          course:courses(title, image_url, price, start_date),
           mentor:profiles!bookings_mentor_id_fkey(name, avatar_url)
         `)
         .eq("learner_id", learnerId!)
@@ -51,7 +51,7 @@ export function useMentorBookings(mentorId: string | undefined) {
         .from("bookings")
         .select(`
           *,
-          course:courses(title, image_url, price),
+          course:courses(title, image_url, price, start_date),
           learner:profiles!bookings_learner_id_fkey(name, avatar_url)
         `)
         .eq("mentor_id", mentorId!)
@@ -77,6 +77,17 @@ export function useCreateBooking() {
       payment_method: "later" | "platform";
       total_price: number;
     }) => {
+      const { data: course, error: courseError } = await supabase
+        .from("courses")
+        .select("start_date")
+        .eq("id", payload.course_id)
+        .single();
+
+      if (courseError) throw courseError;
+      if (course?.start_date && payload.booking_date < course.start_date) {
+        throw new Error("KhÃ´ng thá»ƒ Ä‘áº·t lá»‹ch trÆ°á»›c ngÃ y khai giáº£ng.");
+      }
+
       const { data, error } = await supabase
         .from("bookings")
         .insert({ ...payload, status: "pending" })
@@ -87,6 +98,7 @@ export function useCreateBooking() {
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["learner-bookings", vars.learner_id] });
+      qc.invalidateQueries({ queryKey: ["mentor-bookings", vars.mentor_id] });
     },
   });
 }

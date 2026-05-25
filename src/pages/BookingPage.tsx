@@ -12,6 +12,39 @@ import { Separator } from "@/components/ui/separator";
 import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 
+const DAY_INDEX: Record<string, number> = {
+  "Thứ 2": 1,
+  "Thứ 3": 2,
+  "Thứ 4": 3,
+  "Thứ 5": 4,
+  "Thứ 6": 5,
+  "Thứ 7": 6,
+  "Chủ nhật": 0,
+};
+
+function formatLocalDate(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getNextBookingDate(dayOfWeek: string, startDate?: string | null) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const firstAvailable = startDate ? new Date(`${startDate}T00:00:00`) : today;
+  const base = firstAvailable > today ? firstAvailable : today;
+  const targetDay = DAY_INDEX[dayOfWeek];
+
+  if (targetDay === undefined) return formatLocalDate(base);
+
+  const next = new Date(base);
+  const daysUntilTarget = (targetDay - next.getDay() + 7) % 7;
+  next.setDate(next.getDate() + daysUntilTarget);
+  return formatLocalDate(next);
+}
+
 export default function BookingPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -31,9 +64,7 @@ export default function BookingPage() {
   const handleConfirm = async () => {
     if (!session?.user?.id || !course || !selectedSchedule) return;
 
-    // Tính ngày booking tiếp theo dựa trên day_of_week
-    const today = new Date();
-    const bookingDate = today.toISOString().split("T")[0];
+    const bookingDate = getNextBookingDate(selectedSchedule.day_of_week, course.start_date);
 
     try {
       await createBooking.mutateAsync({
@@ -74,6 +105,9 @@ export default function BookingPage() {
   }
 
   const mentor = (course as any).mentor;
+  const selectedBookingDate = selectedSchedule
+    ? getNextBookingDate(selectedSchedule.day_of_week, course.start_date)
+    : null;
 
   return (
     <MainLayout>
@@ -204,7 +238,7 @@ export default function BookingPage() {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Lịch học</span>
                     <span className="text-foreground">
-                      {selectedSchedule ? `${selectedSchedule.day_of_week} • ${selectedSchedule.start_time}` : "Chưa chọn"}
+                      {selectedSchedule && selectedBookingDate ? `${selectedSchedule.day_of_week} • ${selectedSchedule.start_time} • ${new Date(`${selectedBookingDate}T00:00:00`).toLocaleDateString("vi-VN")}` : "Chưa chọn"}
                     </span>
                   </div>
                   <Separator className="my-2" />

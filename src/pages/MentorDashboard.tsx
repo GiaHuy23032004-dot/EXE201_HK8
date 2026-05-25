@@ -1,18 +1,20 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { MentorLayout } from "@/components/layout/MentorLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMentorCourses } from "@/hooks/use-courses";
 import { useMentorBookings, useUpdateBookingStatus } from "@/hooks/use-bookings";
 import { useMentorWallet, useWalletTransactions, useMentorTransactions, useCreateWithdrawal } from "@/hooks/use-wallet";
+import { useMentorVerification, type MentorVerificationStatus } from "@/hooks/useMentorVerification";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Plus, BookOpen, Calendar, DollarSign, Star, Users,
   Check, X, Wallet, Clock, ArrowDownToLine, TrendingDown,
   ArrowUpRight, ArrowDownLeft, RotateCcw, Loader2,
-  TrendingUp, Eye, ChevronRight, AlertCircle,
+  TrendingUp, Eye, ChevronRight, AlertCircle, BadgeCheck, ShieldCheck,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -28,6 +30,31 @@ import {
 const FEE_RATE = 0.15;
 const fmt = (n: number) => n.toLocaleString("vi-VN") + "đ";
 
+interface ChartTransaction {
+  amount: number;
+  created_at: string;
+}
+
+interface DashboardReview {
+  rating: number;
+}
+
+interface WalletTransactionPreview {
+  id: string;
+  delta: number;
+  description: string | null;
+}
+
+interface DashboardStatCard {
+  icon: LucideIcon;
+  label: string;
+  value: string | number;
+  sub?: string;
+  color: string;
+  bg: string;
+  action?: ReactNode;
+}
+
 const statusConfig: Record<string, { label: string; cls: string }> = {
   pending:   { label: "Chờ xác nhận", cls: "bg-warning/10 text-warning border-0" },
   upcoming:  { label: "Đã xác nhận",  cls: "bg-primary/10 text-primary border-0" },
@@ -36,8 +63,34 @@ const statusConfig: Record<string, { label: string; cls: string }> = {
   cancelled: { label: "Đã hủy",       cls: "bg-muted text-muted-foreground border-0" },
 };
 
+const verificationBannerCopy: Record<Exclude<MentorVerificationStatus, "approved">, {
+  title: string;
+  description: string;
+  button?: string;
+}> = {
+  unverified: {
+    title: "Hoàn tất xác minh để tăng độ tin cậy",
+    description: "Bổ sung hồ sơ và bằng chứng chuyên môn để nhận huy hiệu Verified Mentor.",
+    button: "Xác minh ngay",
+  },
+  draft: {
+    title: "Hồ sơ xác minh chưa hoàn tất",
+    description: "Bạn có thể tiếp tục bổ sung thông tin trước khi gửi duyệt.",
+    button: "Tiếp tục xác minh",
+  },
+  pending: {
+    title: "Hồ sơ đang chờ duyệt",
+    description: "Admin đang xem xét hồ sơ xác minh của bạn.",
+  },
+  rejected: {
+    title: "Hồ sơ cần bổ sung",
+    description: "Hồ sơ cần bổ sung thêm thông tin.",
+    button: "Bổ sung hồ sơ",
+  },
+};
+
 // Build a simple monthly revenue chart from transactions
-function buildChartData(txns: any[]) {
+function buildChartData(txns: ChartTransaction[]) {
   const map: Record<string, number> = {};
   txns.forEach((t) => {
     const d = new Date(t.created_at);
@@ -47,6 +100,10 @@ function buildChartData(txns: any[]) {
   return Object.entries(map)
     .slice(-6)
     .map(([month, revenue]) => ({ month, revenue }));
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Đã xảy ra lỗi không xác định.";
 }
 
 export default function MentorDashboard() {
@@ -59,6 +116,7 @@ export default function MentorDashboard() {
   const { data: wallet }                                    = useMentorWallet(mentorId);
   const { data: walletTxns = [] }                           = useWalletTransactions(mentorId);
   const { data: txns = [] }                                 = useMentorTransactions(mentorId);
+  const { data: verificationContext }                       = useMentorVerification(mentorId);
   const updateStatus   = useUpdateBookingStatus();
   const createWithdraw = useCreateWithdrawal();
 
@@ -68,7 +126,7 @@ export default function MentorDashboard() {
   const [bankAccount,    setBankAccount]    = useState("");
   const [bankHolder,     setBankHolder]     = useState("");
 
-  const { data: reviews = [] } = useQuery({
+  const { data: reviews = [] } = useQuery<DashboardReview[]>({
     queryKey: ["mentor-dashboard-reviews", mentorId],
     enabled: courses.length > 0,
     queryFn: async () => {
@@ -78,7 +136,7 @@ export default function MentorDashboard() {
         .in("course_id", courses.map((c) => c.id))
         .order("created_at", { ascending: false });
       if (error) return [];
-      return data ?? [];
+      return (data ?? []) as DashboardReview[];
     },
   });
 
@@ -86,12 +144,18 @@ export default function MentorDashboard() {
   const recentBookings   = bookings.slice(0, 5);
   const totalStudents    = courses.reduce((s, c) => s + c.students_count, 0);
   const avgRating        = reviews.length > 0
-    ? (reviews.reduce((s: number, r: any) => s + r.rating, 0) / reviews.length).toFixed(1)
+    ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
     : "—";
   const totalRevenue     = wallet?.total_earned ?? 0;
   const available        = wallet?.balance      ?? 0;
   const held             = wallet?.held_balance ?? 0;
-  const chartData        = buildChartData(txns as any[]);
+  const chartData        = buildChartData(txns as ChartTransaction[]);
+  const verification = verificationContext?.verification;
+  const verificationStatus = verification?.status ?? "unverified";
+  const showVerificationBanner = verificationStatus !== "approved";
+  const verificationCopy = showVerificationBanner
+    ? verificationBannerCopy[verificationStatus as Exclude<MentorVerificationStatus, "approved">]
+    : null;
 
   const handleBookingAction = async (id: string, action: "upcoming" | "declined") => {
     if (!mentorId) return;
@@ -119,10 +183,50 @@ export default function MentorDashboard() {
       });
       setWithdrawOpen(false);
       toast({ title: "Yêu cầu rút tiền đã gửi", description: `${fmt(withdrawAmount)} sẽ được chuyển trong 24-48h.` });
-    } catch (err: any) {
-      toast({ title: "Lỗi", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Lỗi", description: getErrorMessage(err), variant: "destructive" });
     }
   };
+
+  const statCards: DashboardStatCard[] = [
+    {
+      icon: DollarSign,
+      label: "Tổng doanh thu",
+      value: fmt(totalRevenue),
+      sub: `Khả dụng: ${fmt(available)}`,
+      color: "text-success",
+      bg: "bg-success/10",
+      action: available > 0 ? (
+        <button onClick={openWithdraw} className="mt-3 flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+          <ArrowDownToLine className="h-3 w-3" /> Rút tiền
+        </button>
+      ) : undefined,
+    },
+    {
+      icon: Users,
+      label: "Tổng học viên",
+      value: totalStudents,
+      sub: `${courses.length} khóa học`,
+      color: "text-primary",
+      bg: "bg-primary/10",
+    },
+    {
+      icon: BookOpen,
+      label: "Khóa học đang hoạt động",
+      value: courses.filter((c) => c.status === "approved").length,
+      sub: `${courses.filter((c) => c.status === "pending").length} chờ duyệt`,
+      color: "text-secondary-foreground",
+      bg: "bg-accent",
+    },
+    {
+      icon: Star,
+      label: "Đánh giá trung bình",
+      value: avgRating,
+      sub: `${reviews.length} lượt đánh giá`,
+      color: "text-warning",
+      bg: "bg-warning/10",
+    },
+  ];
 
   return (
     <MentorLayout>
@@ -131,12 +235,49 @@ export default function MentorDashboard() {
         {/* ── Page header ── */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Tổng quan</h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-2xl font-bold text-foreground">Tổng quan</h1>
+              {verificationStatus === "approved" && (
+                <Badge className="gap-1 rounded-full border-0 bg-success/10 text-success">
+                  <BadgeCheck className="h-3.5 w-3.5" />
+                  Verified Mentor
+                </Badge>
+              )}
+            </div>
             <p className="mt-1 text-sm text-muted-foreground">
               Chào mừng trở lại! Đây là tình hình hoạt động của bạn.
             </p>
           </div>
         </div>
+
+        {showVerificationBanner && verificationCopy && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="flex flex-col gap-4 rounded-2xl border border-primary/20 bg-primary/5 px-5 py-4 sm:flex-row sm:items-center"
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-background text-primary shadow-sm">
+              <ShieldCheck className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="font-semibold text-foreground">{verificationCopy.title}</p>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {verificationStatus === "rejected" && verification?.admin_note
+                  ? verification.admin_note
+                  : verificationCopy.description}
+              </p>
+            </div>
+            {verificationCopy.button && (
+              <Link to="/mentor/verification">
+                <Button
+                  className="rounded-xl border-0 text-primary-foreground gradient-primary"
+                >
+                  {verificationCopy.button}
+                </Button>
+              </Link>
+            )}
+          </motion.div>
+        )}
 
         {/* ── Pending bookings alert ── */}
         {pendingBookings.length > 0 && (
@@ -157,37 +298,7 @@ export default function MentorDashboard() {
 
         {/* ── Stat cards ── */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[
-            {
-              icon: DollarSign, label: "Tổng doanh thu",
-              value: fmt(totalRevenue),
-              sub: `Khả dụng: ${fmt(available)}`,
-              color: "text-success", bg: "bg-success/10",
-              action: available > 0 ? (
-                <button onClick={openWithdraw} className="mt-3 flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
-                  <ArrowDownToLine className="h-3 w-3" /> Rút tiền
-                </button>
-              ) : null,
-            },
-            {
-              icon: Users, label: "Tổng học viên",
-              value: totalStudents,
-              sub: `${courses.length} khóa học`,
-              color: "text-primary", bg: "bg-primary/10",
-            },
-            {
-              icon: BookOpen, label: "Khóa học đang hoạt động",
-              value: courses.filter((c) => c.status === "approved").length,
-              sub: `${courses.filter((c) => c.status === "pending").length} chờ duyệt`,
-              color: "text-secondary-foreground", bg: "bg-accent",
-            },
-            {
-              icon: Star, label: "Đánh giá trung bình",
-              value: avgRating,
-              sub: `${reviews.length} lượt đánh giá`,
-              color: "text-warning", bg: "bg-warning/10",
-            },
-          ].map((s, i) => (
+          {statCards.map((s, i) => (
             <motion.div
               key={s.label}
               initial={{ opacity: 0, y: 16 }}
@@ -204,7 +315,7 @@ export default function MentorDashboard() {
               <p className="mt-3 text-2xl font-bold text-foreground">{s.value}</p>
               <p className="mt-0.5 text-xs text-muted-foreground">{s.label}</p>
               {s.sub && <p className="mt-1 text-[11px] text-muted-foreground/70">{s.sub}</p>}
-              {(s as any).action}
+              {s.action}
             </motion.div>
           ))}
         </div>
@@ -283,7 +394,7 @@ export default function MentorDashboard() {
             {walletTxns.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-medium text-muted-foreground">Giao dịch gần đây</p>
-                {(walletTxns as any[]).slice(0, 3).map((w) => {
+                {(walletTxns as WalletTransactionPreview[]).slice(0, 3).map((w) => {
                   const positive = w.delta > 0;
                   return (
                     <div key={w.id} className="flex items-center justify-between text-xs">

@@ -9,6 +9,18 @@ import { Star, BadgeCheck, BookOpen, Users, Award, Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { motion } from "framer-motion";
+import { usePublicMentorVerification } from "@/hooks/usePublicMentorVerification";
+
+interface MentorReviewRow {
+  id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+  learner?: {
+    name: string | null;
+    avatar_url: string | null;
+  } | null;
+}
 
 export default function MentorProfilePage() {
   const { id } = useParams();
@@ -30,11 +42,12 @@ export default function MentorProfilePage() {
 
   // Fetch mentor courses
   const { data: courses = [], isLoading: coursesLoading } = useMentorCourses(id);
+  const { data: mentorVerification } = usePublicMentorVerification(id);
 
   // Fetch reviews cho tất cả courses của mentor
-  const { data: reviews = [] } = useQuery({
+  const { data: reviews = [] } = useQuery<MentorReviewRow[]>({
     queryKey: ["mentor-reviews", id],
-    enabled: !!id,
+    enabled: !!id && courses.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("reviews")
@@ -43,9 +56,8 @@ export default function MentorProfilePage() {
         .order("created_at", { ascending: false })
         .limit(10);
       if (error) return [];
-      return data ?? [];
+      return (data ?? []) as MentorReviewRow[];
     },
-    enabled: courses.length > 0,
   });
 
   if (mentorLoading) {
@@ -84,7 +96,7 @@ export default function MentorProfilePage() {
     studentsCount: c.students_count,
   }));
 
-  const mappedReviews = reviews.map((r: any) => ({
+  const mappedReviews = reviews.map((r) => ({
     id: r.id,
     userName: r.learner?.name || "Học viên",
     userAvatar: r.learner?.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face",
@@ -94,8 +106,10 @@ export default function MentorProfilePage() {
   }));
 
   const avgRating = reviews.length > 0
-    ? (reviews.reduce((s: number, r: any) => s + r.rating, 0) / reviews.length).toFixed(1)
+    ? (reviews.reduce((s, r) => s + r.rating, 0) / reviews.length).toFixed(1)
     : "—";
+  const isMentorProfile = mentor.role === "mentor";
+  const isVerifiedMentor = isMentorProfile && mentorVerification?.verified === true;
 
   return (
     <MainLayout>
@@ -112,7 +126,7 @@ export default function MentorProfilePage() {
               <div className="flex-1">
                 <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
                   <h1 className="text-2xl font-bold text-foreground">{mentor.name}</h1>
-                  <BadgeCheck className="h-5 w-5 text-secondary" />
+                  {isVerifiedMentor && <BadgeCheck className="h-5 w-5 text-secondary" />}
                 </div>
                 <p className="text-muted-foreground mb-3">{mentor.role === "mentor" ? "Mentor" : "Giảng viên"}</p>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-sm text-muted-foreground">
@@ -126,9 +140,18 @@ export default function MentorProfilePage() {
                   </span>
                 </div>
               </div>
-              <Badge className="bg-success/10 text-success border-0 gap-1">
-                <Award className="h-3 w-3" />Đã xác minh
-              </Badge>
+              {isMentorProfile && (
+                <Badge
+                  className={
+                    isVerifiedMentor
+                      ? "bg-success/10 text-success border-0 gap-1"
+                      : "bg-muted text-muted-foreground border-0 gap-1"
+                  }
+                >
+                  <Award className="h-3 w-3" />
+                  {isVerifiedMentor ? "Đã xác minh" : "Chưa xác minh"}
+                </Badge>
+              )}
             </div>
 
             <Separator className="my-6" />

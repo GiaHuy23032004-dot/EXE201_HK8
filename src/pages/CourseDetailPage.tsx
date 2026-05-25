@@ -1,6 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useCourse } from "@/hooks/use-courses";
+import { useCourse, type Course } from "@/hooks/use-courses";
 import { useCourseReviews } from "@/hooks/use-reviews";
 import { useIsSaved, useToggleSaveCourse } from "@/hooks/use-saved-courses";
 import { ReviewBlock } from "@/components/marketplace/ReviewBlock";
@@ -11,6 +11,26 @@ import { Separator } from "@/components/ui/separator";
 import { motion } from "framer-motion";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { usePublicMentorVerification } from "@/hooks/usePublicMentorVerification";
+
+interface CourseDetailMentor {
+  user_id: string;
+  name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+}
+
+interface CourseDetailSchedule {
+  id: string;
+  day_of_week: string;
+  start_time: string;
+  end_time: string;
+}
+
+type CourseDetail = Course & {
+  mentor?: CourseDetailMentor | null;
+  course_schedules?: CourseDetailSchedule[];
+};
 
 export default function CourseDetailPage() {
   const { id } = useParams();
@@ -21,6 +41,9 @@ export default function CourseDetailPage() {
   const { data: course, isLoading } = useCourse(id);
   const { data: reviews = [] } = useCourseReviews(id);
   const { data: isSaved = false } = useIsSaved(session?.user?.id, id);
+  const courseDetail = course as CourseDetail | undefined;
+  const mentorId = courseDetail?.mentor?.user_id;
+  const { data: mentorVerification } = usePublicMentorVerification(mentorId);
   const toggleSave = useToggleSaveCourse();
 
   const handleSave = () => {
@@ -55,8 +78,9 @@ export default function CourseDetailPage() {
     );
   }
 
-  const mentor = (course as any).mentor;
-  const schedules = (course as any).course_schedules ?? [];
+  const mentor = courseDetail?.mentor;
+  const schedules = courseDetail?.course_schedules ?? [];
+  const isVerifiedMentor = mentorVerification?.verified === true;
 
   // Map reviews sang ReviewBlock format
   const mappedReviews = reviews.map((r) => ({
@@ -131,7 +155,7 @@ export default function CourseDetailPage() {
                   <Separator className="my-6" />
                   <h2 className="mb-3 text-lg font-semibold text-foreground">Lịch học</h2>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {schedules.map((s: any) => (
+                    {schedules.map((s) => (
                       <div key={s.id} className="rounded-xl border bg-muted/30 p-3 text-center">
                         <p className="text-sm font-medium text-foreground">{s.day_of_week}</p>
                         <p className="text-xs text-muted-foreground">{s.start_time} - {s.end_time}</p>
@@ -221,9 +245,21 @@ export default function CourseDetailPage() {
                     <div>
                       <div className="flex items-center gap-1">
                         <p className="font-semibold text-card-foreground">{mentor.name}</p>
-                        <BadgeCheck className="h-4 w-4 text-secondary" />
+                        {isVerifiedMentor && <BadgeCheck className="h-4 w-4 text-secondary" />}
                       </div>
-                      <p className="text-xs text-muted-foreground">{course.category}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <p className="text-xs text-muted-foreground">{course.category}</p>
+                        <Badge
+                          variant="outline"
+                          className={
+                            isVerifiedMentor
+                              ? "rounded-full border-success/20 bg-success/10 text-success text-[10px]"
+                              : "rounded-full border-border bg-muted text-muted-foreground text-[10px]"
+                          }
+                        >
+                          {isVerifiedMentor ? "Đã xác minh" : "Chưa xác minh"}
+                        </Badge>
+                      </div>
                     </div>
                   </div>
                   {mentor.bio && <p className="text-sm text-muted-foreground mb-4">{mentor.bio}</p>}

@@ -5,12 +5,13 @@ import { SearchHero } from "@/components/marketplace/SearchHero";
 import { CourseCard } from "@/components/marketplace/CourseCard";
 import { MentorCard } from "@/components/marketplace/MentorCard";
 import { CategoryChip } from "@/components/marketplace/CategoryChip";
-import { useCourses } from "@/hooks/use-courses";
+import { useCourses, type Course } from "@/hooks/use-courses";
 import { useQuery } from "@tanstack/react-query";
 import { Music, Globe, Code, Palette, Dumbbell, ChefHat, Briefcase, Pencil, ArrowRight, TrendingUp, MapPin, Sparkles, Brain, Zap, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { usePublicMentorVerificationMap } from "@/hooks/usePublicMentorVerification";
 
 const categoryIcons = [
   { icon: Music, label: "Âm nhạc", slug: "music" },
@@ -23,8 +24,16 @@ const categoryIcons = [
   { icon: Pencil, label: "Thiết kế", slug: "design" },
 ];
 
+interface HomeMentor {
+  user_id: string;
+  name: string | null;
+  avatar_url: string | null;
+  bio: string | null;
+  role: string | null;
+}
+
 // Helper map course từ Supabase sang CourseCard props
-function mapCourse(c: any) {
+function mapCourse(c: Course) {
   return {
     id: c.id,
     title: c.title,
@@ -50,7 +59,7 @@ export default function HomePage() {
   const recommended = allCourses.slice(0, 4);
 
   // Fetch mentors từ Supabase
-  const { data: mentors = [] } = useQuery({
+  const { data: mentors = [] } = useQuery<HomeMentor[]>({
     queryKey: ["mentors-home"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -59,12 +68,15 @@ export default function HomePage() {
         .eq("role", "mentor")
         .limit(6);
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []) as HomeMentor[];
     },
   });
+  const { data: approvedMentorIds = new Set<string>() } = usePublicMentorVerificationMap(
+    mentors.map((mentor) => mentor.user_id),
+  );
 
   // Map mentors sang MentorCard props
-  const mappedMentors = mentors.map((m: any) => ({
+  const mappedMentors = mentors.map((m) => ({
     id: m.user_id,
     name: m.name || "Mentor",
     avatar: m.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face",
@@ -72,7 +84,7 @@ export default function HomePage() {
     rating: 4.8,
     reviewCount: 0,
     coursesCount: 0,
-    verified: true,
+    verified: approvedMentorIds.has(m.user_id),
     bio: m.bio || "",
   }));
 

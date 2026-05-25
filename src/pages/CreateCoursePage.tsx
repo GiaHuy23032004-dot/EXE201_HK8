@@ -3,20 +3,25 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useCreateCourse } from "@/hooks/use-courses";
-import { Image, MapPin, Monitor, Globe, Clock, DollarSign, FileText, Upload, CheckCircle2, Loader2, X } from "lucide-react";
+import { Image, MapPin, Monitor, Globe, DollarSign, FileText, Upload, CheckCircle2, Loader2, X, CalendarDays } from "lucide-react";
 import { useUploadImage } from "@/hooks/use-upload";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
-import { Separator } from "@/components/ui/separator";
 import { categories } from "@/data/mockData";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 
 const days = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
+
+function formatLocalDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
 export default function CreateCoursePage() {
   const navigate = useNavigate();
@@ -27,6 +32,7 @@ export default function CreateCoursePage() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
+  const [startDate, setStartDate] = useState("");
   const [format, setFormat] = useState<"online" | "offline">("offline");
   const [location, setLocation] = useState("");
   const [meetingLink, setMeetingLink] = useState("");
@@ -38,6 +44,7 @@ export default function CreateCoursePage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const { uploadImage, uploading: imageUploading } = useUploadImage();
+  const todayIso = formatLocalDate();
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -56,8 +63,36 @@ export default function CreateCoursePage() {
       toast({ title: "Vui lòng đăng nhập", variant: "destructive" });
       return;
     }
-    if (!title || !category || !price) {
+    if (!title.trim() || !category || !price) {
       toast({ title: "Vui lòng điền đầy đủ thông tin bắt buộc", variant: "destructive" });
+      return;
+    }
+    if (!startDate) {
+      toast({ title: "Vui lòng chọn ngày khai giảng", variant: "destructive" });
+      return;
+    }
+    if (startDate < todayIso) {
+      toast({ title: "Ngày khai giảng không thể trước hôm nay", variant: "destructive" });
+      return;
+    }
+    if (selectedDays.length === 0) {
+      toast({ title: "Vui lòng chọn ít nhất một ngày học trong tuần", variant: "destructive" });
+      return;
+    }
+    if (!startTime || !endTime || endTime <= startTime) {
+      toast({ title: "Giờ kết thúc phải sau giờ bắt đầu", variant: "destructive" });
+      return;
+    }
+    if (format === "offline" && !location.trim()) {
+      toast({ title: "Vui lòng nhập địa chỉ lớp học", variant: "destructive" });
+      return;
+    }
+    if (format === "online" && !meetingLink.trim()) {
+      toast({ title: "Vui lòng nhập link phòng học online", variant: "destructive" });
+      return;
+    }
+    if (Number(price) < 0) {
+      toast({ title: "Giá phải là số không âm", variant: "destructive" });
       return;
     }
 
@@ -69,14 +104,15 @@ export default function CreateCoursePage() {
       }
       await createCourse.mutateAsync({
         mentor_id: session.user.id,
-        title,
-        description,
+        title: title.trim(),
+        description: description.trim(),
         category,
         format,
-        price: parseInt(price),
-        location: format === "offline" ? location : undefined,
-        meeting_link: format === "online" ? meetingLink : undefined,
+        price: Number(price),
+        location: format === "offline" ? location.trim() : undefined,
+        meeting_link: format === "online" ? meetingLink.trim() : undefined,
         image_url: imageUrl,
+        start_date: startDate,
         schedules: selectedDays.map((day) => ({
           day_of_week: day,
           start_time: startTime,
@@ -103,7 +139,7 @@ export default function CreateCoursePage() {
               <Button onClick={() => navigate("/mentor/dashboard")} className="gradient-primary border-0 text-primary-foreground rounded-xl">
                 Về Dashboard
               </Button>
-              <Button variant="outline" onClick={() => { setSubmitted(false); setTitle(""); setCategory(""); setDescription(""); setPrice(""); setSelectedDays([]); }} className="rounded-xl">
+              <Button variant="outline" onClick={() => { setSubmitted(false); setTitle(""); setCategory(""); setDescription(""); setStartDate(""); setPrice(""); setSelectedDays([]); }} className="rounded-xl">
                 Tạo thêm
               </Button>
             </div>
@@ -144,6 +180,45 @@ export default function CreateCoursePage() {
             </div>
           </div>
 
+          {/* Start date & Schedule */}
+          <div className="rounded-2xl border bg-card p-6 shadow-card space-y-4">
+            <h2 className="font-semibold text-foreground flex items-center gap-2">
+              <CalendarDays className="h-5 w-5 text-primary" />Thời gian khai giảng & lịch học
+            </h2>
+            <div>
+              <Label>Ngày khai giảng <span className="text-destructive">*</span></Label>
+              <Input
+                type="date"
+                min={todayIso}
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                className="mt-1 rounded-xl"
+                required
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Học viên chỉ có thể đặt lịch từ ngày khai giảng trở đi.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {days.map((day) => (
+                <button key={day} type="button" onClick={() => toggleDay(day)}
+                  className={`rounded-xl border px-4 py-2 text-sm transition-all ${
+                    selectedDays.includes(day) ? "border-primary bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:border-primary/30"
+                  }`}>
+                  {day}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Giờ bắt đầu</Label>
+                <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1 rounded-xl" />
+              </div>
+              <div>
+                <Label>Giờ kết thúc</Label>
+                <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1 rounded-xl" />
+              </div>
+            </div>
+          </div>
+
           {/* Format & Location */}
           <div className="rounded-2xl border bg-card p-6 shadow-card space-y-4">
             <h2 className="font-semibold text-foreground flex items-center gap-2">
@@ -173,33 +248,6 @@ export default function CreateCoursePage() {
                 <Input value={meetingLink} onChange={(e) => setMeetingLink(e.target.value)} placeholder="https://zoom.us/j/..." className="mt-1 rounded-xl" />
               </div>
             )}
-          </div>
-
-          {/* Schedule */}
-          <div className="rounded-2xl border bg-card p-6 shadow-card space-y-4">
-            <h2 className="font-semibold text-foreground flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />Lịch dạy
-            </h2>
-            <div className="flex flex-wrap gap-2">
-              {days.map((day) => (
-                <button key={day} type="button" onClick={() => toggleDay(day)}
-                  className={`rounded-xl border px-4 py-2 text-sm transition-all ${
-                    selectedDays.includes(day) ? "border-primary bg-accent text-accent-foreground font-medium" : "text-muted-foreground hover:border-primary/30"
-                  }`}>
-                  {day}
-                </button>
-              ))}
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Giờ bắt đầu</Label>
-                <Input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className="mt-1 rounded-xl" />
-              </div>
-              <div>
-                <Label>Giờ kết thúc</Label>
-                <Input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className="mt-1 rounded-xl" />
-              </div>
-            </div>
           </div>
 
           {/* Pricing */}

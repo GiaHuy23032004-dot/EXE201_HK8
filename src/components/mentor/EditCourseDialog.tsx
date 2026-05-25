@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Loader2, Pencil, Image, MapPin, Video, DollarSign, Tag, AlignLeft, BookOpen } from "lucide-react";
+import { Loader2, Pencil, Image, MapPin, Video, DollarSign, Tag, AlignLeft, BookOpen, CalendarDays } from "lucide-react";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
@@ -31,6 +31,7 @@ interface FormState {
   title:        string;
   description:  string;
   category:     string;
+  start_date:   string;
   format:       "online" | "offline";
   price:        string;          // keep as string for controlled input
   location:     string;
@@ -43,12 +44,20 @@ function courseToForm(c: Course): FormState {
     title:        c.title,
     description:  c.description  ?? "",
     category:     c.category,
+    start_date:   c.start_date ?? "",
     format:       c.format,
     price:        String(c.price),
     location:     c.location     ?? "",
     meeting_link: c.meeting_link ?? "",
     image_url:    c.image_url    ?? "",
   };
+}
+
+function formatLocalDate(date = new Date()) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 // ─── field wrapper ────────────────────────────────────────────────────────────
@@ -83,6 +92,8 @@ interface EditCourseDialogProps {
 export function EditCourseDialog({ course, mentorId, open, onClose }: EditCourseDialogProps) {
   const { toast }      = useToast();
   const updateCourse   = useUpdateCourse();
+  const todayIso       = formatLocalDate();
+  const startDateLocked = (course?.active_booking_count ?? 0) > 0;
 
   const [form,   setForm]   = useState<FormState>(course ? courseToForm(course) : courseToForm({} as Course));
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
@@ -111,6 +122,12 @@ export function EditCourseDialog({ course, mentorId, open, onClose }: EditCourse
     if (!form.category)
       next.category = "Vui lòng chọn danh mục.";
 
+    if (!startDateLocked && !form.start_date)
+      next.start_date = "Ngày khai giảng là bắt buộc.";
+
+    if (!startDateLocked && form.start_date && form.start_date < todayIso)
+      next.start_date = "Ngày khai giảng không thể trước hôm nay.";
+
     const priceNum = Number(form.price);
     if (isNaN(priceNum) || priceNum < 0)
       next.price = "Giá phải là số không âm.";
@@ -136,6 +153,7 @@ export function EditCourseDialog({ course, mentorId, open, onClose }: EditCourse
       title:        form.title.trim(),
       description:  form.description.trim() || null,
       category:     form.category,
+      start_date:   startDateLocked ? course.start_date : form.start_date,
       format:       form.format,
       price:        Number(form.price),
       location:     form.format === "offline" ? form.location.trim() || null : null,
@@ -192,6 +210,25 @@ export function EditCourseDialog({ course, mentorId, open, onClose }: EditCourse
                 className="pl-9 rounded-xl resize-none"
               />
             </div>
+          </Field>
+
+          <Field label="Ngày khai giảng" required error={errors.start_date}>
+            <div className="relative">
+              <CalendarDays className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="date"
+                min={todayIso}
+                value={form.start_date}
+                onChange={(e) => set("start_date", e.target.value)}
+                disabled={startDateLocked}
+                className={cn("pl-9 rounded-xl", errors.start_date && "border-destructive")}
+              />
+            </div>
+            {startDateLocked && (
+              <p className="text-xs text-muted-foreground">
+                Không thể đổi ngày khai giảng khi khóa học đã có lượt đặt lịch.
+              </p>
+            )}
           </Field>
 
           {/* Category + Format row */}

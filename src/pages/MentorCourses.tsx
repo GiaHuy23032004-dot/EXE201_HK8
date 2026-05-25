@@ -6,8 +6,8 @@ import { useMentorCourses, useDeleteCourse, type Course } from "@/hooks/use-cour
 import { EditCourseDialog } from "@/components/mentor/EditCourseDialog";
 import {
   Plus, Star, Users, Eye, MapPin, Video,
-  Pencil, Trash2, ExternalLink, Clock, AlertTriangle,
-  BookOpen, Loader2, Search, LayoutGrid, List,
+  Pencil, Trash2, Clock, AlertTriangle,
+  BookOpen, Loader2, Search, LayoutGrid, List, CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +50,38 @@ const FORMAT_ICON: Record<string, React.ReactNode> = {
 
 const FALLBACK_IMG =
   "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&h=400&fit=crop";
+
+const DAY_ORDER: Record<string, number> = {
+  "Thứ 2": 1,
+  "Thứ 3": 2,
+  "Thứ 4": 3,
+  "Thứ 5": 4,
+  "Thứ 6": 5,
+  "Thứ 7": 6,
+  "Chủ nhật": 7,
+};
+
+function formatDate(date: string | null) {
+  if (!date) return "Chưa có ngày khai giảng";
+  return `Khai giảng: ${new Date(`${date}T00:00:00`).toLocaleDateString("vi-VN")}`;
+}
+
+function formatScheduleSummary(course: Course) {
+  const schedules = [...(course.course_schedules ?? [])].sort((a, b) => {
+    const dayDiff = (DAY_ORDER[a.day_of_week] ?? 99) - (DAY_ORDER[b.day_of_week] ?? 99);
+    return dayDiff || a.start_time.localeCompare(b.start_time);
+  });
+
+  if (schedules.length === 0) return "Chưa có lịch cố định";
+
+  const days = Array.from(new Set(schedules.map((slot) => slot.day_of_week)));
+  const first = schedules[0];
+  return `${days.join(", ")} · ${first.start_time.slice(0, 5)} - ${first.end_time.slice(0, 5)}`;
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "Đã xảy ra lỗi không xác định.";
+}
 
 // ─── skeleton ─────────────────────────────────────────────────────────────────
 
@@ -133,9 +165,16 @@ function CourseCard({ course: c, onEdit, onDelete, index }: CourseCardProps) {
           <span className="flex items-center gap-1">
             <Eye className="h-3 w-3" />{c.review_count}
           </span>
-          <span className="flex items-center gap-1 ml-auto">
-            <Clock className="h-3 w-3" />
-            {new Date(c.created_at).toLocaleDateString("vi-VN")}
+        </div>
+
+        <div className="mb-3 space-y-1.5 text-xs text-muted-foreground">
+          <span className="flex items-center gap-1">
+            <CalendarDays className="h-3.5 w-3.5 text-primary" />
+            {formatDate(c.start_date)}
+          </span>
+          <span className="flex items-center gap-1">
+            <Clock className="h-3.5 w-3.5 text-primary" />
+            {formatScheduleSummary(c)}
           </span>
         </div>
 
@@ -145,22 +184,23 @@ function CourseCard({ course: c, onEdit, onDelete, index }: CourseCardProps) {
           <span className="ml-1 text-xs font-normal text-muted-foreground">/buổi</span>
         </p>
 
-        {/* Actions — 3 buttons in a row */}
-        <div className="grid grid-cols-3 gap-2">
-          <Link to={`/course/${c.id}`} target="_blank">
-            <Button variant="outline" size="sm" className="w-full rounded-xl text-xs gap-1">
-              <ExternalLink className="h-3.5 w-3.5" />
-              Xem
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              size="sm"
+              onClick={() => onEdit(c)}
+              className="w-full rounded-xl text-xs gap-1 gradient-primary border-0 text-primary-foreground"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Chỉnh sửa
             </Button>
-          </Link>
-          <Button
-            size="sm"
-            onClick={() => onEdit(c)}
-            className="w-full rounded-xl text-xs gap-1 gradient-primary border-0 text-primary-foreground"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-            Sửa
-          </Button>
+            <Link to={`/mentor/schedule?courseId=${c.id}`}>
+              <Button variant="outline" size="sm" className="w-full rounded-xl text-xs gap-1">
+                <CalendarDays className="h-3.5 w-3.5" />
+                Quản lý lịch
+              </Button>
+            </Link>
+          </div>
           <Button
             variant="outline"
             size="sm"
@@ -219,7 +259,8 @@ function CourseRow({ course: c, onEdit, onDelete, index }: CourseRowProps) {
           </span>
           <span className="flex items-center gap-1"><Users className="h-3 w-3" />{c.students_count} học viên</span>
           <span className="flex items-center gap-1"><Eye className="h-3 w-3" />{c.review_count} đánh giá</span>
-          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{new Date(c.created_at).toLocaleDateString("vi-VN")}</span>
+          <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" />{formatDate(c.start_date)}</span>
+          <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{formatScheduleSummary(c)}</span>
         </div>
       </div>
       <p className="shrink-0 text-base font-bold text-primary hidden sm:block">
@@ -227,19 +268,21 @@ function CourseRow({ course: c, onEdit, onDelete, index }: CourseRowProps) {
       </p>
       {/* Actions — icon-only buttons */}
       <div className="flex shrink-0 items-center gap-2">
-        <Link to={`/course/${c.id}`} target="_blank">
-          <Button variant="outline" size="sm" className="rounded-xl h-8 w-8 p-0" title="Xem trang">
-            <ExternalLink className="h-3.5 w-3.5" />
-          </Button>
-        </Link>
         <Button
           size="sm"
           onClick={() => onEdit(c)}
-          className="rounded-xl h-8 w-8 p-0 gradient-primary border-0 text-primary-foreground"
+          className="rounded-xl h-8 px-3 text-xs gap-1 gradient-primary border-0 text-primary-foreground"
           title="Chỉnh sửa"
         >
           <Pencil className="h-3.5 w-3.5" />
+          Chỉnh sửa
         </Button>
+        <Link to={`/mentor/schedule?courseId=${c.id}`}>
+          <Button variant="outline" size="sm" className="rounded-xl h-8 px-3 text-xs gap-1" title="Quản lý lịch">
+            <CalendarDays className="h-3.5 w-3.5" />
+            Quản lý lịch
+          </Button>
+        </Link>
         <Button
           variant="outline"
           size="sm"
@@ -292,8 +335,8 @@ export default function MentorCourses() {
     try {
       await deleteCourse.mutateAsync(deleteTarget.id);
       toast({ title: "Đã xóa khóa học", description: deleteTarget.title });
-    } catch (err: any) {
-      toast({ title: "Lỗi khi xóa", description: err.message, variant: "destructive" });
+    } catch (err: unknown) {
+      toast({ title: "Lỗi khi xóa", description: getErrorMessage(err), variant: "destructive" });
     } finally {
       setDeleteTarget(null);
     }

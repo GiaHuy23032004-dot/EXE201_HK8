@@ -1,6 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+export interface CourseScheduleSummary {
+  id: string;
+  day_of_week: string;
+  start_time: string;
+  end_time: string;
+}
+
+type CourseBookingStatus = "pending" | "upcoming" | "completed" | "cancelled" | "declined";
+
 export interface Course {
   id: string;
   mentor_id: string;
@@ -17,7 +26,11 @@ export interface Course {
   students_count: number;
   rating: number;
   review_count: number;
+  start_date: string | null;
   created_at: string;
+  updated_at?: string;
+  course_schedules?: CourseScheduleSummary[];
+  active_booking_count?: number;
   // joined
   mentor?: {
     name: string | null;
@@ -32,6 +45,29 @@ export interface CourseFilters {
   format?: "all" | "online" | "offline";
   minPrice?: number;
   maxPrice?: number;
+}
+
+const ACTIVE_BOOKING_STATUSES = new Set<CourseBookingStatus>(["pending", "upcoming", "completed"]);
+
+type MentorCourseRow = Course & {
+  bookings?: { id: string; status: CourseBookingStatus }[];
+};
+
+function normalizeMentorCourse(course: MentorCourseRow): Course {
+  const schedules = [...(course.course_schedules ?? [])].sort((a, b) => {
+    const timeDiff = a.start_time.localeCompare(b.start_time);
+    return timeDiff || a.day_of_week.localeCompare(b.day_of_week);
+  });
+  const activeBookingCount = (course.bookings ?? []).filter((booking) =>
+    ACTIVE_BOOKING_STATUSES.has(booking.status),
+  ).length;
+
+  const { bookings: _bookings, ...rest } = course;
+  return {
+    ...rest,
+    course_schedules: schedules,
+    active_booking_count: activeBookingCount,
+  };
 }
 
 // Fetch tất cả courses đã approved (cho trang Search & Home)
@@ -91,11 +127,15 @@ export function useMentorCourses(mentorId: string | undefined) {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("courses")
-        .select("*")
+        .select(`
+          *,
+          course_schedules(id, day_of_week, start_time, end_time),
+          bookings(id, status)
+        `)
         .eq("mentor_id", mentorId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Course[];
+      return ((data ?? []) as unknown as MentorCourseRow[]).map(normalizeMentorCourse);
     },
   });
 }
@@ -114,6 +154,7 @@ export function useDeleteCourse() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["courses"] });
       qc.invalidateQueries({ queryKey: ["mentor-courses"] });
+      qc.invalidateQueries({ queryKey: ["mentor-schedules"] });
     },
   });
 }
@@ -130,6 +171,7 @@ export interface UpdateCoursePayload {
   location: string | null;
   meeting_link: string | null;
   image_url: string | null;
+  start_date: string | null;
 }
 
 export function useUpdateCourse() {
@@ -150,6 +192,8 @@ export function useUpdateCourse() {
       qc.invalidateQueries({ queryKey: ["courses"] });
       qc.invalidateQueries({ queryKey: ["mentor-courses", vars.mentor_id] });
       qc.invalidateQueries({ queryKey: ["course", vars.id] });
+      qc.invalidateQueries({ queryKey: ["mentor-schedules", vars.mentor_id] });
+      qc.invalidateQueries({ queryKey: ["mentor-bookings", vars.mentor_id] });
     },
   });
 }
@@ -168,6 +212,7 @@ export function useCreateCourse() {
       location?: string;
       meeting_link?: string;
       image_url?: string;
+      start_date: string;
       schedules?: { day_of_week: string; start_time: string; end_time: string }[];
     }) => {
       const { schedules, ...courseData } = payload;
@@ -186,9 +231,10 @@ export function useCreateCourse() {
       }
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       qc.invalidateQueries({ queryKey: ["courses"] });
       qc.invalidateQueries({ queryKey: ["mentor-courses"] });
+      qc.invalidateQueries({ queryKey: ["mentor-schedules", variables.mentor_id] });
     },
   });
 }
