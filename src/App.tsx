@@ -20,6 +20,7 @@ import MentorDashboard from "./pages/MentorDashboard";
 import MentorCourses from "./pages/MentorCourses";
 import MentorSchedule from "./pages/mentor/MentorSchedule";
 import MentorStudents from "./pages/mentor/MentorStudents";
+import MentorProfile from "./pages/mentor/MentorProfile";
 import MentorSettings from "./pages/mentor/MentorSettings";
 import MentorVerification from "./pages/mentor/MentorVerification";
 import MentorProfilePage from "./pages/MentorProfilePage";
@@ -54,6 +55,7 @@ const App = () => (
             <Route path="/mentor/schedule"  element={<MentorGuard><MentorSchedule /></MentorGuard>} />
             <Route path="/mentor/wallet"    element={<MentorGuard><MentorDashboard /></MentorGuard>} />
             <Route path="/mentor/students"  element={<MentorGuard><MentorStudents /></MentorGuard>} />
+            <Route path="/mentor/profile"   element={<MentorGuard><MentorProfile /></MentorGuard>} />
             <Route path="/mentor/settings"  element={<MentorGuard><MentorSettings /></MentorGuard>} />
             <Route path="/mentor/verification" element={<MentorGuard><MentorVerification /></MentorGuard>} />
             <Route path="/mentor/create-course" element={<CreateCoursePage />} />

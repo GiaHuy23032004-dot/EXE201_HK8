@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import type { MentorVerificationStatus } from "@/hooks/useMentorVerification";
 
-export type ProofType = "social" | "certificate" | "portfolio";
+export type ProofType = "social" | "certificate" | "portfolio" | "teaching_evidence";
 export type StoredProofType = ProofType | string;
 
 export type SocialPlatform =
@@ -55,12 +55,14 @@ export const PROOF_TYPE_LABELS: Record<ProofType, string> = {
   social: "Mạng xã hội nghề nghiệp",
   certificate: "Chứng chỉ / bằng cấp",
   portfolio: "Portfolio / sản phẩm cá nhân",
+  teaching_evidence: "Minh chứng giảng dạy",
 };
 
 export const PROOF_TYPE_EXAMPLES: Record<ProofType, string> = {
   social: "Chọn nền tảng nghề nghiệp và dán URL hồ sơ hoặc kênh nội dung của bạn.",
   certificate: "Tải lên chứng chỉ, bằng cấp hoặc tài liệu chuyên môn có liên quan.",
   portfolio: "Thêm URL portfolio hoặc tải lên sản phẩm cá nhân tiêu biểu.",
+  teaching_evidence: "Thêm video, ảnh lớp học, tài liệu giảng dạy hoặc phản hồi học viên.",
 };
 
 export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
@@ -74,11 +76,10 @@ export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
   other: "Other",
 };
 
-export const SUPPORTED_PROOF_TYPES: ProofType[] = ["social", "certificate", "portfolio"];
+export const SUPPORTED_PROOF_TYPES: ProofType[] = ["social", "certificate", "portfolio", "teaching_evidence"];
 
 const IMAGE_AND_PDF_TYPES = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
-const CERTIFICATE_MAX_FILE_SIZE = 5 * 1024 * 1024;
-const PORTFOLIO_MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_PROOF_FILE_SIZE = 5 * 1024 * 1024;
 const EDITABLE_STATUSES: MentorVerificationStatus[] = ["unverified", "draft", "rejected"];
 
 function normalizeString(value: string | null | undefined) {
@@ -115,12 +116,8 @@ export function isValidProofItem(proof: Pick<MentorVerificationProof, "proof_typ
   const filePath = metadata.file_url ?? proof.file_path;
   const title = metadata.title ?? proof.title;
 
-  if (proof.proof_type === "social") {
-    return Boolean(metadata.platform) && isValidUrl(url);
-  }
-
   if (proof.proof_type === "certificate") {
-    return Boolean(title?.trim()) && Boolean(filePath);
+    return Boolean(title?.trim()) && (Boolean(filePath) || isValidUrl(url));
   }
 
   return Boolean(filePath) || isValidUrl(url);
@@ -133,7 +130,7 @@ function assertEditable(status: MentorVerificationStatus | undefined) {
 }
 
 function getMaxFileSize(type: ProofType) {
-  return type === "portfolio" ? PORTFOLIO_MAX_FILE_SIZE : CERTIFICATE_MAX_FILE_SIZE;
+  return MAX_PROOF_FILE_SIZE;
 }
 
 function validateFile(file: File, type: ProofType) {
@@ -144,7 +141,7 @@ function validateFile(file: File, type: ProofType) {
     throw new Error("Chỉ hỗ trợ PNG, JPG, JPEG, WEBP hoặc PDF.");
   }
   if (file.size > getMaxFileSize(type)) {
-    throw new Error(type === "portfolio" ? "Tệp portfolio không được vượt quá 10MB." : "Tệp chứng chỉ không được vượt quá 5MB.");
+    throw new Error("Tệp bằng chứng không được vượt quá 5MB.");
   }
 }
 
@@ -188,7 +185,7 @@ async function markDraftIfAllowed(userId: string) {
 
 async function uploadProofFile(userId: string, type: ProofType, file: File) {
   validateFile(file, type);
-  const path = `${userId}/${type}/${Date.now()}-${safeFileName(file.name)}`;
+  const path = `${userId}/${Date.now()}-${safeFileName(file.name)}`;
   const { error } = await supabase.storage
     .from("mentor-verification")
     .upload(path, file, {
@@ -208,7 +205,6 @@ function validateProof(values: ProofFormValues, filePath?: string | null) {
   const url = normalizeString(values.url);
 
   if (values.proof_type === "social") {
-    if (!values.platform) throw new Error("Vui lòng chọn nền tảng mạng xã hội.");
     if (!url) throw new Error("URL là bắt buộc với mạng xã hội nghề nghiệp.");
     if (!isValidUrl(url)) throw new Error("URL không hợp lệ.");
     return;
@@ -216,14 +212,14 @@ function validateProof(values: ProofFormValues, filePath?: string | null) {
 
   if (values.proof_type === "certificate") {
     if (!values.title.trim()) throw new Error("Vui lòng nhập tên chứng chỉ / bằng cấp.");
-    if (!values.file && !filePath) throw new Error("Vui lòng tải lên tệp chứng chỉ / bằng cấp.");
+    if (!url && !values.file && !filePath) throw new Error("Vui lòng thêm URL hoặc tải lên tệp chứng chỉ / bằng cấp.");
     if (url && !isValidUrl(url)) throw new Error("URL xác thực không hợp lệ.");
     return;
   }
 
-  if (url && !isValidUrl(url)) throw new Error("URL portfolio không hợp lệ.");
+  if (url && !isValidUrl(url)) throw new Error("URL không hợp lệ.");
   if (!url && !values.file && !filePath) {
-    throw new Error("Vui lòng thêm URL hoặc tải lên tệp portfolio.");
+    throw new Error("Vui lòng thêm URL hoặc tải lên tệp bằng chứng.");
   }
 }
 
@@ -231,8 +227,13 @@ function getStoredTitle(values: ProofFormValues, filePath?: string | null) {
   if (values.proof_type === "social" && values.platform) {
     return SOCIAL_PLATFORM_LABELS[values.platform] ?? "Mạng xã hội nghề nghiệp";
   }
+  if (values.proof_type === "social") return "Mạng xã hội nghề nghiệp";
   if (values.title.trim()) return values.title.trim();
-  if (normalizeString(values.url)) return "Portfolio / sản phẩm cá nhân";
+  if (normalizeString(values.url)) {
+    return values.proof_type === "teaching_evidence"
+      ? "Minh chứng giảng dạy"
+      : "Portfolio / sản phẩm cá nhân";
+  }
   if (filePath) return safeFileName(filePath.split("/").pop() ?? filePath);
   return "Bằng chứng xác minh";
 }

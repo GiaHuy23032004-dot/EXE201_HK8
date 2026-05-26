@@ -1,3 +1,10 @@
+clone về xong mở terminal trong vs chạy lần lượt 2 lệnh
+npm install
+____
+npm run dev 
+Xong nếu muốn chỉnh sửa gì liên quan đến database(cái này đừng sửa ngu, mệt lắm) thì tạo tk supabase r gửi mail cho tk Huy nó invite vào 
+
+__________________________
 # Welcome to your Lovable project
 
 ## Project info

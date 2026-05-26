@@ -1,7 +1,5 @@
-import { Link } from "react-router-dom";
-import { BadgeCheck, ChevronRight, ShieldCheck } from "lucide-react";
+import { BadgeCheck, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   VERIFICATION_STATUS_LABELS,
@@ -26,16 +24,13 @@ const STATUS_STYLE: Record<MentorVerificationStatus, string> = {
 
 export function VerificationStatusCard({ status, adminNote, completion }: VerificationStatusCardProps) {
   const approved = status === "approved";
-  const buttonLabel =
-    status === "rejected"
-      ? "Bổ sung hồ sơ"
-      : status === "draft"
-      ? "Tiếp tục xác minh"
-      : status === "pending"
-      ? "Xem hồ sơ đã gửi"
-      : approved
-      ? "Xem hồ sơ xác minh"
-      : "Xác minh ngay";
+  const message: Record<MentorVerificationStatus, string> = {
+    unverified: "Bạn chưa gửi hồ sơ xác minh.",
+    draft: "Hồ sơ xác minh của bạn chưa hoàn tất.",
+    pending: "Hồ sơ của bạn đang chờ admin duyệt.",
+    approved: "Bạn đã được xác minh.",
+    rejected: "Hồ sơ cần bổ sung.",
+  };
 
   return (
     <Card className="rounded-2xl shadow-card">
@@ -51,11 +46,7 @@ export function VerificationStatusCard({ status, adminNote, completion }: Verifi
               {approved ? "Verified Mentor" : VERIFICATION_STATUS_LABELS[status]}
             </Badge>
           </div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {approved
-              ? "Bạn đã được xác minh. Huy hiệu Verified Mentor sẽ hiển thị trên hồ sơ và khóa học của bạn."
-              : "Hoàn thiện hồ sơ và thêm bằng chứng chuyên môn để tăng độ tin cậy với học viên."}
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">{message[status]}</p>
           {status === "rejected" && adminNote && (
             <p className="mt-2 rounded-xl bg-destructive/5 px-3 py-2 text-sm text-destructive">{adminNote}</p>
           )}
@@ -67,12 +58,6 @@ export function VerificationStatusCard({ status, adminNote, completion }: Verifi
           )}
         </div>
 
-        <Link to="/mentor/verification">
-          <Button variant={approved ? "outline" : "default"} className={cn("rounded-xl", !approved && "border-0 text-primary-foreground gradient-primary")}>
-            {buttonLabel}
-            <ChevronRight className="ml-2 h-4 w-4" />
-          </Button>
-        </Link>
       </CardContent>
     </Card>
   );
