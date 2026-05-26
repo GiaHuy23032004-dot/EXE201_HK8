@@ -3,8 +3,9 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import { useLearnerBookings, useCancelBooking } from "@/hooks/use-bookings";
 import { useSavedCourses } from "@/hooks/use-saved-courses";
 import { useLearnerReviews, useCreateReview } from "@/hooks/use-reviews";
+import { useLearnerTransactions } from "@/hooks/use-wallet";
 import { useAuth } from "@/contexts/AuthContext";
-import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Loader2 } from "lucide-react";
+import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Loader2, Receipt, CheckCircle2, RotateCcw, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -39,6 +40,7 @@ export default function LearnerDashboard() {
   const { data: bookings = [], isLoading: bookingsLoading } = useLearnerBookings(userId);
   const { data: savedData = [], isLoading: savedLoading } = useSavedCourses(userId);
   const { data: reviews = [] } = useLearnerReviews(userId);
+  const { data: transactions = [], isLoading: txnsLoading } = useLearnerTransactions(userId);
   const cancelBooking = useCancelBooking();
   const createReview = useCreateReview();
 
@@ -175,6 +177,7 @@ export default function LearnerDashboard() {
             <TabsTrigger value="completed" className="flex-1">Hoàn thành ({completed.length})</TabsTrigger>
             <TabsTrigger value="saved"     className="flex-1">Đã lưu</TabsTrigger>
             <TabsTrigger value="reviews"   className="flex-1">Đánh giá</TabsTrigger>
+            <TabsTrigger value="payments"  className="flex-1">💳 Thanh toán</TabsTrigger>
           </TabsList>
 
           <TabsContent value="upcoming" className="space-y-3">
@@ -239,6 +242,60 @@ export default function LearnerDashboard() {
                 <p className="text-sm text-foreground">{r.comment}</p>
               </div>
             )) : <p className="text-center text-muted-foreground py-8">Chưa có đánh giá nào</p>}
+          </TabsContent>
+
+          {/* PAYMENTS TAB */}
+          <TabsContent value="payments" className="space-y-3">
+            <p className="text-xs text-muted-foreground mb-3">Lịch sử các giao dịch thanh toán của bạn</p>
+            {txnsLoading ? (
+              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : transactions.length > 0 ? (
+              <div className="space-y-3">
+                {(transactions as any[]).map((t) => (
+                  <div key={t.id} className="rounded-2xl border bg-card p-4 shadow-card">
+                    <div className="flex items-start gap-3">
+                      <img
+                        src={t.course?.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=100&h=100&fit=crop"}
+                        alt={t.course?.title}
+                        className="h-14 w-14 rounded-xl object-cover shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-card-foreground line-clamp-1">{t.course?.title || "Khóa học"}</p>
+                        <p className="text-xs text-muted-foreground font-mono mt-0.5">{t.reference_code || t.id.slice(0, 8).toUpperCase()}</p>
+                        <p className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleDateString("vi-VN")}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="text-sm font-bold text-foreground">{t.amount.toLocaleString("vi-VN")}đ</p>
+                        <Badge className={`mt-1 text-[10px] border-0 ${
+                          t.status === "success" ? "bg-success/10 text-success" :
+                          t.status === "refunded" ? "bg-warning/10 text-warning" :
+                          "bg-muted text-muted-foreground"
+                        }`}>
+                          {t.status === "success" ? <><CheckCircle2 className="h-3 w-3 mr-1" />Thành công</> :
+                           t.status === "refunded" ? <><RotateCcw className="h-3 w-3 mr-1" />Đã hoàn</> :
+                           "Đang xử lý"}
+                        </Badge>
+                      </div>
+                    </div>
+                    {t.booking_id && (
+                      <div className="mt-3 flex justify-end">
+                        <Link to={`/receipt/${t.booking_id}`}>
+                          <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg gap-1">
+                            <FileText className="h-3 w-3" />Xem biên lai
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="flex flex-col items-center py-16 text-center">
+                <Receipt className="h-12 w-12 text-muted mb-3" />
+                <p className="font-semibold text-foreground">Chưa có giao dịch nào</p>
+                <p className="text-xs text-muted-foreground mt-1">Các giao dịch thanh toán online sẽ hiển thị ở đây</p>
+              </div>
+            )}
           </TabsContent>
         </Tabs>
 

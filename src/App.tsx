@@ -27,6 +27,7 @@ import CreateCoursePage from "./pages/CreateCoursePage";
 import AdminDashboard from "./pages/AdminDashboard";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
+import ReceiptPage from "./pages/ReceiptPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -60,6 +61,7 @@ const App = () => (
             <Route path="/admin" element={<AdminGuard><AdminDashboard /></AdminGuard>} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/receipt/:bookingId" element={<ReceiptPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <AiChatAssistant />

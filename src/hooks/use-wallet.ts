@@ -102,3 +102,24 @@ export function useUpdateBankInfo() {
     },
   });
 }
+
+// Lịch sử thanh toán của learner
+export function useLearnerTransactions(learnerId: string | undefined) {
+  return useQuery({
+    queryKey: ["learner-transactions", learnerId],
+    enabled: !!learnerId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("transactions")
+        .select(`
+          *,
+          course:courses(title, image_url),
+          booking:bookings(booking_date, start_time, end_time)
+        `)
+        .eq("learner_id", learnerId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
+}
