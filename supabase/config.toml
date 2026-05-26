@@ -1,4 +1,4 @@
-project_id = "rzuybkfmxgvigfotckfu"
+project_id = "lfbsayozyvhmxsuzatpj"
 
 [functions.ai-search]
 verify_jwt = false
@@ -10,4 +10,7 @@ verify_jwt = false
 verify_jwt = false
 
 [functions.admin-users]
+verify_jwt = false
+
+[functions.admin-seed]
 verify_jwt = false

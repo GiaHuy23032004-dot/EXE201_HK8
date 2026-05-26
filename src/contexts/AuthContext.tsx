@@ -7,7 +7,7 @@ export interface UserProfile {
   email: string;
   username?: string;
   avatar?: string;
-  role: "learner" | "mentor" | "admin";
+  role: "learner" | "mentor";
   phone?: string;
   bio?: string;
   isBlocked?: boolean;
@@ -19,7 +19,7 @@ interface AuthContextType {
   isLoggedIn: boolean;
   isLoading: boolean;
   /** Login by username OR email + password */
-  login: (identifier: string, password: string) => Promise<{ error?: string; role?: "learner" | "mentor" | "admin" }>;
+  login: (identifier: string, password: string) => Promise<{ error?: string; role?: "learner" | "mentor" }>;
   register: (params: {
     name: string;
     email: string;
@@ -48,12 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .single();
 
     if (data) {
+      const productRole = data.role === "mentor" ? "mentor" : "learner";
+
       setUser({
         name: data.name || authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "User",
         email: data.email || authUser.email || "",
         username: (data as any).username || undefined,
         avatar: data.avatar_url || authUser.user_metadata?.avatar_url,
-        role: (data.role as "learner" | "mentor" | "admin") || "learner",
+        role: productRole,
         phone: data.phone || undefined,
         bio: data.bio || undefined,
         isBlocked: data.is_blocked ?? false,
@@ -91,7 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (identifier: string, password: string) => {
+  const login = async (identifier: string, password: string): Promise<{ error?: string; role?: "learner" | "mentor" }> => {
     const email = identifier.trim().toLowerCase();
     const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: error.message };
@@ -109,7 +111,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên." };
       }
 
-      return { role: (profile?.role ?? "learner") as "learner" | "mentor" | "admin" };
+      const role: "learner" | "mentor" = profile?.role === "mentor" ? "mentor" : "learner";
+      return { role };
     }
 
     return {};

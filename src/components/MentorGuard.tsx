@@ -13,7 +13,7 @@ export function MentorGuard({ children }: { children: React.ReactNode }) {
       navigate("/auth?role=mentor", { replace: true });
       return;
     }
-    if (user && user.role !== "mentor" && user.role !== "admin") {
+    if (user && user.role !== "mentor") {
       navigate("/", { replace: true });
     }
   }, [isLoading, session, user, navigate]);
@@ -32,7 +32,7 @@ export function MentorGuard({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (user && user.role !== "mentor" && user.role !== "admin") return null;
+  if (user && user.role !== "mentor") return null;
 
   return <>{children}</>;
 }

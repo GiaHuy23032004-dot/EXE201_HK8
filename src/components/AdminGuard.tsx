@@ -1,46 +1,71 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, supabaseUrl } from "@/integrations/supabase/client";
 import { Loader2, Shield } from "lucide-react";
 
 export function AdminGuard({ children }: { children: React.ReactNode }) {
   const { isLoading, session } = useAuth();
-  const userId = session?.user?.id;
+  const accessToken = session?.access_token;
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const navigate = useNavigate();
 
   useEffect(() => {
     if (isLoading) return;
 
-    if (!userId) {
-      setIsAdmin(false);
-      navigate("/admin/login", { replace: true });
-      return;
-    }
-
     let cancelled = false;
-    supabase.functions
-      .invoke("admin-check", { body: { action: "check" } })
-      .then(({ data, error }) => {
+    const verifyAdmin = async () => {
+      setIsAdmin(null);
+      const token =
+        accessToken ??
+        (await supabase.auth.getSession()).data.session?.access_token;
+
+      if (!token) {
+        if (!cancelled) {
+          setIsAdmin(false);
+          navigate("/admin/login", { replace: true });
+        }
+        return;
+      }
+
+      try {
+        if (import.meta.env.DEV) {
+          console.log("Supabase URL", supabaseUrl);
+        }
+
+        const { data, error } = await supabase.functions.invoke("admin-check", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (import.meta.env.DEV) {
+          console.log("admin-check response", { data, error });
+          console.log("admin-check response payload", data);
+          if (error) console.error("admin-check error object", error);
+        }
+
         if (cancelled) return;
-        if (!error && data?.isAdmin) {
+        if (!error && data?.isAdmin === true) {
           setIsAdmin(true);
         } else {
           setIsAdmin(false);
           navigate("/admin/login", { replace: true });
         }
-      })
-      .catch(() => {
+      } catch (checkError) {
+        if (import.meta.env.DEV) {
+          console.error("admin-check error object", checkError);
+        }
+
         if (cancelled) return;
         setIsAdmin(false);
         navigate("/admin/login", { replace: true });
-      });
+      }
+    };
+
+    verifyAdmin();
 
     return () => { cancelled = true; };
-    // Only re-check when user identity or loading state actually changes,
-    // NOT on every session object refresh (which causes flicker/redirect loops).
-  }, [userId, isLoading, navigate]);
+    // Re-check whenever the access token changes so admin access follows the current session.
+  }, [accessToken, isLoading, navigate]);
 
   if (isLoading || isAdmin === null) {
     return (

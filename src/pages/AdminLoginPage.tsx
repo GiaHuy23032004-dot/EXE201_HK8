@@ -1,12 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Shield, Lock, AtSign, Eye, EyeOff, Loader2, ArrowLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase, supabaseUrl } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
 import logoImg from "@/assets/logo.png";
 
@@ -15,48 +14,88 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [seeding, setSeeding] = useState(true);
-  const { login, isLoggedIn, session, logout } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-
-  // Ensure the seeded admin account exists (idempotent)
-  useEffect(() => {
-    supabase.functions
-      .invoke("admin-seed", { body: {} })
-      .catch(() => {})
-      .finally(() => setSeeding(false));
-  }, []);
-
-  // After login, verify role and route
-  const userId = session?.user?.id;
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    supabase.functions.invoke("admin-check", { body: { action: "check" } }).then(({ data }) => {
-      if (cancelled) return;
-      if (data?.isAdmin) {
-        navigate("/admin");
-      } else {
-        toast({
-          title: "Không có quyền truy cập",
-          description: "Tài khoản này không phải Admin. Đã đăng xuất.",
-          variant: "destructive",
-        });
-        logout();
-      }
-    });
-    return () => { cancelled = true; };
-  }, [userId, navigate, toast, logout]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    const result = await login(identifier.trim(), password);
-    setLoading(false);
-    if (result.error) {
-      toast({ title: "Lỗi đăng nhập", description: result.error, variant: "destructive" });
+
+    const email = identifier.trim().toLowerCase();
+    const { data: authData, error: loginError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (loginError) {
+      setLoading(false);
+      toast({
+        title: "Lỗi đăng nhập",
+        description: loginError.message,
+        variant: "destructive",
+      });
+      return;
     }
+
+    const accessToken =
+      authData.session?.access_token ??
+      (await supabase.auth.getSession()).data.session?.access_token;
+
+    if (!accessToken) {
+      await supabase.auth.signOut();
+      setLoading(false);
+      toast({
+        title: "Không thể xác thực",
+        description: "Phiên đăng nhập không hợp lệ. Vui lòng thử lại.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (import.meta.env.DEV) {
+      console.log("Supabase URL", supabaseUrl);
+    }
+
+    const { data, error } = await supabase.functions.invoke("admin-check", {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).catch((checkError) => ({
+      data: null,
+      error: checkError instanceof Error ? checkError : new Error("Không thể gọi admin-check"),
+    }));
+
+    if (import.meta.env.DEV) {
+      console.log("admin-check response", { data, error });
+      console.log("admin-check response payload", data);
+      if (error) console.error("admin-check error object", error);
+    }
+
+    setLoading(false);
+
+    if (error) {
+      await supabase.auth.signOut();
+      toast({
+        title: "Không thể xác thực quyền Admin",
+        description: error.message || "Vui lòng kiểm tra Edge Function admin-check.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (data?.isAdmin === true) {
+      toast({
+        title: "Đăng nhập Admin thành công",
+        description: "Chào mừng bạn quay lại trang quản trị VET.",
+      });
+      navigate("/admin/dashboard", { replace: true });
+      return;
+    }
+
+    await supabase.auth.signOut();
+    toast({
+      title: "Không có quyền truy cập",
+      description: "Tài khoản này không phải Admin. Đã đăng xuất.",
+      variant: "destructive",
+    });
   };
 
   return (
@@ -77,16 +116,17 @@ export default function AdminLoginPage() {
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <Label>Tên tài khoản Admin</Label>
+              <Label>Email Admin</Label>
               <div className="relative mt-1">
                 <AtSign className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="admin"
+                  placeholder="admin@vet-platform.com"
                   className="pl-10"
                   required
                   autoComplete="username"
+                  type="email"
                 />
               </div>
             </div>
@@ -103,13 +143,17 @@ export default function AdminLoginPage() {
                   required
                   autoComplete="current-password"
                 />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground"
+                >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
               </div>
             </div>
-            <Button type="submit" disabled={loading || seeding} className="w-full gradient-primary border-0 text-primary-foreground">
-              {(loading || seeding) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={loading} className="w-full gradient-primary border-0 text-primary-foreground">
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               <Shield className="mr-2 h-4 w-4" />
               Đăng nhập Admin
             </Button>

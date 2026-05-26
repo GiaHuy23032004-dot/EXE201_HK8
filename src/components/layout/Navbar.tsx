@@ -82,7 +82,7 @@ export function Navbar() {
           ))}
           {isAdmin && (
             <Link
-              to="/admin"
+              to="/admin/dashboard"
               className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                 location.pathname.startsWith("/admin")
                   ? "bg-destructive/10 text-destructive"
@@ -172,7 +172,7 @@ export function Navbar() {
                     </DropdownMenuItem>
                   )}
                   {isAdmin && (
-                    <DropdownMenuItem onClick={() => navigate("/admin")} className="text-destructive focus:text-destructive">
+                    <DropdownMenuItem onClick={() => navigate("/admin/dashboard")} className="text-destructive focus:text-destructive">
                       <Shield className="mr-2 h-4 w-4" />
                       Admin Panel
                     </DropdownMenuItem>
@@ -241,7 +241,7 @@ export function Navbar() {
                     </Link>
                   )}
                   {isAdmin && (
-                    <Link to="/admin" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-destructive hover:bg-muted">
+                    <Link to="/admin/dashboard" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-destructive hover:bg-muted">
                       <Shield className="h-4 w-4" />Admin Panel
                     </Link>
                   )}

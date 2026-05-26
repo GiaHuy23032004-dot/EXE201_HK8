@@ -6,16 +6,27 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const allowedSystemRoles = new Set(["admin", "moderator", "user"]);
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+
+const getBearerToken = (req: Request) => {
+  const authHeader = req.headers.get("Authorization");
+  const match = authHeader?.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() || null;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const jwt = getBearerToken(req);
+    if (!jwt) {
+      return json({ error: "Unauthorized" }, 401);
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -23,41 +34,36 @@ serve(async (req) => {
     const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
     if (!supabaseUrl || !supabaseAnonKey || !serviceRole) {
-      return new Response(JSON.stringify({ error: "Server env not configured" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Server env not configured" }, 500);
     }
 
-    const userClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const userClient = createClient(supabaseUrl, supabaseAnonKey);
+    const { data: userData, error: userError } = await userClient.auth.getUser(jwt);
+    const user = userData.user;
 
-    const { data: { user }, error: userError } = await userClient.auth.getUser();
     if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Invalid token" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Invalid token" }, 401);
     }
 
     const adminClient = createClient(supabaseUrl, serviceRole);
 
-    const { data: myRole } = await adminClient
+    const { data: myRole, error: roleError } = await adminClient
       .from("user_roles")
       .select("role")
       .eq("user_id", user.id)
       .eq("role", "admin")
-      .single();
+      .maybeSingle();
 
-    if (!myRole) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (roleError) {
+      console.error("admin-users role lookup error:", roleError);
+      return json({ error: roleError.message }, 500);
     }
 
-    const { action, targetUserId, role } = await req.json();
+    if (myRole?.role !== "admin") {
+      return json({ error: "Forbidden" }, 403);
+    }
+
+    const { action, targetUserId, role } = await req.json().catch(() => ({}));
 
     if (action === "list") {
       const { data: profiles, error: profileError } = await adminClient
@@ -68,48 +74,42 @@ serve(async (req) => {
 
       if (profileError) throw profileError;
 
-      const { data: roles, error: roleError } = await adminClient
+      const { data: roles, error: rolesError } = await adminClient
         .from("user_roles")
         .select("user_id, role");
 
-      if (roleError) throw roleError;
+      if (rolesError) throw rolesError;
 
       const roleMap = new Map<string, string[]>();
-      (roles || []).forEach((r) => {
-        const arr = roleMap.get(r.user_id) || [];
-        arr.push(r.role);
-        roleMap.set(r.user_id, arr);
+      (roles || []).forEach((roleRow) => {
+        const userRoles = roleMap.get(roleRow.user_id) || [];
+        userRoles.push(roleRow.role);
+        roleMap.set(roleRow.user_id, userRoles);
       });
 
-      const users = (profiles || []).map((p) => ({
-        ...p,
-        roles: roleMap.get(p.user_id) || [],
+      const users = (profiles || []).map((profile) => ({
+        ...profile,
+        roles: roleMap.get(profile.user_id) || [],
       }));
 
-      return new Response(JSON.stringify({ users }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ users });
     }
 
     if (!targetUserId) {
-      return new Response(JSON.stringify({ error: "Missing targetUserId" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ error: "Missing targetUserId" }, 400);
     }
 
     if (action === "toggle-block") {
-      const { data: profile } = await adminClient
+      const { data: profile, error: profileError } = await adminClient
         .from("profiles")
         .select("is_blocked")
         .eq("user_id", targetUserId)
-        .single();
+        .maybeSingle();
+
+      if (profileError) throw profileError;
 
       if (!profile) {
-        return new Response(JSON.stringify({ error: "User not found" }), {
-          status: 404,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+        return json({ error: "User not found" }, 404);
       }
 
       const next = !profile.is_blocked;
@@ -120,17 +120,12 @@ serve(async (req) => {
 
       if (updateErr) throw updateErr;
 
-      return new Response(JSON.stringify({ success: true, is_blocked: next }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ success: true, is_blocked: next });
     }
 
     if (action === "assign-role") {
-      if (!role) {
-        return new Response(JSON.stringify({ error: "Missing role" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!role || !allowedSystemRoles.has(role)) {
+        return json({ error: "Invalid role" }, 400);
       }
 
       const { error: insertErr } = await adminClient
@@ -139,41 +134,28 @@ serve(async (req) => {
 
       if (insertErr) throw insertErr;
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ success: true });
     }
 
     if (action === "remove-role") {
-      if (!role) {
-        return new Response(JSON.stringify({ error: "Missing role" }), {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
+      if (!role || !allowedSystemRoles.has(role)) {
+        return json({ error: "Invalid role" }, 400);
       }
 
-      const { error: delErr } = await adminClient
+      const { error: deleteErr } = await adminClient
         .from("user_roles")
         .delete()
         .eq("user_id", targetUserId)
         .eq("role", role);
 
-      if (delErr) throw delErr;
+      if (deleteErr) throw deleteErr;
 
-      return new Response(JSON.stringify({ success: true }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return json({ success: true });
     }
 
-    return new Response(JSON.stringify({ error: "Invalid action" }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: "Invalid action" }, 400);
   } catch (e) {
     console.error("admin-users error:", e);
-    return new Response(JSON.stringify({ error: e instanceof Error ? e.message : "Unknown error" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
   }
 });

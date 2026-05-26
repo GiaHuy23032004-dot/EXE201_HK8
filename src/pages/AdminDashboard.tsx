@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import { useAuth } from "@/contexts/AuthContext";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "hsl(var(--warning, 38 92% 50%))", "hsl(var(--muted-foreground))"];
 
@@ -50,6 +51,7 @@ type LedgerEntry = {
 
 export default function AdminDashboard() {
   const { toast } = useToast();
+  const { session } = useAuth();
   const qc = useQueryClient();
   const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
   const FEE = 0.15;
@@ -69,6 +71,18 @@ export default function AdminDashboard() {
   const [ledgerTo, setLedgerTo] = useState("");
   const [ledgerKind, setLedgerKind] = useState<"all" | "in" | "payout" | "refund">("all");
   const [ledgerSearch, setLedgerSearch] = useState("");
+
+  const invokeAdminUsers = useCallback((body: Record<string, unknown>) => {
+    const accessToken = session?.access_token;
+    if (!accessToken) {
+      throw new Error("Missing admin session");
+    }
+
+    return supabase.functions.invoke("admin-users", {
+      body,
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  }, [session?.access_token]);
 
   // ── Supabase queries ──────────────────────────────────────
 
@@ -348,9 +362,7 @@ export default function AdminDashboard() {
   const fetchUsers = useCallback(async () => {
     setUserLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("admin-users", {
-        body: { action: "list" },
-      });
+      const { data, error } = await invokeAdminUsers({ action: "list" });
       if (!error && data?.users) {
         setUserList(data.users);
       } else {
@@ -360,14 +372,12 @@ export default function AdminDashboard() {
       toast({ title: "Lỗi", description: "Không thể kết nối server.", variant: "destructive" });
     }
     setUserLoading(false);
-  }, []);
+  }, [invokeAdminUsers, toast]);
 
   const handleToggleBlock = async (userId: string, currentlyBlocked: boolean) => {
     setActionLoading(userId + "_block");
     try {
-      const { data, error } = await supabase.functions.invoke("admin-users", {
-        body: { action: "toggle-block", targetUserId: userId },
-      });
+      const { data, error } = await invokeAdminUsers({ action: "toggle-block", targetUserId: userId });
       if (!error && data?.success) {
         setUserList((prev) => prev.map((u) => u.user_id === userId ? { ...u, is_blocked: data.is_blocked } : u));
         toast({ title: data.is_blocked ? "Đã khóa tài khoản" : "Đã mở khóa tài khoản" });
@@ -384,9 +394,7 @@ export default function AdminDashboard() {
     setActionLoading(userId + "_role");
     const action = hasAdmin ? "remove-role" : "assign-role";
     try {
-      const { data, error } = await supabase.functions.invoke("admin-users", {
-        body: { action, targetUserId: userId, role: "admin" },
-      });
+      const { data, error } = await invokeAdminUsers({ action, targetUserId: userId, role: "admin" });
       if (!error && data?.success) {
         setUserList((prev) => prev.map((u) => {
           if (u.user_id !== userId) return u;
