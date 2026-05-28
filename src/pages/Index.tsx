@@ -5,7 +5,7 @@ import { SearchHero } from "@/components/marketplace/SearchHero";
 import { CourseCard } from "@/components/marketplace/CourseCard";
 import { MentorCard } from "@/components/marketplace/MentorCard";
 import { CategoryChip } from "@/components/marketplace/CategoryChip";
-import { useCourses, type Course } from "@/hooks/use-courses";
+import { useLearnerSearchCourses, type LearnerCourse } from "@/hooks/useLearnerCourses";
 import { useQuery } from "@tanstack/react-query";
 import { Music, Globe, Code, Palette, Dumbbell, ChefHat, Briefcase, Pencil, ArrowRight, TrendingUp, MapPin, Sparkles, Brain, Zap, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -33,7 +33,7 @@ interface HomeMentor {
 }
 
 // Helper map course từ Supabase sang CourseCard props
-function mapCourse(c: Course) {
+function mapCourse(c: LearnerCourse) {
   return {
     id: c.id,
     title: c.title,
@@ -52,7 +52,7 @@ function mapCourse(c: Course) {
 }
 
 export default function HomePage() {
-  const { data: allCourses = [], isLoading } = useCourses();
+  const { data: allCourses = [], isLoading } = useLearnerSearchCourses();
 
   const featured = allCourses.filter((c) => c.is_promoted).slice(0, 4);
   const nearby = allCourses.filter((c) => c.format === "offline").slice(0, 4);

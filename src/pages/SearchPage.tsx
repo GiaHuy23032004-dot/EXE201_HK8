@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { CourseCard } from "@/components/marketplace/CourseCard";
 import { categories } from "@/data/mockData";
-import { useCourses } from "@/hooks/use-courses";
+import { useLearnerSearchCourses } from "@/hooks/useLearnerCourses";
 import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List, Sparkles, Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -29,7 +29,7 @@ export default function SearchPage() {
   }, []);
 
   // Fetch courses từ Supabase
-  const { data: courses = [], isLoading } = useCourses({
+  const { data: courses = [], isLoading } = useLearnerSearchCourses({
     query,
     category: selectedCategory,
     format,

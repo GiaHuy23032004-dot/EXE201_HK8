@@ -1,7 +1,6 @@
 import { useParams, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useLearnerReceipt } from "@/hooks/useLearnerPayments";
 import { useAuth } from "@/contexts/AuthContext";
 import { CheckCircle2, Download, ArrowLeft, Loader2, Calendar, Clock, BookOpen, User, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -14,33 +13,7 @@ export default function ReceiptPage() {
   const { session } = useAuth();
   const { toast } = useToast();
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["receipt", bookingId],
-    enabled: !!bookingId && !!session?.user?.id,
-    queryFn: async () => {
-      // Lấy booking
-      const { data: booking, error: bErr } = await supabase
-        .from("bookings")
-        .select(`
-          *,
-          course:courses(title, image_url, price, category, format),
-          mentor:profiles!bookings_mentor_id_fkey(name, avatar_url)
-        `)
-        .eq("id", bookingId!)
-        .eq("learner_id", session!.user.id)
-        .single();
-      if (bErr) throw bErr;
-
-      // Lấy transaction nếu có
-      const { data: txn } = await supabase
-        .from("transactions")
-        .select("*")
-        .eq("booking_id", bookingId!)
-        .maybeSingle();
-
-      return { booking, txn };
-    },
-  });
+  const { data, isLoading } = useLearnerReceipt(bookingId, session?.user?.id);
 
   const handleDownload = () => {
     if (!data) return;

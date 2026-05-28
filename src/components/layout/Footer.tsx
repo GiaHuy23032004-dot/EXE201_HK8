@@ -1,7 +1,11 @@
 import { Link } from "react-router-dom";
 import logoImg from "@/assets/logo.png";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function Footer() {
+  const { user } = useAuth();
+  const isMentor = user?.role === "mentor";
+  const isAdmin  = user?.role === "admin";
   return (
     <footer className="border-t border-border/40 bg-secondary">
       <div className="container py-12">
@@ -26,18 +30,27 @@ export function Footer() {
           <div>
             <h4 className="mb-3 font-semibold text-foreground">Dành cho Mentor</h4>
             <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-              <Link to="/mentor/dashboard" className="hover:text-primary transition-colors">Bảng điều khiển</Link>
-              <Link to="/mentor/create-course" className="hover:text-primary transition-colors">Tạo khóa học</Link>
-              <Link to="/auth" className="hover:text-primary transition-colors">Đăng ký dạy</Link>
+              {isMentor && (
+                <>
+                  <Link to="/mentor/dashboard" className="hover:text-primary transition-colors">Bảng điều khiển</Link>
+                  <Link to="/mentor/create-course" className="hover:text-primary transition-colors">Tạo khóa học</Link>
+                </>
+              )}
+              {!isMentor && !isAdmin && (
+                <Link to="/auth?role=mentor" className="hover:text-primary transition-colors">Đăng ký dạy</Link>
+              )}
+              {isAdmin && (
+                <Link to="/admin" className="hover:text-primary transition-colors">Quản trị hệ thống</Link>
+              )}
             </div>
           </div>
           <div>
             <h4 className="mb-3 font-semibold text-foreground">Hỗ trợ</h4>
             <div className="flex flex-col gap-2 text-sm text-muted-foreground">
-              <a href="#" className="hover:text-primary transition-colors">Trung tâm trợ giúp</a>
-              <a href="#" className="hover:text-primary transition-colors">Chính sách bảo mật</a>
-              <a href="#" className="hover:text-primary transition-colors">Điều khoản sử dụng</a>
-              <a href="#" className="hover:text-primary transition-colors">Liên hệ</a>
+              <Link to="/help" className="hover:text-primary transition-colors">Trung tâm trợ giúp</Link>
+              <Link to="/privacy" className="hover:text-primary transition-colors">Chính sách bảo mật</Link>
+              <Link to="/terms" className="hover:text-primary transition-colors">Điều khoản sử dụng</Link>
+              <Link to="/contact" className="hover:text-primary transition-colors">Liên hệ</Link>
             </div>
           </div>
         </div>

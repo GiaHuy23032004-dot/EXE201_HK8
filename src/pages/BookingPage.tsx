@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useCourse } from "@/hooks/use-courses";
-import { useCreateBooking } from "@/hooks/use-bookings";
+import { useLearnerCourseDetail } from "@/hooks/useLearnerCourses";
+import { useCreateLearnerBooking } from "@/hooks/useLearnerBookings";
 import { useAuth } from "@/contexts/AuthContext";
 import { Calendar, Clock, Phone, CreditCard, Wallet, ChevronLeft, CheckCircle2, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -41,8 +41,8 @@ export default function BookingPage() {
   const { session } = useAuth();
   const { toast } = useToast();
 
-  const { data: course, isLoading } = useCourse(id);
-  const createBooking = useCreateBooking();
+  const { data: course, isLoading } = useLearnerCourseDetail(id);
+  const createBooking = useCreateLearnerBooking();
 
   const [selectedSchedule, setSelectedSchedule] = useState<any | null>(null);
   const [phone, setPhone]     = useState("");

@@ -1,10 +1,9 @@
 import { useParams, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useCourse, type Course } from "@/hooks/use-courses";
-import { useCourseReviews } from "@/hooks/use-reviews";
-import { useIsSaved, useToggleSaveCourse } from "@/hooks/use-saved-courses";
+import { useLearnerCourseDetail, useLearnerIsSaved, useLearnerToggleSaveCourse } from "@/hooks/useLearnerCourses";
+import { useCourseReviews } from "@/hooks/useLearnerReviews";
 import { ReviewBlock } from "@/components/marketplace/ReviewBlock";
-import { Star, MapPin, Monitor, Clock, Users, BadgeCheck, Calendar, Share2, Heart, ChevronRight, Loader2 } from "lucide-react";
+import { Star, MapPin, Monitor, Users, BadgeCheck, Calendar, Share2, Heart, ChevronRight, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -13,38 +12,20 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { usePublicMentorVerification } from "@/hooks/usePublicMentorVerification";
 
-interface CourseDetailMentor {
-  user_id: string;
-  name: string | null;
-  avatar_url: string | null;
-  bio: string | null;
-}
-
-interface CourseDetailSchedule {
-  id: string;
-  day_of_week: string;
-  start_time: string;
-  end_time: string;
-}
-
-type CourseDetail = Course & {
-  mentor?: CourseDetailMentor | null;
-  course_schedules?: CourseDetailSchedule[];
-};
-
 export default function CourseDetailPage() {
   const { id } = useParams();
   const { user, session } = useAuth();
   const { toast } = useToast();
   const isLearner = !user || user.role === "learner";
 
-  const { data: course, isLoading } = useCourse(id);
+  const { data: course, isLoading } = useLearnerCourseDetail(id);
   const { data: reviews = [] } = useCourseReviews(id);
-  const { data: isSaved = false } = useIsSaved(session?.user?.id, id);
-  const courseDetail = course as CourseDetail | undefined;
-  const mentorId = courseDetail?.mentor?.user_id;
+  const { data: isSaved = false } = useLearnerIsSaved(session?.user?.id, id);
+  const toggleSave = useLearnerToggleSaveCourse();
+
+  const mentorId = (course as any)?.mentor?.user_id;
   const { data: mentorVerification } = usePublicMentorVerification(mentorId);
-  const toggleSave = useToggleSaveCourse();
+  const isVerifiedMentor = mentorVerification?.verified === true;
 
   const handleSave = () => {
     if (!session?.user?.id) {
@@ -78,11 +59,9 @@ export default function CourseDetailPage() {
     );
   }
 
-  const mentor = courseDetail?.mentor;
-  const schedules = courseDetail?.course_schedules ?? [];
-  const isVerifiedMentor = mentorVerification?.verified === true;
+  const mentor = (course as any).mentor;
+  const schedules = (course as any).course_schedules ?? [];
 
-  // Map reviews sang ReviewBlock format
   const mappedReviews = reviews.map((r) => ({
     id: r.id,
     userName: r.learner?.name || "Học viên",
@@ -95,7 +74,6 @@ export default function CourseDetailPage() {
   return (
     <MainLayout>
       <div className="container py-6">
-        {/* Breadcrumb */}
         <div className="mb-4 flex items-center gap-1 text-xs text-muted-foreground">
           <Link to="/" className="hover:text-primary">Trang chủ</Link>
           <ChevronRight className="h-3 w-3" />
@@ -105,23 +83,16 @@ export default function CourseDetailPage() {
         </div>
 
         <div className="grid gap-8 lg:grid-cols-3">
-          {/* Main */}
           <div className="lg:col-span-2">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
               <div className="overflow-hidden rounded-2xl mb-6">
-                <img
-                  src={course.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&h=400&fit=crop"}
-                  alt={course.title}
-                  className="w-full aspect-video object-cover"
-                />
+                <img src={course.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&h=400&fit=crop"} alt={course.title} className="w-full aspect-video object-cover" />
               </div>
 
               <div className="flex items-center gap-2 mb-3">
                 <Badge variant="secondary">{course.category}</Badge>
                 <Badge variant={course.format === "online" ? "secondary" : "outline"}>
-                  {course.format === "online"
-                    ? <><Monitor className="mr-1 h-3 w-3" />Online</>
-                    : <><MapPin className="mr-1 h-3 w-3" />Offline</>}
+                  {course.format === "online" ? <><Monitor className="mr-1 h-3 w-3" />Online</> : <><MapPin className="mr-1 h-3 w-3" />Offline</>}
                 </Badge>
               </div>
 
@@ -155,7 +126,7 @@ export default function CourseDetailPage() {
                   <Separator className="my-6" />
                   <h2 className="mb-3 text-lg font-semibold text-foreground">Lịch học</h2>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {schedules.map((s) => (
+                    {schedules.map((s: any) => (
                       <div key={s.id} className="rounded-xl border bg-muted/30 p-3 text-center">
                         <p className="text-sm font-medium text-foreground">{s.day_of_week}</p>
                         <p className="text-xs text-muted-foreground">{s.start_time} - {s.end_time}</p>
@@ -184,26 +155,19 @@ export default function CourseDetailPage() {
 
               <Separator className="my-6" />
               <h2 className="mb-4 text-lg font-semibold text-foreground">Đánh giá ({mappedReviews.length})</h2>
-              {mappedReviews.length > 0 ? (
-                <div className="space-y-3">
-                  {mappedReviews.map((r) => <ReviewBlock key={r.id} review={r} />)}
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">Chưa có đánh giá nào.</p>
-              )}
+              {mappedReviews.length > 0
+                ? <div className="space-y-3">{mappedReviews.map((r) => <ReviewBlock key={r.id} review={r} />)}</div>
+                : <p className="text-sm text-muted-foreground">Chưa có đánh giá nào.</p>}
             </motion.div>
           </div>
 
-          {/* Sidebar */}
           <div className="lg:col-span-1">
             <div className="sticky top-20 space-y-4">
-              {/* Price card */}
               <div className="rounded-2xl border bg-card p-6 shadow-card">
                 <div className="mb-4 flex items-baseline gap-1">
                   <span className="text-3xl font-bold text-primary">{course.price.toLocaleString("vi-VN")}đ</span>
                   <span className="text-sm text-muted-foreground">/buổi</span>
                 </div>
-
                 {isLearner ? (
                   <>
                     <Link to={`/booking/${course.id}`}>
@@ -212,12 +176,7 @@ export default function CourseDetailPage() {
                       </Button>
                     </Link>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        className={`flex-1 rounded-xl ${isSaved ? "border-primary text-primary" : ""}`}
-                        onClick={handleSave}
-                        disabled={toggleSave.isPending}
-                      >
+                      <Button variant="outline" className={`flex-1 rounded-xl ${isSaved ? "border-primary text-primary" : ""}`} onClick={handleSave} disabled={toggleSave.isPending}>
                         <Heart className={`mr-2 h-4 w-4 ${isSaved ? "fill-primary" : ""}`} />
                         {isSaved ? "Đã lưu" : "Lưu"}
                       </Button>
@@ -233,15 +192,10 @@ export default function CourseDetailPage() {
                 )}
               </div>
 
-              {/* Mentor card */}
               {mentor && (
                 <div className="rounded-2xl border bg-card p-6 shadow-card">
                   <div className="flex items-center gap-3 mb-4">
-                    <img
-                      src={mentor.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face"}
-                      alt={mentor.name}
-                      className="h-14 w-14 rounded-xl object-cover"
-                    />
+                    <img src={mentor.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face"} alt={mentor.name} className="h-14 w-14 rounded-xl object-cover" />
                     <div>
                       <div className="flex items-center gap-1">
                         <p className="font-semibold text-card-foreground">{mentor.name}</p>
@@ -249,14 +203,7 @@ export default function CourseDetailPage() {
                       </div>
                       <div className="mt-1 flex flex-wrap items-center gap-2">
                         <p className="text-xs text-muted-foreground">{course.category}</p>
-                        <Badge
-                          variant="outline"
-                          className={
-                            isVerifiedMentor
-                              ? "rounded-full border-success/20 bg-success/10 text-success text-[10px]"
-                              : "rounded-full border-border bg-muted text-muted-foreground text-[10px]"
-                          }
-                        >
+                        <Badge variant="outline" className={isVerifiedMentor ? "rounded-full border-success/20 bg-success/10 text-success text-[10px]" : "rounded-full border-border bg-muted text-muted-foreground text-[10px]"}>
                           {isVerifiedMentor ? "Đã xác minh" : "Chưa xác minh"}
                         </Badge>
                       </div>

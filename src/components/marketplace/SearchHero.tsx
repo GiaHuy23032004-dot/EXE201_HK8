@@ -54,10 +54,10 @@ export function SearchHero() {
   };
 
   return (
-    <section className="relative overflow-hidden py-20 md:py-28">
+    <section className="relative py-20 md:py-28">
       {/* Soft gradient background */}
-      <div className="absolute inset-0 gradient-hero" />
-      <div className="absolute inset-0 gradient-hero-mesh" />
+      <div className="absolute inset-0 gradient-hero overflow-hidden" />
+      <div className="absolute inset-0 gradient-hero-mesh overflow-hidden" />
 
       {/* Floating decorations - more visible */}
       <motion.div
@@ -108,7 +108,7 @@ export function SearchHero() {
             Kết nối với hàng nghìn mentor chất lượng. Học mọi thứ từ âm nhạc, ngoại ngữ đến lập trình.
           </p>
 
-          <div className="relative mx-auto max-w-2xl">
+          <div className="relative mx-auto max-w-2xl overflow-visible">
             <form onSubmit={handleSearch} className="flex items-center gap-2 rounded-2xl border border-border/60 bg-background p-2 shadow-elevated transition-shadow focus-within:shadow-glow focus-within:border-primary/30">
               <div className="flex flex-1 items-center gap-2 px-3">
                 <Search className="h-5 w-5 text-primary" />

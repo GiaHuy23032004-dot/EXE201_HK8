@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
-import { useLearnerBookings, useCancelBooking } from "@/hooks/use-bookings";
-import { useSavedCourses } from "@/hooks/use-saved-courses";
-import { useLearnerReviews, useCreateReview } from "@/hooks/use-reviews";
-import { useLearnerTransactions } from "@/hooks/use-wallet";
+import { useLearnerBookings, useCancelLearnerBooking } from "@/hooks/useLearnerBookings";
+import { useLearnerSavedCourses } from "@/hooks/useLearnerCourses";
+import { useLearnerReviews, useCreateLearnerReview } from "@/hooks/useLearnerReviews";
+import { useLearnerTransactions } from "@/hooks/useLearnerPayments";
 import { useAuth } from "@/contexts/AuthContext";
 import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Loader2, Receipt, CheckCircle2, RotateCcw, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -38,11 +38,11 @@ export default function LearnerDashboard() {
   const userId = session?.user?.id;
 
   const { data: bookings = [], isLoading: bookingsLoading } = useLearnerBookings(userId);
-  const { data: savedData = [], isLoading: savedLoading } = useSavedCourses(userId);
+  const { data: savedData = [], isLoading: savedLoading } = useLearnerSavedCourses(userId);
   const { data: reviews = [] } = useLearnerReviews(userId);
   const { data: transactions = [], isLoading: txnsLoading } = useLearnerTransactions(userId);
-  const cancelBooking = useCancelBooking();
-  const createReview = useCreateReview();
+  const cancelBooking = useCancelLearnerBooking();
+  const createReview = useCreateLearnerReview();
 
   // Review dialog state
   const [reviewTarget, setReviewTarget] = useState<ReviewTarget | null>(null);
@@ -61,8 +61,7 @@ export default function LearnerDashboard() {
       toast({ title: "Đã hủy đặt lịch" });
     } catch {
       toast({ title: "Không thể hủy", variant: "destructive" });
-    }
-  };
+    }  };
 
   const openReviewDialog = (booking: typeof bookings[0]) => {
     setReviewTarget({
