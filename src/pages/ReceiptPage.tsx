@@ -9,6 +9,11 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { ReportModal } from "@/components/reports/ReportModal";
+import {
+  formatVnd,
+  getPlatformPaymentAmount,
+  inferPaymentOptionFromBooking,
+} from "@/lib/learnerPayment";
 
 export default function ReceiptPage() {
   const { bookingId } = useParams();
@@ -21,8 +26,17 @@ export default function ReceiptPage() {
   const handleDownload = () => {
     if (!data) return;
     const { booking, transaction: txn } = data;
+    const paymentOption = inferPaymentOptionFromBooking({
+      courseFormat: booking.course?.format,
+      paymentMethod: booking.payment_method,
+      totalPrice: booking.total_price,
+      transactionAmount: txn?.amount,
+    });
+    const platformAmount = txn?.amount ?? getPlatformPaymentAmount(paymentOption, booking.total_price);
+    const remainingAmount = Math.max(0, booking.total_price - platformAmount);
+    const receiptTitle = paymentOption === "platform_deposit" ? "BIÊN NHẬN ĐẶT CỌC" : "BIÊN LAI ĐẶT LỊCH HỌC";
     const content = [
-      "=== BIÊN LAI ĐẶT LỊCH HỌC ===",
+      `=== ${receiptTitle} ===`,
       `Mã biên lai: ${txn?.reference_code || booking.id.slice(0, 8).toUpperCase()}`,
       `Ngày tạo: ${new Date(booking.created_at).toLocaleString("vi-VN")}`,
       "",
@@ -33,12 +47,20 @@ export default function ReceiptPage() {
       `Giờ học: ${booking.start_time} - ${booking.end_time}`,
       "",
       "--- THANH TOÁN ---",
-      `Phương thức: ${booking.payment_method === "platform" ? "Thanh toán online" : "Trả sau trực tiếp"}`,
-      `Tổng tiền: ${booking.total_price.toLocaleString("vi-VN")}đ`,
+      `Phương thức: ${
+        paymentOption === "platform_full"
+          ? "Thanh toán khóa học qua nền tảng"
+          : paymentOption === "platform_deposit"
+            ? "Đặt cọc giữ chỗ qua nền tảng"
+            : "Trả tại lớp"
+      }`,
+      `Tổng học phí: ${formatVnd(booking.total_price)}`,
+      `Cần thanh toán qua nền tảng: ${formatVnd(platformAmount)}`,
+      paymentOption === "platform_deposit" ? `Còn lại trả tại lớp: ${formatVnd(remainingAmount)}` : null,
       `Trạng thái: ${booking.status === "pending" ? "Chờ xác nhận" : booking.status === "upcoming" ? "Đã xác nhận" : "Hoàn thành"}`,
       "",
       "Cảm ơn bạn đã sử dụng VET!",
-    ].join("\n");
+    ].filter(Boolean).join("\n");
 
     const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -75,6 +97,20 @@ export default function ReceiptPage() {
 
   const { booking, transaction: txn } = data;
   const refCode = txn?.reference_code || `BK-${booking.id.slice(0, 8).toUpperCase()}`;
+  const paymentOption = inferPaymentOptionFromBooking({
+    courseFormat: booking.course?.format,
+    paymentMethod: booking.payment_method,
+    totalPrice: booking.total_price,
+    transactionAmount: txn?.amount,
+  });
+  const platformAmount = txn?.amount ?? getPlatformPaymentAmount(paymentOption, booking.total_price);
+  const remainingAmount = Math.max(0, booking.total_price - platformAmount);
+  const isDeposit = paymentOption === "platform_deposit";
+  const receiptTitle = isDeposit
+    ? "Biên nhận đặt cọc"
+    : paymentOption === "platform_full"
+      ? "Thanh toán khóa học"
+      : "Biên lai đặt lịch";
 
   const statusInfo = {
     pending:   { label: "Chờ xác nhận", color: "bg-warning/10 text-warning" },
@@ -98,7 +134,7 @@ export default function ReceiptPage() {
               <CheckCircle2 className="h-6 w-6 text-success" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-foreground">Biên lai đặt lịch</h1>
+              <h1 className="text-xl font-bold text-foreground">{receiptTitle}</h1>
               <p className="text-sm text-muted-foreground font-mono">{refCode}</p>
             </div>
           </div>
@@ -170,7 +206,11 @@ export default function ReceiptPage() {
               <span className="text-muted-foreground">Phương thức</span>
               <span className="font-medium text-foreground flex items-center gap-1">
                 <CreditCard className="h-3 w-3" />
-                {booking.payment_method === "platform" ? "Thanh toán online" : "Trả sau trực tiếp"}
+                {paymentOption === "platform_full"
+                  ? "Thanh toán khóa học"
+                  : paymentOption === "platform_deposit"
+                    ? "Đặt cọc giữ chỗ"
+                    : "Trả tại lớp"}
               </span>
             </div>
             {txn && (
@@ -187,10 +227,36 @@ export default function ReceiptPage() {
                 </div>
               </>
             )}
+            {!txn && booking.payment_method === "platform" && (
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Trạng thái GD</span>
+                <Badge className="bg-muted text-muted-foreground border-0 text-xs">Chưa có giao dịch</Badge>
+              </div>
+            )}
             <Separator />
+            {isDeposit && (
+              <>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">{txn?.status === "success" ? "Đã đặt cọc" : "Cần đặt cọc"}</span>
+                  <span className="font-semibold text-primary">{formatVnd(platformAmount)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Còn lại trả tại lớp</span>
+                  <span className="font-medium text-foreground">{formatVnd(remainingAmount)}</span>
+                </div>
+                <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
+                  Phần còn lại thanh toán trực tiếp với mentor khi học.
+                </p>
+              </>
+            )}
+            {paymentOption === "pay_at_class" && (
+              <p className="rounded-xl bg-muted/40 p-3 text-xs text-muted-foreground">
+                Bạn sẽ thanh toán trực tiếp với mentor khi đến lớp.
+              </p>
+            )}
             <div className="flex justify-between text-base font-bold">
-              <span>Tổng cộng</span>
-              <span className="text-primary">{booking.total_price.toLocaleString("vi-VN")}đ</span>
+              <span>{isDeposit ? "Tổng học phí" : "Tổng cộng"}</span>
+              <span className="text-primary">{formatVnd(booking.total_price)}</span>
             </div>
           </div>
 

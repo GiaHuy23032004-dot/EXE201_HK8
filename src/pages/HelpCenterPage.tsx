@@ -5,7 +5,7 @@ import { useState } from "react";
 const faqs = [
   {
     q: "Làm thế nào để đặt lịch học?",
-    a: "Tìm khóa học phù hợp, vào trang chi tiết và nhấn 'Đặt lịch học ngay'. Chọn lịch, nhập số điện thoại và xác nhận. Mentor sẽ phản hồi trong vòng 24h.",
+    a: "Tìm khóa học phù hợp, vào trang chi tiết và nhấn 'Đặt lịch học ngay'. Chọn lịch, nhập số điện thoại và chọn phương thức thanh toán phù hợp với hình thức Online/Offline.",
   },
   {
     q: "Tôi có thể hủy lịch học không?",
@@ -21,7 +21,7 @@ const faqs = [
   },
   {
     q: "Tôi có thể thanh toán bằng cách nào?",
-    a: "Hiện tại hỗ trợ 2 hình thức: Trả sau trực tiếp với mentor, hoặc thanh toán qua nền tảng VET.",
+    a: "Lớp online bắt buộc thanh toán 100% qua nền tảng. Lớp offline có thể đặt cọc giữ chỗ qua nền tảng hoặc trả trực tiếp tại lớp nếu mentor xác nhận.",
   },
   {
     q: "Làm sao để liên hệ hỗ trợ?",

@@ -145,7 +145,13 @@ export default function CourseDetailPage() {
 
               <div className="mb-3 flex items-center gap-2">
                 <Badge variant="secondary">{courseDetail.category}</Badge>
-                <Badge variant={courseDetail.format === "online" ? "secondary" : "outline"}>
+                <Badge
+                  className={
+                    courseDetail.format === "online"
+                      ? "rounded-full border-0 bg-blue-100 text-blue-700"
+                      : "rounded-full border-0 bg-teal-100 text-teal-700"
+                  }
+                >
                   {courseDetail.format === "online" ? (
                     <>
                       <Monitor className="mr-1 h-3 w-3" />
@@ -194,6 +200,46 @@ export default function CourseDetailPage() {
                   <li>Nhận feedback cá nhân hóa từ mentor</li>
                   <li>Chứng chỉ hoàn thành khóa học</li>
                 </ul>
+              </div>
+
+              <div
+                className={`mt-6 rounded-2xl border p-4 ${
+                  courseDetail.format === "online"
+                    ? "border-blue-100 bg-blue-50/70"
+                    : "border-teal-100 bg-teal-50/70"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className={`rounded-xl p-2 ${
+                      courseDetail.format === "online"
+                        ? "bg-blue-100 text-blue-700"
+                        : "bg-teal-100 text-teal-700"
+                    }`}
+                  >
+                    {courseDetail.format === "online" ? (
+                      <Monitor className="h-5 w-5" />
+                    ) : (
+                      <MapPin className="h-5 w-5" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-foreground">
+                      Hình thức học: {courseDetail.format === "online" ? "Online" : "Offline"}
+                    </p>
+                    <p className="mt-1 text-sm leading-relaxed text-muted-foreground">
+                      {courseDetail.format === "online"
+                        ? "Học trực tuyến qua nền tảng hoặc link học do mentor cung cấp sau khi thanh toán."
+                        : "Học trực tiếp tại địa điểm mentor cung cấp."}
+                    </p>
+                    {courseDetail.format === "offline" && courseDetail.location && (
+                      <p className="mt-2 flex items-center gap-1 text-sm font-medium text-foreground">
+                        <MapPin className="h-4 w-4 text-teal-600" />
+                        {courseDetail.location}
+                      </p>
+                    )}
+                  </div>
+                </div>
               </div>
 
               {schedules.length > 0 && (

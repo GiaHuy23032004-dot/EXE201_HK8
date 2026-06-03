@@ -7,6 +7,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { LearnerPaymentOption } from "@/lib/learnerPayment";
 
 export interface LearnerBooking {
   id: string;
@@ -23,7 +24,13 @@ export interface LearnerBooking {
   total_price: number;
   note: string | null;
   created_at: string;
-  course?: { title: string; image_url: string | null; price: number; start_date: string | null };
+  course?: {
+    title: string;
+    image_url: string | null;
+    price: number;
+    start_date: string | null;
+    format: "online" | "offline";
+  };
   mentor?: { name: string | null; avatar_url: string | null };
 }
 
@@ -39,7 +46,7 @@ export function useLearnerBookings(learnerId: string | undefined) {
         .from("bookings")
         .select(`
           *,
-          course:courses(title, image_url, price, start_date),
+          course:courses(title, image_url, price, start_date, format),
           mentor:profiles!bookings_mentor_id_fkey(name, avatar_url)
         `)
         .eq("learner_id", learnerId!)
@@ -61,6 +68,8 @@ export interface CreateBookingPayload {
   end_time: string;
   phone?: string;
   payment_method: "later" | "platform";
+  payment_option?: LearnerPaymentOption;
+  platform_amount?: number;
   total_price: number;
 }
 
@@ -80,31 +89,31 @@ export function useCreateLearnerBooking() {
       }
 
       // Tạo booking
+      const bookingPayload = {
+        course_id: payload.course_id,
+        learner_id: payload.learner_id,
+        mentor_id: payload.mentor_id,
+        schedule_id: payload.schedule_id,
+        booking_date: payload.booking_date,
+        start_time: payload.start_time,
+        end_time: payload.end_time,
+        phone: payload.phone,
+        payment_method: payload.payment_method,
+        total_price: payload.total_price,
+        status: "pending" as const,
+      };
+
       const { data: booking, error } = await supabase
         .from("bookings")
-        .insert({ ...payload, status: "pending" })
+        .insert(bookingPayload)
         .select()
         .single();
       if (error) throw error;
 
-      // Tạo transaction nếu thanh toán qua nền tảng
-      if (payload.payment_method === "platform") {
-        const platformFee = Math.round(payload.total_price * 0.15);
-        const refCode = `TXN-${Date.now().toString(36).toUpperCase()}`;
-        await supabase.from("transactions").insert({
-          booking_id: booking.id,
-          learner_id: payload.learner_id,
-          mentor_id: payload.mentor_id,
-          course_id: payload.course_id,
-          amount: payload.total_price,
-          platform_fee: platformFee,
-          net_amount: payload.total_price - platformFee,
-          payment_method: "platform",
-          txn_type: "online",
-          status: "pending",
-          reference_code: refCode,
-        });
-      }
+      // Backend integration point:
+      // for platform_full/platform_deposit, create the payment session and transaction
+      // through a protected Edge Function. The frontend must not insert transactions
+      // directly because RLS correctly blocks that table.
 
       return booking;
     },

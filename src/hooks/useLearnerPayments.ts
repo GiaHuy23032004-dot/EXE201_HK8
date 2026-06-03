@@ -60,7 +60,10 @@ export function useLearnerTransactions(learnerId: string | undefined) {
         `)
         .eq("learner_id", learnerId!)
         .order("created_at", { ascending: false });
-      if (error) throw error;
+      if (error) {
+        console.warn("Không thể tải giao dịch learner, dùng danh sách rỗng:", error.message);
+        return [];
+      }
       return (data ?? []) as unknown as LearnerTransaction[];
     },
   });
@@ -86,13 +89,16 @@ export function useLearnerReceipt(bookingId: string | undefined, learnerId: stri
       if (bErr) throw bErr;
 
       // Lấy transaction nếu có
-      const { data: transaction } = await supabase
+      const { data: transaction, error: txnErr } = await supabase
         .from("transactions")
         .select("*")
         .eq("booking_id", bookingId!)
         .maybeSingle();
+      if (txnErr) {
+        console.warn("Không thể tải giao dịch biên lai, dùng trạng thái mock:", txnErr.message);
+      }
 
-      return { booking, transaction } as unknown as LearnerReceipt;
+      return { booking, transaction: txnErr ? null : transaction } as unknown as LearnerReceipt;
     },
   });
 }

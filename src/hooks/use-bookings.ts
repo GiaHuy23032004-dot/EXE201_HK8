@@ -62,7 +62,7 @@ export function useMentorBookings(mentorId: string | undefined) {
   });
 }
 
-// Tạo booking mới + transaction record
+// Tạo booking mới
 export function useCreateBooking() {
   const qc = useQueryClient();
   return useMutation({
@@ -85,24 +85,9 @@ export function useCreateBooking() {
         .single();
       if (error) throw error;
 
-      // 2. Tạo transaction record (nếu thanh toán qua platform)
-      if (payload.payment_method === "platform") {
-        const platformFee = Math.round(payload.total_price * 0.15);
-        const refCode = `TXN-${Date.now().toString(36).toUpperCase()}`;
-        await supabase.from("transactions").insert({
-          booking_id: booking.id,
-          learner_id: payload.learner_id,
-          mentor_id: payload.mentor_id,
-          course_id: payload.course_id,
-          amount: payload.total_price,
-          platform_fee: platformFee,
-          net_amount: payload.total_price - platformFee,
-          payment_method: "platform",
-          txn_type: "online",
-          status: "pending",
-          reference_code: refCode,
-        });
-      }
+      // Backend integration point:
+      // platform payments should create transaction/payment sessions via a protected
+      // Edge Function. The browser must only create the booking request.
 
       return booking;
     },

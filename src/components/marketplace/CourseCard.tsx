@@ -55,8 +55,8 @@ export function CourseCard({ course }: { course: CourseData }) {
               variant="secondary"
               className={`backdrop-blur-md border-0 shadow-sm ${
                 course.format === "online"
-                  ? "bg-emerald-500/90 text-white"
-                  : "bg-white/90 text-foreground"
+                  ? "bg-blue-600/90 text-white"
+                  : "bg-teal-600/90 text-white"
               }`}
             >
               {course.format === "online" ? (

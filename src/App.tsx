@@ -17,6 +17,7 @@ import SearchPage from "./pages/SearchPage";
 import MapPage from "./pages/MapPage";
 import CourseDetailPage from "./pages/CourseDetailPage";
 import BookingPage from "./pages/BookingPage";
+import CheckoutPage from "./pages/CheckoutPage";
 import LearnerDashboard from "./pages/LearnerDashboard";
 import LearnerReports from "./pages/LearnerReports";
 import MentorDashboard from "./pages/MentorDashboard";
@@ -84,6 +85,7 @@ const App = () => (
             <Route path="/dev/map-config" element={<MapConfigPage />} />
             <Route path="/course/:id" element={<CourseDetailPage />} />
             <Route path="/booking/:id" element={<BookingPage />} />
+            <Route path="/checkout/:bookingId" element={<CheckoutPage />} />
             <Route path="/learner/dashboard" element={<LearnerDashboard />} />
             <Route path="/learner/reports" element={<LearnerReports />} />
             <Route path="/mentor/dashboard" element={<MentorGuard><MentorDashboard /></MentorGuard>} />

@@ -11,6 +11,7 @@ import {
   MapPin,
   Search,
   Star,
+  X,
 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
@@ -38,7 +39,8 @@ const RADIUS_FILTERS = [
 ] as const;
 
 type RadiusFilter = (typeof RADIUS_FILTERS)[number]["value"];
-type MapPoint = { lat: number; lng: number; label?: string };
+type LocationSource = "current" | "address";
+type ActiveLocation = { lat: number; lng: number; label: string; source: LocationSource };
 type CourseWithDistance = Course & { distanceKm?: number };
 type GeoapifyFeature = {
   properties?: {
@@ -75,22 +77,22 @@ const selectedCourseIcon = L.divIcon({
 
 const userIcon = L.divIcon({
   className: "",
-  html: `<div style="position:relative;height:24px;width:24px;">
-    <div style="position:absolute;inset:0;border-radius:999px;background:rgba(20,184,166,.18);animation:pulse 1.8s infinite;"></div>
-    <div style="position:absolute;left:5px;top:5px;height:14px;width:14px;border-radius:999px;background:#14b8a6;border:3px solid white;box-shadow:0 8px 22px rgba(20,184,166,.45);"></div>
+  html: `<div style="position:relative;height:28px;width:28px;">
+    <div style="position:absolute;inset:0;border-radius:999px;background:rgba(20,184,166,.18);"></div>
+    <div style="position:absolute;left:6px;top:6px;height:16px;width:16px;border-radius:999px;background:#14b8a6;border:3px solid white;box-shadow:0 8px 22px rgba(20,184,166,.45);"></div>
   </div>`,
-  iconSize: [24, 24],
-  iconAnchor: [12, 12],
+  iconSize: [28, 28],
+  iconAnchor: [14, 14],
 });
 
 const searchIcon = L.divIcon({
   className: "",
-  html: `<div style="display:flex;height:30px;width:30px;align-items:center;justify-content:center;border-radius:999px;background:#f59e0b;box-shadow:0 10px 24px rgba(245,158,11,.35);border:3px solid white;color:white;">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+  html: `<div style="display:flex;height:34px;width:34px;align-items:center;justify-content:center;border-radius:999px;background:#f59e0b;box-shadow:0 10px 24px rgba(245,158,11,.35);border:3px solid white;color:white;">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
   </div>`,
-  iconSize: [30, 30],
-  iconAnchor: [15, 30],
-  popupAnchor: [0, -30],
+  iconSize: [34, 34],
+  iconAnchor: [17, 34],
+  popupAnchor: [0, -34],
 });
 
 function hasCoordinates<T extends Course>(course: T): course is T & { latitude: number; longitude: number } {
@@ -119,7 +121,7 @@ function getFeatureLabel(feature: GeoapifyFeature) {
   );
 }
 
-function getFeaturePoint(feature: GeoapifyFeature): MapPoint | null {
+function getFeaturePoint(feature: GeoapifyFeature): Omit<ActiveLocation, "source"> | null {
   const lat = feature.properties?.lat;
   const lon = feature.properties?.lon;
   if (typeof lat === "number" && typeof lon === "number") {
@@ -134,33 +136,59 @@ function getFeaturePoint(feature: GeoapifyFeature): MapPoint | null {
   return null;
 }
 
-async function fetchGeoapifyFeatures(url: string): Promise<GeoapifyFeature[]> {
-  const response = await fetch(url);
+async function fetchGeoapifyFeatures(url: string, signal?: AbortSignal): Promise<GeoapifyFeature[]> {
+  const response = await fetch(url, { signal });
   if (!response.ok) throw new Error("Geoapify request failed");
   const data = (await response.json()) as { features?: GeoapifyFeature[] };
   return data.features ?? [];
 }
 
-function MapFocus({
-  selectedCourse,
-  activePoint,
+function getLocationErrorMessage(error: GeolocationPositionError) {
+  if (error.code === error.PERMISSION_DENIED) {
+    return "Bạn đã từ chối quyền vị trí. Hãy nhập khu vực thủ công để tìm lớp học gần bạn.";
+  }
+  if (error.code === error.TIMEOUT) {
+    return "Không thể lấy vị trí trong thời gian cho phép. Bạn có thể nhập khu vực thủ công để tiếp tục.";
+  }
+  return "Vị trí hiện tại chưa sẵn sàng. Bạn có thể nhập khu vực thủ công để tìm lớp học gần bạn.";
+}
+
+function MapFocusController({
+  activeLocation,
+  visibleCourses,
+  focusedCourse,
 }: {
-  selectedCourse: CourseWithDistance | null;
-  activePoint: MapPoint | null;
+  activeLocation: ActiveLocation | null;
+  visibleCourses: CourseWithDistance[];
+  focusedCourse: CourseWithDistance | null;
 }) {
   const map = useMap();
 
   useEffect(() => {
-    if (selectedCourse && hasCoordinates(selectedCourse)) {
-      map.flyTo([selectedCourse.latitude, selectedCourse.longitude], FOCUS_ZOOM, { duration: 0.7 });
+    if (focusedCourse && hasCoordinates(focusedCourse)) {
+      map.flyTo([focusedCourse.latitude, focusedCourse.longitude], FOCUS_ZOOM, { duration: 0.7 });
+      return;
     }
-  }, [map, selectedCourse]);
 
-  useEffect(() => {
-    if (activePoint) {
-      map.flyTo([activePoint.lat, activePoint.lng], FOCUS_ZOOM, { duration: 0.7 });
+    if (!activeLocation) return;
+
+    const boundsPoints: [number, number][] = [
+      [activeLocation.lat, activeLocation.lng],
+      ...visibleCourses
+        .filter(hasCoordinates)
+        .map((course): [number, number] => [course.latitude, course.longitude]),
+    ];
+
+    if (boundsPoints.length > 1) {
+      map.fitBounds(L.latLngBounds(boundsPoints), {
+        padding: [60, 60],
+        maxZoom: FOCUS_ZOOM,
+      });
+      return;
     }
-  }, [map, activePoint]);
+
+    map.flyTo([activeLocation.lat, activeLocation.lng], 14, { duration: 0.7 });
+  }, [activeLocation, focusedCourse, map, visibleCourses]);
 
   return null;
 }
@@ -172,26 +200,29 @@ export default function MapPage() {
   const initialLocation = searchParams.get("location") ?? "";
   const { data: allCourses = [], isLoading, isError, error } = useCourses({ format: "offline" });
   const [searchInput, setSearchInput] = useState(initialLocation);
-  const [searchTerm, setSearchTerm] = useState(initialLocation);
+  const [fallbackSearchTerm, setFallbackSearchTerm] = useState("");
   const [radius, setRadius] = useState<RadiusFilter>("all");
-  const [userLocation, setUserLocation] = useState<MapPoint | null>(null);
-  const [searchLocation, setSearchLocation] = useState<MapPoint | null>(null);
-  const [reverseAddress, setReverseAddress] = useState("");
-  const [locating, setLocating] = useState(false);
-  const [geocoding, setGeocoding] = useState(false);
+  const [userLocation, setUserLocation] = useState<ActiveLocation | null>(null);
+  const [activeSearchLocation, setActiveSearchLocation] = useState<ActiveLocation | null>(null);
+  const [isLocationConsentOpen, setIsLocationConsentOpen] = useState(false);
+  const [isGettingLocation, setIsGettingLocation] = useState(false);
+  const [isGeocoding, setIsGeocoding] = useState(false);
   const [autocompleteLoading, setAutocompleteLoading] = useState(false);
   const [autocompleteOptions, setAutocompleteOptions] = useState<GeoapifyFeature[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string | null>(null);
+  const initialSearchHandledRef = useRef(false);
   const autocompleteAbortRef = useRef<AbortController | null>(null);
   const hasGeoapifyKey = Boolean(GEOAPIFY_API_KEY);
-  const activePoint = searchLocation ?? userLocation;
+  const isFallbackTextSearch = Boolean(fallbackSearchTerm.trim());
+  const activeOrigin = isFallbackTextSearch ? null : activeSearchLocation ?? userLocation;
+  const activeLocationSource = activeOrigin?.source ?? null;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setSearchTerm(searchInput.trim());
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [searchInput]);
+    if (initialSearchHandledRef.current || !initialLocation.trim()) return;
+    initialSearchHandledRef.current = true;
+    void geocodeText(initialLocation);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialLocation]);
 
   useEffect(() => {
     const term = searchInput.trim();
@@ -208,12 +239,10 @@ export default function MapPage() {
     const timer = window.setTimeout(async () => {
       setAutocompleteLoading(true);
       try {
-        const response = await fetch(buildAutocompleteUrl(term), { signal: controller.signal });
-        if (!response.ok) throw new Error("Autocomplete failed");
-        const data = (await response.json()) as { features?: GeoapifyFeature[] };
-        setAutocompleteOptions(data.features ?? []);
-      } catch (error) {
-        if (!(error instanceof DOMException && error.name === "AbortError")) {
+        const features = await fetchGeoapifyFeatures(buildAutocompleteUrl(term), controller.signal);
+        setAutocompleteOptions(features);
+      } catch (fetchError) {
+        if (!(fetchError instanceof DOMException && fetchError.name === "AbortError")) {
           setAutocompleteOptions([]);
         }
       } finally {
@@ -231,80 +260,105 @@ export default function MapPage() {
     return allCourses
       .filter((course) => course.format === "offline")
       .map((course) => {
-        if (!activePoint || !hasCoordinates(course)) return course;
+        if (!activeOrigin || !hasCoordinates(course)) return course;
         return {
           ...course,
-          distanceKm: getDistanceKm(activePoint.lat, activePoint.lng, course.latitude, course.longitude),
+          distanceKm: getDistanceKm(activeOrigin.lat, activeOrigin.lng, course.latitude, course.longitude),
         };
       });
-  }, [activePoint, allCourses]);
+  }, [activeOrigin, allCourses]);
 
   const filteredCourses = useMemo(() => {
     const radiusNumber = radius === "all" ? null : Number(radius);
+
     return coursesWithDistance
-      .filter((course) => courseMatchesSearch(course, searchTerm))
       .filter((course) => {
-        if (!radiusNumber || !activePoint) return true;
+        if (fallbackSearchTerm) return courseMatchesSearch(course, fallbackSearchTerm);
+        if (activeOrigin) return hasCoordinates(course);
+        return true;
+      })
+      .filter((course) => {
+        if (!radiusNumber || !activeOrigin) return true;
         return typeof course.distanceKm === "number" && course.distanceKm <= radiusNumber;
       })
       .sort((a, b) => {
-        if (!activePoint) return Number(b.is_promoted) - Number(a.is_promoted);
+        if (!activeOrigin) return Number(b.is_promoted) - Number(a.is_promoted);
         const aDistance = a.distanceKm ?? Number.POSITIVE_INFINITY;
         const bDistance = b.distanceKm ?? Number.POSITIVE_INFINITY;
         return aDistance - bDistance;
       });
-  }, [activePoint, coursesWithDistance, radius, searchTerm]);
+  }, [activeOrigin, coursesWithDistance, fallbackSearchTerm, radius]);
 
-  const markerCourses = filteredCourses.filter(hasCoordinates);
+  const markerCourses = useMemo(() => filteredCourses.filter(hasCoordinates), [filteredCourses]);
   const selectedCourse = filteredCourses.find((course) => course.id === selectedCourseId) ?? null;
 
-  const applySearchPoint = (point: MapPoint, label: string) => {
-    setSearchLocation({ ...point, label });
-    setSearchInput(label);
-    setSearchTerm(label);
+  const applyAddressPoint = (point: Omit<ActiveLocation, "source">) => {
+    const location: ActiveLocation = { ...point, source: "address" };
+    setActiveSearchLocation(location);
+    setSearchInput(location.label);
+    setFallbackSearchTerm("");
     setAutocompleteOptions([]);
+    setSelectedCourseId(null);
   };
 
-  const geocodeText = async (text: string) => {
+  async function geocodeText(text: string) {
     const term = text.trim();
-    setSearchTerm(term);
+    setAutocompleteOptions([]);
+    setSelectedCourseId(null);
+
     if (!term) {
-      setSearchLocation(null);
+      setActiveSearchLocation(null);
+      setFallbackSearchTerm("");
+      setRadius("all");
       return;
     }
 
     if (!hasGeoapifyKey) {
+      setActiveSearchLocation(null);
+      setFallbackSearchTerm(term);
       toast({
         title: "Thiếu cấu hình Geoapify API key",
-        description: "VET sẽ tạm lọc theo nội dung địa chỉ đã nhập.",
+        description: "VET sẽ tìm theo nội dung địa chỉ trong danh sách khóa học.",
         variant: "destructive",
       });
       return;
     }
 
-    setGeocoding(true);
+    setIsGeocoding(true);
     try {
       const features = await fetchGeoapifyFeatures(buildGeocodeUrl(term));
       const point = features.map(getFeaturePoint).find(Boolean);
       if (!point) {
+        setActiveSearchLocation(null);
+        setFallbackSearchTerm(term);
         toast({
-          title: "Không tìm thấy tọa độ",
-          description: "VET sẽ tạm lọc theo nội dung địa chỉ đã nhập.",
+          title: "Không tìm thấy tọa độ khu vực này",
+          description: "VET sẽ tìm theo nội dung địa chỉ.",
         });
         return;
       }
-      applySearchPoint(point, point.label || term);
+
+      applyAddressPoint(point);
+      toast({ title: `Đang tìm lớp gần: ${point.label}` });
     } catch {
+      setActiveSearchLocation(null);
+      setFallbackSearchTerm(term);
       toast({
-        title: "Không thể tìm vị trí này",
-        description: "VET sẽ tạm lọc theo nội dung địa chỉ đã nhập.",
+        title: "Không thể tìm tọa độ khu vực này",
+        description: "VET sẽ tìm theo nội dung địa chỉ.",
       });
     } finally {
-      setGeocoding(false);
+      setIsGeocoding(false);
     }
+  }
+
+  const requestCurrentLocation = () => {
+    setIsLocationConsentOpen(true);
   };
 
-  const locateUser = () => {
+  const confirmCurrentLocation = () => {
+    setIsLocationConsentOpen(false);
+
     if (!navigator.geolocation) {
       toast({
         title: "Trình duyệt chưa hỗ trợ định vị",
@@ -314,35 +368,42 @@ export default function MapPage() {
       return;
     }
 
-    setLocating(true);
+    setIsGettingLocation(true);
     navigator.geolocation.getCurrentPosition(
       async (position) => {
-        const point = {
+        const point: ActiveLocation = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,
-          label: "Vị trí của bạn",
+          label: "Vị trí hiện tại",
+          source: "current",
         };
-        setUserLocation(point);
-        setSearchLocation(null);
-        setLocating(false);
 
+        let formattedAddress = "";
         if (hasGeoapifyKey) {
           try {
             const features = await fetchGeoapifyFeatures(buildReverseGeocodeUrl(point.lat, point.lng));
-            const label = features[0] ? getFeatureLabel(features[0]) : "";
-            setReverseAddress(label);
+            formattedAddress = features[0] ? getFeatureLabel(features[0]) : "";
           } catch {
-            setReverseAddress("");
+            formattedAddress = "";
           }
         }
 
+        const nextLocation = { ...point, label: formattedAddress || point.label };
+        setUserLocation(nextLocation);
+        setActiveSearchLocation(nextLocation);
+        setFallbackSearchTerm("");
+        setSearchInput("");
+        setAutocompleteOptions([]);
+        setSelectedCourseId(null);
+        setIsGettingLocation(false);
         toast({ title: "Đã dùng vị trí hiện tại để sắp xếp lớp học gần bạn." });
       },
-      () => {
-        setLocating(false);
+      (locationError) => {
+        setIsGettingLocation(false);
         toast({
           title: "Không thể lấy vị trí",
-          description: "Bạn có thể nhập khu vực thủ công để tìm lớp học gần bạn.",
+          description: getLocationErrorMessage(locationError),
+          variant: locationError.code === locationError.PERMISSION_DENIED ? "destructive" : "default",
         });
       },
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 },
@@ -351,13 +412,42 @@ export default function MapPage() {
 
   const submitSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    geocodeText(searchInput);
+    const term = searchInput.trim();
+    if (activeSearchLocation?.source === "address" && normalize(activeSearchLocation.label) === normalize(term)) {
+      setFallbackSearchTerm("");
+      return;
+    }
+    void geocodeText(term);
   };
+
+  const clearSearch = () => {
+    setSearchInput("");
+    setFallbackSearchTerm("");
+    setAutocompleteOptions([]);
+    setActiveSearchLocation(null);
+    setRadius("all");
+    setSelectedCourseId(null);
+  };
+
+  const activeStatusText =
+    activeLocationSource === "current"
+      ? activeOrigin?.label && activeOrigin.label !== "Vị trí hiện tại"
+        ? `Bạn đang ở gần: ${activeOrigin.label}`
+        : "Đang tìm lớp gần vị trí hiện tại"
+      : activeLocationSource === "address"
+        ? `Đang tìm lớp gần: ${activeOrigin?.label}`
+        : fallbackSearchTerm
+          ? `Đang tìm theo nội dung địa chỉ: ${fallbackSearchTerm}`
+          : "Hiển thị các lớp offline trên bản đồ";
+
+  const distancePrefix = activeLocationSource === "address" ? "Cách khu vực tìm kiếm" : "Cách bạn";
+  const showUserMarker = activeLocationSource === "current" && userLocation;
+  const showAddressMarker = activeLocationSource === "address" && activeOrigin;
 
   return (
     <MainLayout hideFooter>
       <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-background lg:flex-row">
-        <aside className="flex h-[46vh] min-h-0 w-full flex-col border-b bg-card lg:h-full lg:w-[420px] lg:border-b-0 lg:border-r">
+        <aside className="flex h-[48vh] min-h-0 w-full flex-col border-b bg-card lg:h-full lg:w-[430px] lg:border-b-0 lg:border-r">
           <div className="space-y-4 border-b p-4">
             <div className="flex items-center gap-2">
               <Link to="/search">
@@ -367,7 +457,9 @@ export default function MapPage() {
               </Link>
               <div className="min-w-0">
                 <h1 className="font-semibold text-foreground">Lớp học gần bạn</h1>
-                <p className="text-xs text-muted-foreground">Khám phá khóa học offline quanh khu vực bạn quan tâm.</p>
+                <p className="text-xs text-muted-foreground">
+                  Khám phá khóa học offline quanh khu vực bạn quan tâm.
+                </p>
               </div>
             </div>
 
@@ -376,67 +468,132 @@ export default function MapPage() {
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <div>
                   <p className="font-medium">Thiếu cấu hình Geoapify API key.</p>
-                  <p>Map tiles/geocoding sẽ hoạt động sau khi thêm `VITE_GEOAPIFY_API_KEY`.</p>
+                  <p>Thêm `VITE_GEOAPIFY_API_KEY` để dùng bản đồ, autocomplete và geocoding.</p>
                 </div>
               </div>
             )}
 
-            <form onSubmit={submitSearch} className="relative">
-              <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2">
-                <Search className="h-4 w-4 text-muted-foreground" />
-                <Input
-                  value={searchInput}
-                  onChange={(event) => setSearchInput(event.target.value)}
-                  placeholder="Tìm theo quận, đường hoặc khu vực..."
-                  className="h-auto border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
-                />
-                {(geocoding || autocompleteLoading) && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+            <form onSubmit={submitSearch} className="space-y-2">
+              <div className="relative">
+                <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2">
+                  <Search className="h-4 w-4 text-muted-foreground" />
+                  <Input
+                    value={searchInput}
+                    onChange={(event) => {
+                      setSearchInput(event.target.value);
+                      if (!event.target.value.trim()) setFallbackSearchTerm("");
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === "Escape") setAutocompleteOptions([]);
+                    }}
+                    placeholder="Nhập quận, đường hoặc khu vực..."
+                    className="h-auto border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                  />
+                  {(isGeocoding || autocompleteLoading) && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                  {searchInput && !isGeocoding && !autocompleteLoading && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSearchInput("");
+                        setAutocompleteOptions([]);
+                      }}
+                      className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                      aria-label="Xóa nội dung nhập"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {autocompleteOptions.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full z-[700] mt-2 max-h-72 overflow-y-auto rounded-xl border bg-popover shadow-elevated">
+                    {autocompleteOptions.map((feature, index) => {
+                      const label = getFeatureLabel(feature);
+                      const point = getFeaturePoint(feature);
+                      return (
+                        <button
+                          key={`${label}-${index}`}
+                          type="button"
+                          disabled={!point}
+                          onClick={() => point && applyAddressPoint(point)}
+                          className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50"
+                        >
+                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                          <span className="line-clamp-2">{label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
-              {autocompleteOptions.length > 0 && (
-                <div className="absolute left-0 right-0 top-full z-[700] mt-2 overflow-hidden rounded-xl border bg-popover shadow-elevated">
-                  {autocompleteOptions.map((feature, index) => {
-                    const label = getFeatureLabel(feature);
-                    const point = getFeaturePoint(feature);
-                    return (
-                      <button
-                        key={`${label}-${index}`}
-                        type="button"
-                        disabled={!point}
-                        onClick={() => point && applySearchPoint(point, label)}
-                        className="flex w-full items-start gap-2 px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50"
-                      >
-                        <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                        <span className="line-clamp-2">{label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <Button
+                  type="submit"
+                  variant="outline"
+                  disabled={isGeocoding || !searchInput.trim()}
+                  className="rounded-xl"
+                >
+                  {isGeocoding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+                  Tìm khu vực
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={!searchInput && !activeSearchLocation && !fallbackSearchTerm}
+                  onClick={clearSearch}
+                  className="rounded-xl"
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Xóa tìm kiếm
+                </Button>
+              </div>
             </form>
 
             <div className="grid gap-3">
               <Button
                 type="button"
-                onClick={locateUser}
-                disabled={locating}
-                className="gradient-primary justify-center rounded-xl border-0 text-primary-foreground"
+                onClick={requestCurrentLocation}
+                disabled={isGettingLocation}
+                className="rounded-xl border-0 gradient-primary text-primary-foreground"
               >
-                {locating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
-                Dùng vị trí của tôi
+                {isGettingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
+                {isGettingLocation ? "Đang lấy vị trí..." : "Dùng vị trí của tôi"}
               </Button>
 
-              {userLocation && (
-                <div className="rounded-xl border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">Bạn đang ở gần: </span>
-                  {reverseAddress || "Vị trí hiện tại"}
+              {isLocationConsentOpen && (
+                <div className="rounded-2xl border border-primary/20 bg-primary/5 p-3 text-sm shadow-sm">
+                  <p className="font-semibold text-foreground">
+                    Cho phép VET dùng vị trí hiện tại để tìm lớp gần bạn?
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    VET sẽ dùng vị trí của bạn để gợi ý các lớp học offline gần nhất. Bạn có thể từ chối và nhập khu vực thủ công.
+                  </p>
+                  <div className="mt-3 flex flex-wrap justify-end gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-xl"
+                      onClick={() => setIsLocationConsentOpen(false)}
+                    >
+                      Không
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-xl border-0 gradient-primary text-primary-foreground"
+                      onClick={confirmCurrentLocation}
+                    >
+                      Đồng ý
+                    </Button>
+                  </div>
                 </div>
               )}
 
-              {searchLocation && (
+              {activeStatusText && (
                 <div className="rounded-xl border bg-primary/5 p-3 text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">Đang tìm quanh: </span>
-                  {searchLocation.label || searchInput}
+                  <span className="font-medium text-foreground">{activeStatusText}</span>
                 </div>
               )}
 
@@ -446,7 +603,7 @@ export default function MapPage() {
                     <button
                       key={item.value}
                       type="button"
-                      disabled={item.value !== "all" && !activePoint}
+                      disabled={item.value !== "all" && !activeOrigin}
                       onClick={() => setRadius(item.value)}
                       className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
                         radius === item.value
@@ -458,8 +615,10 @@ export default function MapPage() {
                     </button>
                   ))}
                 </div>
-                {!activePoint && (
-                  <p className="text-xs text-muted-foreground">Bật vị trí hoặc nhập khu vực để lọc theo khoảng cách.</p>
+                {!activeOrigin && (
+                  <p className="text-xs text-muted-foreground">
+                    Bật vị trí hoặc nhập khu vực để lọc theo khoảng cách.
+                  </p>
                 )}
               </div>
             </div>
@@ -479,81 +638,95 @@ export default function MapPage() {
               <div className="flex flex-col items-center px-5 py-12 text-center">
                 <MapPin className="mb-3 h-10 w-10 text-muted-foreground" />
                 <p className="font-medium text-foreground">Chưa tìm thấy lớp học gần khu vực này.</p>
-                <p className="mt-1 text-sm text-muted-foreground">Thử đổi từ khóa hoặc mở rộng bán kính tìm kiếm.</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Thử đổi từ khóa, nhập khu vực khác hoặc mở rộng bán kính tìm kiếm.
+                </p>
               </div>
             ) : (
               <div className="divide-y">
-                {filteredCourses.map((course) => (
-                  <button
-                    key={course.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedCourseId(course.id);
-                      if (typeof course.latitude !== "number" || typeof course.longitude !== "number") {
-                        navigate(`/course/${course.id}`);
-                      }
-                    }}
-                    className={`flex w-full gap-3 p-4 text-left transition-colors hover:bg-muted/50 ${
-                      selectedCourseId === course.id ? "bg-primary/5" : ""
-                    }`}
-                  >
-                    <img
-                      src={course.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200&h=200&fit=crop"}
-                      alt={course.title}
-                      className="h-20 w-20 shrink-0 rounded-xl object-cover"
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-start justify-between gap-2">
-                        <h2 className="line-clamp-2 text-sm font-semibold text-card-foreground">{course.title}</h2>
-                        <Badge variant="outline" className="shrink-0 rounded-full border-primary/20 bg-primary/5 text-[10px] text-primary">
-                          Offline
-                        </Badge>
-                      </div>
-                      <p className="mt-1 truncate text-xs text-muted-foreground">{course.mentor?.name || "Mentor"}</p>
-                      <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                        <Star className="h-3 w-3 fill-warning text-warning" />
-                        <span>{course.rating}</span>
-                        {typeof course.distanceKm === "number" && (
-                          <>
-                            <span>•</span>
-                            <Crosshair className="h-3 w-3" />
-                            <span>{course.distanceKm.toFixed(1)} km</span>
-                          </>
+                {filteredCourses.map((course) => {
+                  const courseHasCoordinates =
+                    typeof course.latitude === "number" && typeof course.longitude === "number";
+
+                  return (
+                    <button
+                      key={course.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCourseId(course.id);
+                        if (!courseHasCoordinates) navigate(`/course/${course.id}`);
+                      }}
+                      className={`flex w-full gap-3 p-4 text-left transition-colors hover:bg-muted/50 ${
+                        selectedCourseId === course.id ? "bg-primary/5" : ""
+                      }`}
+                    >
+                      <img
+                        src={course.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200&h=200&fit=crop"}
+                        alt={course.title}
+                        className="h-20 w-20 shrink-0 rounded-xl object-cover"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <h2 className="line-clamp-2 text-sm font-semibold text-card-foreground">{course.title}</h2>
+                          <Badge variant="outline" className="shrink-0 rounded-full border-primary/20 bg-primary/5 text-[10px] text-primary">
+                            Offline
+                          </Badge>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{course.mentor?.name || "Mentor"}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <Star className="h-3 w-3 fill-warning text-warning" />
+                            {course.rating}
+                          </span>
+                          {typeof course.distanceKm === "number" && (
+                            <span className="flex items-center gap-1">
+                              <Crosshair className="h-3 w-3" />
+                              {distancePrefix} {course.distanceKm.toFixed(1)} km
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{course.location || "Chưa có địa chỉ"}</p>
+                        <p className="mt-1 text-sm font-bold text-primary">{formatPrice(course.price)}</p>
+                        {!courseHasCoordinates && (
+                          <p className="mt-1 text-xs text-warning">Chưa có tọa độ, mở chi tiết để xem thêm.</p>
                         )}
                       </div>
-                      <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{course.location || "Chưa có địa chỉ"}</p>
-                      <p className="mt-1 text-sm font-bold text-primary">{formatPrice(course.price)}</p>
-                      {!hasCoordinates(course) && (
-                        <p className="mt-1 text-xs text-warning">Chưa có tọa độ, mở chi tiết để xem thêm.</p>
-                      )}
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         </aside>
 
-        <section className="relative min-h-[54vh] flex-1 bg-muted lg:min-h-0">
-          {hasGeoapifyKey ? (
-            <MapContainer center={DEFAULT_MAP_CENTER} zoom={DEFAULT_MAP_ZOOM} scrollWheelZoom className="h-full w-full">
-              <TileLayer attribution='&copy; <a href="https://www.geoapify.com/">Geoapify</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' url={GEOAPIFY_TILE_URL} />
-              <MapFocus selectedCourse={selectedCourse} activePoint={selectedCourse ? null : activePoint} />
+        <section className="relative min-h-[52vh] flex-1 bg-muted lg:min-h-0">
+          <MapContainer center={DEFAULT_MAP_CENTER} zoom={DEFAULT_MAP_ZOOM} scrollWheelZoom className="h-full w-full">
+            {hasGeoapifyKey && (
+              <TileLayer
+                attribution='&copy; <a href="https://www.geoapify.com/">Geoapify</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url={GEOAPIFY_TILE_URL}
+              />
+            )}
+              <MapFocusController
+                activeLocation={selectedCourse ? null : activeOrigin}
+                visibleCourses={markerCourses}
+                focusedCourse={selectedCourse}
+              />
 
-              {userLocation && (
+              {showUserMarker && (
                 <Marker position={[userLocation.lat, userLocation.lng]} icon={userIcon}>
                   <Popup>
                     <p className="text-sm font-semibold">Vị trí của bạn</p>
-                    {reverseAddress && <p className="mt-1 text-xs text-muted-foreground">{reverseAddress}</p>}
+                    <p className="mt-1 text-xs text-muted-foreground">{userLocation.label}</p>
                   </Popup>
                 </Marker>
               )}
 
-              {searchLocation && (
-                <Marker position={[searchLocation.lat, searchLocation.lng]} icon={searchIcon}>
+              {showAddressMarker && (
+                <Marker position={[activeOrigin.lat, activeOrigin.lng]} icon={searchIcon}>
                   <Popup>
-                    <p className="text-sm font-semibold">Khu vực tìm kiếm</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{searchLocation.label || searchInput}</p>
+                    <p className="text-sm font-semibold">Khu vực đang tìm</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{activeOrigin.label}</p>
                   </Popup>
                 </Marker>
               )}
@@ -574,7 +747,7 @@ export default function MapPage() {
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Star className="h-3 w-3 fill-warning text-warning" />
                         <span>{course.rating}</span>
-                        {typeof course.distanceKm === "number" && <span>• {course.distanceKm.toFixed(1)} km</span>}
+                        {typeof course.distanceKm === "number" && <span>· {course.distanceKm.toFixed(1)} km</span>}
                       </div>
                       <p className="text-xs text-muted-foreground">{course.location || "Chưa có địa chỉ"}</p>
                       <p className="font-bold text-primary">{formatPrice(course.price)}</p>
@@ -585,11 +758,12 @@ export default function MapPage() {
                   </Popup>
                 </Marker>
               ))}
-            </MapContainer>
-          ) : (
-            <div className="flex h-full items-center justify-center p-6">
-              <div className="max-w-md rounded-2xl border bg-card p-6 text-center shadow-card">
-                <AlertCircle className="mx-auto mb-3 h-10 w-10 text-warning" />
+          </MapContainer>
+
+          {!hasGeoapifyKey && (
+            <div className="absolute left-4 right-4 top-4 z-[500] rounded-2xl border border-warning/30 bg-card/95 p-4 text-sm shadow-card backdrop-blur md:left-auto md:max-w-md">
+              <div className="flex gap-3">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
                 <h2 className="font-semibold text-foreground">Thiếu cấu hình Geoapify API key.</h2>
                 <p className="mt-2 text-sm text-muted-foreground">
                   Thêm `VITE_GEOAPIFY_API_KEY` vào `.env.local` để tải bản đồ Geoapify và dùng geocoding.

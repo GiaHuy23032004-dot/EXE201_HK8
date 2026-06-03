@@ -17,6 +17,10 @@ import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { ReportModal } from "@/components/reports/ReportModal";
+import {
+  formatVnd,
+  inferPaymentOptionFromBooking,
+} from "@/lib/learnerPayment";
 
 const statusMap: Record<string, { label: string; color: string }> = {
   pending:   { label: "Chờ xác nhận", color: "bg-warning/10 text-warning border-warning/20" },
@@ -116,9 +120,47 @@ export default function LearnerDashboard() {
     });
   };
 
+  const getBookingPaymentDisplay = (booking: typeof bookings[0]) => {
+    const transaction = (transactions as any[]).find((txn) => txn.booking_id === booking.id);
+    const paymentOption = inferPaymentOptionFromBooking({
+      courseFormat: booking.course?.format,
+      paymentMethod: booking.payment_method,
+      totalPrice: booking.total_price,
+      transactionAmount: transaction?.amount,
+    });
+    const isPaid = transaction?.status === "success";
+
+    if (paymentOption === "platform_full") {
+      return {
+        label: isPaid ? "Đã thanh toán" : "Chờ thanh toán",
+        detail: "Cần thanh toán 100% qua nền tảng",
+        color: isPaid ? "bg-success/10 text-success border-success/20" : "bg-warning/10 text-warning border-warning/20",
+        actionLabel: isPaid ? null : "Thanh toán",
+      };
+    }
+
+    if (paymentOption === "platform_deposit") {
+      const remaining = Math.max(0, booking.total_price - (transaction?.amount ?? 0));
+      return {
+        label: isPaid ? "Đã đặt cọc" : "Chờ đặt cọc",
+        detail: isPaid ? `Còn lại trả tại lớp: ${formatVnd(remaining)}` : "Thanh toán đặt cọc để giữ chỗ",
+        color: isPaid ? "bg-success/10 text-success border-success/20" : "bg-warning/10 text-warning border-warning/20",
+        actionLabel: isPaid ? null : "Thanh toán đặt cọc",
+      };
+    }
+
+    return {
+      label: booking.status === "pending" ? "Chờ mentor xác nhận" : "Thanh toán tại lớp",
+      detail: "Thanh toán tại lớp",
+      color: "bg-muted text-muted-foreground border-border",
+      actionLabel: null,
+    };
+  };
+
   function BookingItem({ booking }: { booking: typeof bookings[0] }) {
     const s = statusMap[booking.status] ?? statusMap.pending;
     const existingReview = reviews.some((review: any) => review.booking_id === booking.id);
+    const paymentDisplay = getBookingPaymentDisplay(booking);
     return (
       <div className="flex gap-4 rounded-2xl border bg-card p-4 shadow-card">
         <img
@@ -129,13 +171,31 @@ export default function LearnerDashboard() {
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-2">
             <h3 className="text-sm font-semibold text-card-foreground line-clamp-1">{booking.course?.title}</h3>
-            <Badge className={`${s.color} text-xs whitespace-nowrap`}>{s.label}</Badge>
+            <div className="flex flex-col items-end gap-1">
+              <Badge className={`${s.color} text-xs whitespace-nowrap`}>{s.label}</Badge>
+              <Badge variant="outline" className={`${paymentDisplay.color} text-xs whitespace-nowrap`}>
+                {paymentDisplay.label}
+              </Badge>
+            </div>
           </div>
           <p className="text-xs text-muted-foreground mt-1">Mentor: {booking.mentor?.name || "Mentor"}</p>
           <div className="mt-2 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(booking.booking_date).toLocaleDateString("vi-VN")}</span>
             <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{booking.start_time} - {booking.end_time}</span>
           </div>
+          <p className="mt-2 text-xs text-muted-foreground">{paymentDisplay.detail}</p>
+          {paymentDisplay.actionLabel && (
+            <Link to={`/checkout/${booking.id}`}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-2 h-7 rounded-lg text-xs"
+              >
+                <Receipt className="mr-1 h-3 w-3" />
+                {paymentDisplay.actionLabel}
+              </Button>
+            </Link>
+          )}
           {booking.status === "completed" && !existingReview && (
             <Button
               variant="outline"
@@ -306,11 +366,14 @@ export default function LearnerDashboard() {
                       />
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-card-foreground line-clamp-1">{t.course?.title || "Khóa học"}</p>
+                        <p className="text-xs font-medium text-primary">
+                          {t.txn_type === "offline" ? "Đặt cọc giữ chỗ" : "Thanh toán khóa học"}
+                        </p>
                         <p className="text-xs text-muted-foreground font-mono mt-0.5">{t.reference_code || t.id.slice(0, 8).toUpperCase()}</p>
                         <p className="text-xs text-muted-foreground">{new Date(t.created_at).toLocaleDateString("vi-VN")}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <p className="text-sm font-bold text-foreground">{t.amount.toLocaleString("vi-VN")}đ</p>
+                        <p className="text-sm font-bold text-foreground">{formatVnd(t.amount)}</p>
                         <Badge className={`mt-1 text-[10px] border-0 ${
                           t.status === "success" ? "bg-success/10 text-success" :
                           t.status === "refunded" ? "bg-warning/10 text-warning" :
