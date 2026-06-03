@@ -2,6 +2,8 @@ import { Link } from "react-router-dom";
 import { Star, MapPin, Monitor, Users, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
+import { TrustBadges } from "@/components/marketplace/TrustBadges";
+import type { PublicMentorTrustBadge } from "@/hooks/usePublicMentorVerification";
 
 export interface CourseData {
   id: string;
@@ -18,6 +20,7 @@ export interface CourseData {
   distance?: string;
   promoted?: boolean;
   studentsCount?: number;
+  mentorBadges?: PublicMentorTrustBadge[];
 }
 
 export function CourseCard({ course }: { course: CourseData }) {
@@ -74,8 +77,9 @@ export function CourseCard({ course }: { course: CourseData }) {
         <div className="p-4">
           <div className="mb-2 flex items-center gap-2">
             <img src={course.mentorAvatar} alt={course.mentorName} className="h-6 w-6 rounded-full object-cover ring-2 ring-primary/20" />
-            <span className="text-xs font-medium text-muted-foreground">{course.mentorName}</span>
+            <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">{course.mentorName}</span>
           </div>
+          <TrustBadges badges={course.mentorBadges ?? []} compact className="mb-2" />
 
           <h3 className="mb-3 line-clamp-2 text-sm font-semibold leading-snug text-card-foreground group-hover:text-primary transition-colors">
             {course.title}

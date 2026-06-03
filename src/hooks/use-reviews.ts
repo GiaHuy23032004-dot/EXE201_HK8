@@ -60,13 +60,24 @@ export function useCreateReview() {
       rating: number;
       comment?: string;
     }) => {
-      const { data, error } = await supabase
-        .from("reviews")
-        .insert(payload)
-        .select()
-        .single();
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error("Vui lòng đăng nhập để gửi đánh giá.");
+
+      const { data, error } = await supabase.functions.invoke("learner-review-actions", {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: {
+          action: "create_review",
+          bookingId: payload.booking_id,
+          rating: payload.rating,
+          comment: payload.comment,
+        },
+      });
       if (error) throw error;
-      return data;
+      if (data?.error) throw new Error(data.error);
+      return data.review;
     },
     onSuccess: (_, vars) => {
       qc.invalidateQueries({ queryKey: ["reviews", vars.course_id] });

@@ -17,13 +17,16 @@ export type Database = {
           username: string | null
           email: string | null
           phone: string | null
+          address: string | null
           avatar_url: string | null
           bio: string | null
           real_name: string | null
           mentor_headline: string | null
           teaching_fields: string[] | null
           experience_years: number | null
+          district: string | null
           city: string | null
+          location_updated_at: string | null
           portfolio_url: string | null
           role: string
           is_blocked: boolean
@@ -37,13 +40,16 @@ export type Database = {
           username?: string | null
           email?: string | null
           phone?: string | null
+          address?: string | null
           avatar_url?: string | null
           bio?: string | null
           real_name?: string | null
           mentor_headline?: string | null
           teaching_fields?: string[] | null
           experience_years?: number | null
+          district?: string | null
           city?: string | null
+          location_updated_at?: string | null
           portfolio_url?: string | null
           role?: string
           is_blocked?: boolean
@@ -57,13 +63,16 @@ export type Database = {
           username?: string | null
           email?: string | null
           phone?: string | null
+          address?: string | null
           avatar_url?: string | null
           bio?: string | null
           real_name?: string | null
           mentor_headline?: string | null
           teaching_fields?: string[] | null
           experience_years?: number | null
+          district?: string | null
           city?: string | null
+          location_updated_at?: string | null
           portfolio_url?: string | null
           role?: string
           is_blocked?: boolean
@@ -103,6 +112,9 @@ export type Database = {
           format: Database["public"]["Enums"]["course_format"]
           price: number
           location: string | null
+          latitude: number | null
+          longitude: number | null
+          location_geocoded_at: string | null
           meeting_link: string | null
           image_url: string | null
           status: Database["public"]["Enums"]["course_status"]
@@ -111,6 +123,14 @@ export type Database = {
           rating: number
           review_count: number
           start_date: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          rejection_reason: string | null
+          admin_note: string | null
+          is_hidden: boolean
+          hidden_reason: string | null
+          hidden_at: string | null
+          hidden_by: string | null
           created_at: string
           updated_at: string
         }
@@ -123,6 +143,9 @@ export type Database = {
           format?: Database["public"]["Enums"]["course_format"]
           price?: number
           location?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          location_geocoded_at?: string | null
           meeting_link?: string | null
           image_url?: string | null
           status?: Database["public"]["Enums"]["course_status"]
@@ -131,6 +154,14 @@ export type Database = {
           rating?: number
           review_count?: number
           start_date?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          rejection_reason?: string | null
+          admin_note?: string | null
+          is_hidden?: boolean
+          hidden_reason?: string | null
+          hidden_at?: string | null
+          hidden_by?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -143,6 +174,9 @@ export type Database = {
           format?: Database["public"]["Enums"]["course_format"]
           price?: number
           location?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          location_geocoded_at?: string | null
           meeting_link?: string | null
           image_url?: string | null
           status?: Database["public"]["Enums"]["course_status"]
@@ -151,6 +185,14 @@ export type Database = {
           rating?: number
           review_count?: number
           start_date?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          rejection_reason?: string | null
+          admin_note?: string | null
+          is_hidden?: boolean
+          hidden_reason?: string | null
+          hidden_at?: string | null
+          hidden_by?: string | null
           created_at?: string
           updated_at?: string
         }
@@ -432,42 +474,201 @@ export type Database = {
       mentor_verification_proofs: {
         Row: {
           id: string
+          verification_id: string
           mentor_id: string
           proof_type: Database["public"]["Enums"]["mentor_verification_proof_type"]
           title: string
           url: string | null
           file_path: string | null
           description: string | null
+          issuer: string | null
+          issued_year: number | null
+          file_name: string | null
+          file_size_bytes: number | null
+          file_mime_type: string | null
           metadata: Json
+          status: string
+          review_status: string
+          admin_note: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
           created_at: string
           updated_at: string
         }
         Insert: {
           id?: string
+          verification_id: string
           mentor_id: string
           proof_type: Database["public"]["Enums"]["mentor_verification_proof_type"]
           title: string
           url?: string | null
           file_path?: string | null
           description?: string | null
+          issuer?: string | null
+          issued_year?: number | null
+          file_name?: string | null
+          file_size_bytes?: number | null
+          file_mime_type?: string | null
           metadata?: Json
+          status?: string
+          review_status?: string
+          admin_note?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
           created_at?: string
           updated_at?: string
         }
         Update: {
           id?: string
+          verification_id?: string
           mentor_id?: string
           proof_type?: Database["public"]["Enums"]["mentor_verification_proof_type"]
           title?: string
           url?: string | null
           file_path?: string | null
           description?: string | null
+          issuer?: string | null
+          issued_year?: number | null
+          file_name?: string | null
+          file_size_bytes?: number | null
+          file_mime_type?: string | null
           metadata?: Json
+          status?: string
+          review_status?: string
+          admin_note?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
           created_at?: string
           updated_at?: string
         }
         Relationships: [
+          { foreignKeyName: "mentor_verification_proofs_verification_id_fkey"; columns: ["verification_id"]; referencedRelation: "mentor_verifications"; referencedColumns: ["id"] },
           { foreignKeyName: "mentor_verification_proofs_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] }
+        ]
+      }
+      mentor_verification_items: {
+        Row: {
+          id: string
+          mentor_id: string
+          proof_id: string | null
+          item_type: string
+          review_status: string
+          admin_note: string | null
+          reviewed_by: string | null
+          reviewed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          mentor_id: string
+          proof_id?: string | null
+          item_type: string
+          review_status?: string
+          admin_note?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          mentor_id?: string
+          proof_id?: string | null
+          item_type?: string
+          review_status?: string
+          admin_note?: string | null
+          reviewed_by?: string | null
+          reviewed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "mentor_verification_items_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "mentor_verification_items_proof_id_fkey"; columns: ["proof_id"]; referencedRelation: "mentor_verification_proofs"; referencedColumns: ["id"] }
+        ]
+      }
+      mentor_trust_badges: {
+        Row: {
+          id: string
+          mentor_id: string
+          badge_type: string
+          status: string
+          public_visible: boolean
+          reason: string | null
+          granted_by: string | null
+          granted_at: string
+          suspended_until: string | null
+          revoked_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          mentor_id: string
+          badge_type: string
+          status?: string
+          public_visible?: boolean
+          reason?: string | null
+          granted_by?: string | null
+          granted_at?: string
+          suspended_until?: string | null
+          revoked_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          mentor_id?: string
+          badge_type?: string
+          status?: string
+          public_visible?: boolean
+          reason?: string | null
+          granted_by?: string | null
+          granted_at?: string
+          suspended_until?: string | null
+          revoked_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "mentor_trust_badges_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] }
+        ]
+      }
+      mentor_badge_events: {
+        Row: {
+          id: string
+          mentor_id: string
+          badge_type: string
+          event_type: string
+          reason: string | null
+          created_by: string | null
+          report_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          mentor_id: string
+          badge_type: string
+          event_type: string
+          reason?: string | null
+          created_by?: string | null
+          report_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          mentor_id?: string
+          badge_type?: string
+          event_type?: string
+          reason?: string | null
+          created_by?: string | null
+          report_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "mentor_badge_events_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "mentor_badge_events_report_id_fkey"; columns: ["report_id"]; referencedRelation: "reports"; referencedColumns: ["id"] }
         ]
       }
       wallet_transactions: {
@@ -588,6 +789,10 @@ export type Database = {
           reporter_id: string
           reported_user_id: string | null
           course_id: string | null
+          booking_id: string | null
+          transaction_id: string | null
+          comment_id: string | null
+          reviewed_target_snapshot: Json
           status: Database["public"]["Enums"]["report_status"]
           admin_verdict: string | null
           admin_email: string | null
@@ -603,6 +808,10 @@ export type Database = {
           reporter_id: string
           reported_user_id?: string | null
           course_id?: string | null
+          booking_id?: string | null
+          transaction_id?: string | null
+          comment_id?: string | null
+          reviewed_target_snapshot?: Json
           status?: Database["public"]["Enums"]["report_status"]
           admin_verdict?: string | null
           admin_email?: string | null
@@ -618,6 +827,10 @@ export type Database = {
           reporter_id?: string
           reported_user_id?: string | null
           course_id?: string | null
+          booking_id?: string | null
+          transaction_id?: string | null
+          comment_id?: string | null
+          reviewed_target_snapshot?: Json
           status?: Database["public"]["Enums"]["report_status"]
           admin_verdict?: string | null
           admin_email?: string | null
@@ -625,6 +838,38 @@ export type Database = {
           created_at?: string
         }
         Relationships: []
+      }
+      report_attachments: {
+        Row: {
+          id: string
+          report_id: string
+          file_url: string
+          file_path: string | null
+          file_type: string | null
+          file_name: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          report_id: string
+          file_url: string
+          file_path?: string | null
+          file_type?: string | null
+          file_name?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          report_id?: string
+          file_url?: string
+          file_path?: string | null
+          file_type?: string | null
+          file_name?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "report_attachments_report_id_fkey"; columns: ["report_id"]; referencedRelation: "reports"; referencedColumns: ["id"] }
+        ]
       }
       mentor_strikes: {
         Row: {
@@ -656,6 +901,45 @@ export type Database = {
         }
         Relationships: []
       }
+      mentor_restrictions: {
+        Row: {
+          id: string
+          mentor_id: string
+          restriction_type: string
+          reason: string
+          starts_at: string
+          expires_at: string | null
+          created_by: string | null
+          report_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          mentor_id: string
+          restriction_type: string
+          reason: string
+          starts_at?: string
+          expires_at?: string | null
+          created_by?: string | null
+          report_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          mentor_id?: string
+          restriction_type?: string
+          reason?: string
+          starts_at?: string
+          expires_at?: string | null
+          created_by?: string | null
+          report_id?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "mentor_restrictions_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "mentor_restrictions_report_id_fkey"; columns: ["report_id"]; referencedRelation: "reports"; referencedColumns: ["id"] }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -675,7 +959,7 @@ export type Database = {
       course_format: "online" | "offline"
       course_status: "pending" | "approved" | "rejected"
       booking_status: "pending" | "upcoming" | "completed" | "cancelled" | "declined"
-      mentor_verification_status: "unverified" | "draft" | "pending" | "approved" | "rejected"
+      mentor_verification_status: "unverified" | "draft" | "pending" | "approved" | "revision_requested" | "rejected" | "revoked"
       mentor_verification_proof_type: "social" | "certificate" | "portfolio" | "teaching_evidence"
       payment_method: "later" | "platform" | "credit_card" | "bank_transfer" | "e_wallet"
       txn_status: "success" | "refunded" | "pending" | "failed"
@@ -717,7 +1001,7 @@ export const Constants = {
       course_format: ["online", "offline"],
       course_status: ["pending", "approved", "rejected"],
       booking_status: ["pending", "upcoming", "completed", "cancelled", "declined"],
-      mentor_verification_status: ["unverified", "draft", "pending", "approved", "rejected"],
+      mentor_verification_status: ["unverified", "draft", "pending", "approved", "revision_requested", "rejected", "revoked"],
       mentor_verification_proof_type: ["social", "certificate", "portfolio", "teaching_evidence"],
       payment_method: ["later", "platform", "credit_card", "bank_transfer", "e_wallet"],
       txn_status: ["success", "refunded", "pending", "failed"],

@@ -1,40 +1,85 @@
-import { useParams, Link } from "react-router-dom";
-import { MainLayout } from "@/components/layout/MainLayout";
-import { useLearnerCourseDetail, useLearnerIsSaved, useLearnerToggleSaveCourse } from "@/hooks/useLearnerCourses";
-import { useCourseReviews } from "@/hooks/useLearnerReviews";
-import { ReviewBlock } from "@/components/marketplace/ReviewBlock";
-import { Star, MapPin, Monitor, Users, BadgeCheck, Calendar, Share2, Heart, ChevronRight, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
+import { useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
+import {
+  ChevronRight,
+  Flag,
+  Heart,
+  Loader2,
+  MapPin,
+  Monitor,
+  Share2,
+  Star,
+  Users,
+} from "lucide-react";
+import { MainLayout } from "@/components/layout/MainLayout";
+import { ReviewBlock } from "@/components/marketplace/ReviewBlock";
+import { TrustBadges } from "@/components/marketplace/TrustBadges";
+import { ReportModal } from "@/components/reports/ReportModal";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import {
+  useLearnerCourseDetail,
+  useLearnerIsSaved,
+  useLearnerToggleSaveCourse,
+  type LearnerCourse,
+} from "@/hooks/useLearnerCourses";
+import { useCourseReviews } from "@/hooks/useLearnerReviews";
 import { usePublicMentorVerification } from "@/hooks/usePublicMentorVerification";
+import { useToast } from "@/hooks/use-toast";
+
+type CourseDetailMentor = NonNullable<LearnerCourse["mentor"]> & {
+  bio?: string | null;
+  phone?: string | null;
+};
+
+type CourseDetail = LearnerCourse & {
+  mentor?: CourseDetailMentor;
+  course_schedules?: NonNullable<LearnerCourse["course_schedules"]>;
+};
+
+const fallbackCourseImage =
+  "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&h=400&fit=crop";
+const fallbackAvatar =
+  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face";
 
 export default function CourseDetailPage() {
   const { id } = useParams();
   const { user, session } = useAuth();
   const { toast } = useToast();
   const isLearner = !user || user.role === "learner";
+  const [reportOpen, setReportOpen] = useState(false);
+  const [commentReport, setCommentReport] = useState<{
+    id: string;
+    learnerId: string;
+    userName: string;
+    comment: string;
+  } | null>(null);
 
   const { data: course, isLoading } = useLearnerCourseDetail(id);
+  const courseDetail = course as CourseDetail | undefined;
+  const mentor = courseDetail?.mentor;
+  const schedules = courseDetail?.course_schedules ?? [];
+  const mentorId = mentor?.user_id;
+
   const { data: reviews = [] } = useCourseReviews(id);
   const { data: isSaved = false } = useLearnerIsSaved(session?.user?.id, id);
   const toggleSave = useLearnerToggleSaveCourse();
-
-  const mentorId = (course as any)?.mentor?.user_id;
   const { data: mentorVerification } = usePublicMentorVerification(mentorId);
   const isVerifiedMentor = mentorVerification?.verified === true;
+  const mentorBadges = mentorVerification?.badges ?? [];
 
   const handleSave = () => {
     if (!session?.user?.id) {
       toast({ title: "Vui lòng đăng nhập để lưu khóa học", variant: "destructive" });
       return;
     }
+
     toggleSave.mutate(
       { userId: session.user.id, courseId: id!, isSaved },
-      { onSuccess: () => toast({ title: isSaved ? "Đã bỏ lưu" : "Đã lưu khóa học" }) }
+      { onSuccess: () => toast({ title: isSaved ? "Đã bỏ lưu" : "Đã lưu khóa học" }) },
     );
   };
 
@@ -48,72 +93,102 @@ export default function CourseDetailPage() {
     );
   }
 
-  if (!course) {
+  if (!courseDetail) {
     return (
       <MainLayout>
         <div className="container py-20 text-center">
           <p className="text-muted-foreground">Không tìm thấy khóa học.</p>
-          <Link to="/search"><Button className="mt-4">Tìm khóa học khác</Button></Link>
+          <Link to="/search">
+            <Button className="mt-4">Tìm khóa học khác</Button>
+          </Link>
         </div>
       </MainLayout>
     );
   }
 
-  const mentor = (course as any).mentor;
-  const schedules = (course as any).course_schedules ?? [];
-
-  const mappedReviews = reviews.map((r) => ({
-    id: r.id,
-    userName: r.learner?.name || "Học viên",
-    userAvatar: r.learner?.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face",
-    rating: r.rating,
-    comment: r.comment || "",
-    date: new Date(r.created_at).toLocaleDateString("vi-VN"),
+  const mappedReviews = reviews.map((review) => ({
+    id: review.id,
+    userName: review.learner?.name || "Học viên",
+    userAvatar: review.learner?.avatar_url || fallbackAvatar,
+    rating: review.rating,
+    comment: review.comment || "",
+    date: new Date(review.created_at).toLocaleDateString("vi-VN"),
+    learnerId: review.learner_id,
+    reviewId: review.id,
   }));
 
   return (
     <MainLayout>
       <div className="container py-6">
         <div className="mb-4 flex items-center gap-1 text-xs text-muted-foreground">
-          <Link to="/" className="hover:text-primary">Trang chủ</Link>
+          <Link to="/" className="hover:text-primary">
+            Trang chủ
+          </Link>
           <ChevronRight className="h-3 w-3" />
-          <Link to="/search" className="hover:text-primary">Tìm kiếm</Link>
+          <Link to="/search" className="hover:text-primary">
+            Tìm kiếm
+          </Link>
           <ChevronRight className="h-3 w-3" />
-          <span className="text-foreground">{course.title}</span>
+          <span className="text-foreground">{courseDetail.title}</span>
         </div>
 
         <div className="grid gap-8 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-              <div className="overflow-hidden rounded-2xl mb-6">
-                <img src={course.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&h=400&fit=crop"} alt={course.title} className="w-full aspect-video object-cover" />
+              <div className="mb-6 overflow-hidden rounded-2xl">
+                <img
+                  src={courseDetail.image_url || fallbackCourseImage}
+                  alt={courseDetail.title}
+                  className="aspect-video w-full object-cover"
+                />
               </div>
 
-              <div className="flex items-center gap-2 mb-3">
-                <Badge variant="secondary">{course.category}</Badge>
-                <Badge variant={course.format === "online" ? "secondary" : "outline"}>
-                  {course.format === "online" ? <><Monitor className="mr-1 h-3 w-3" />Online</> : <><MapPin className="mr-1 h-3 w-3" />Offline</>}
+              <div className="mb-3 flex items-center gap-2">
+                <Badge variant="secondary">{courseDetail.category}</Badge>
+                <Badge variant={courseDetail.format === "online" ? "secondary" : "outline"}>
+                  {courseDetail.format === "online" ? (
+                    <>
+                      <Monitor className="mr-1 h-3 w-3" />
+                      Online
+                    </>
+                  ) : (
+                    <>
+                      <MapPin className="mr-1 h-3 w-3" />
+                      Offline
+                    </>
+                  )}
                 </Badge>
               </div>
 
-              <h1 className="mb-3 text-2xl font-bold text-foreground md:text-3xl">{course.title}</h1>
+              <h1 className="mb-3 text-2xl font-bold text-foreground md:text-3xl">{courseDetail.title}</h1>
 
               <div className="mb-6 flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Star className="h-4 w-4 fill-warning text-warning" />
-                  <span className="font-semibold text-foreground">{course.rating}</span> ({course.review_count} đánh giá)
+                  <span className="font-semibold text-foreground">{courseDetail.rating}</span> ({courseDetail.review_count} đánh giá)
                 </span>
-                <span className="flex items-center gap-1"><Users className="h-4 w-4" />{course.students_count} học viên</span>
-                {course.location && <span className="flex items-center gap-1"><MapPin className="h-4 w-4" />{course.location}</span>}
+                <span className="flex items-center gap-1">
+                  <Users className="h-4 w-4" />
+                  {courseDetail.students_count} học viên
+                </span>
+                {courseDetail.location && (
+                  <span className="flex items-center gap-1">
+                    <MapPin className="h-4 w-4" />
+                    {courseDetail.location}
+                  </span>
+                )}
               </div>
 
               <Separator className="my-6" />
 
               <h2 className="mb-3 text-lg font-semibold text-foreground">Mô tả khóa học</h2>
-              <div className="space-y-3 text-sm text-muted-foreground leading-relaxed">
-                <p>{course.description || "Khóa học chất lượng cao với phương pháp giảng dạy thực hành kết hợp lý thuyết."}</p>
-                <h3 className="text-foreground font-medium pt-2">Bạn sẽ học được gì?</h3>
-                <ul className="list-disc pl-5 space-y-1">
+              <div className="space-y-3 text-sm leading-relaxed text-muted-foreground">
+                <p>
+                  {courseDetail.description ||
+                    "Khóa học chất lượng cao với phương pháp giảng dạy thực hành kết hợp lý thuyết."}
+                </p>
+                <h3 className="pt-2 font-medium text-foreground">Bạn sẽ học được gì?</h3>
+                <ul className="list-disc space-y-1 pl-5">
                   <li>Nắm vững kiến thức nền tảng</li>
                   <li>Thực hành qua các bài tập thực tế</li>
                   <li>Nhận feedback cá nhân hóa từ mentor</li>
@@ -126,28 +201,30 @@ export default function CourseDetailPage() {
                   <Separator className="my-6" />
                   <h2 className="mb-3 text-lg font-semibold text-foreground">Lịch học</h2>
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                    {schedules.map((s: any) => (
-                      <div key={s.id} className="rounded-xl border bg-muted/30 p-3 text-center">
-                        <p className="text-sm font-medium text-foreground">{s.day_of_week}</p>
-                        <p className="text-xs text-muted-foreground">{s.start_time} - {s.end_time}</p>
+                    {schedules.map((schedule) => (
+                      <div key={schedule.id} className="rounded-xl border bg-muted/30 p-3 text-center">
+                        <p className="text-sm font-medium text-foreground">{schedule.day_of_week}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {schedule.start_time} - {schedule.end_time}
+                        </p>
                       </div>
                     ))}
                   </div>
                 </>
               )}
 
-              {course.format === "offline" && course.location && (
+              {courseDetail.format === "offline" && courseDetail.location && (
                 <>
                   <Separator className="my-6" />
                   <h2 className="mb-3 text-lg font-semibold text-foreground">Vị trí lớp học</h2>
-                  <div className="h-48 rounded-2xl bg-muted relative overflow-hidden">
+                  <div className="relative h-48 overflow-hidden rounded-2xl bg-muted">
                     <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
                       <div className="rounded-full gradient-primary p-3 shadow-lg">
                         <MapPin className="h-6 w-6 text-primary-foreground" />
                       </div>
                     </div>
                     <div className="absolute bottom-3 left-3 rounded-lg bg-card px-3 py-2 shadow-card">
-                      <p className="text-xs font-medium text-card-foreground">{course.location}</p>
+                      <p className="text-xs font-medium text-card-foreground">{courseDetail.location}</p>
                     </div>
                   </div>
                 </>
@@ -155,9 +232,26 @@ export default function CourseDetailPage() {
 
               <Separator className="my-6" />
               <h2 className="mb-4 text-lg font-semibold text-foreground">Đánh giá ({mappedReviews.length})</h2>
-              {mappedReviews.length > 0
-                ? <div className="space-y-3">{mappedReviews.map((r) => <ReviewBlock key={r.id} review={r} />)}</div>
-                : <p className="text-sm text-muted-foreground">Chưa có đánh giá nào.</p>}
+              {mappedReviews.length > 0 ? (
+                <div className="space-y-3">
+                  {mappedReviews.map((review) => (
+                    <ReviewBlock
+                      key={review.id}
+                      review={review}
+                      onReport={() =>
+                        setCommentReport({
+                          id: review.reviewId,
+                          learnerId: review.learnerId,
+                          userName: review.userName,
+                          comment: review.comment,
+                        })
+                      }
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Chưa có đánh giá nào.</p>
+              )}
             </motion.div>
           </div>
 
@@ -165,53 +259,80 @@ export default function CourseDetailPage() {
             <div className="sticky top-20 space-y-4">
               <div className="rounded-2xl border bg-card p-6 shadow-card">
                 <div className="mb-4 flex items-baseline gap-1">
-                  <span className="text-3xl font-bold text-primary">{course.price.toLocaleString("vi-VN")}đ</span>
+                  <span className="text-3xl font-bold text-primary">
+                    {courseDetail.price.toLocaleString("vi-VN")}đ
+                  </span>
                   <span className="text-sm text-muted-foreground">/buổi</span>
                 </div>
                 {isLearner ? (
                   <>
-                    <Link to={`/booking/${course.id}`}>
-                      <Button className="w-full gradient-primary border-0 text-primary-foreground text-base py-6 rounded-xl mb-3">
+                    <Link to={`/booking/${courseDetail.id}`}>
+                      <Button className="mb-3 w-full rounded-xl border-0 gradient-primary py-6 text-base text-primary-foreground">
                         Đặt lịch học ngay
                       </Button>
                     </Link>
                     <div className="flex gap-2">
-                      <Button variant="outline" className={`flex-1 rounded-xl ${isSaved ? "border-primary text-primary" : ""}`} onClick={handleSave} disabled={toggleSave.isPending}>
+                      <Button
+                        variant="outline"
+                        className={`flex-1 rounded-xl ${isSaved ? "border-primary text-primary" : ""}`}
+                        onClick={handleSave}
+                        disabled={toggleSave.isPending}
+                      >
                         <Heart className={`mr-2 h-4 w-4 ${isSaved ? "fill-primary" : ""}`} />
                         {isSaved ? "Đã lưu" : "Lưu"}
                       </Button>
                       <Button variant="outline" className="flex-1 rounded-xl">
-                        <Share2 className="mr-2 h-4 w-4" />Chia sẻ
+                        <Share2 className="mr-2 h-4 w-4" />
+                        Chia sẻ
                       </Button>
                     </div>
+                    <Button
+                      variant="ghost"
+                      className="mt-3 w-full rounded-xl text-muted-foreground hover:text-destructive"
+                      onClick={() => setReportOpen(true)}
+                    >
+                      <Flag className="mr-2 h-4 w-4" />
+                      Báo cáo khóa học
+                    </Button>
                   </>
                 ) : (
-                  <div className="rounded-xl bg-muted/50 p-3 text-xs text-muted-foreground text-center">
-                    Bạn đang xem với vai trò Mentor — chỉ học viên mới có thể đặt lịch học.
+                  <div className="rounded-xl bg-muted/50 p-3 text-center text-xs text-muted-foreground">
+                    Bạn đang xem với vai trò Mentor. Chỉ học viên mới có thể đặt lịch học.
                   </div>
                 )}
               </div>
 
               {mentor && (
                 <div className="rounded-2xl border bg-card p-6 shadow-card">
-                  <div className="flex items-center gap-3 mb-4">
-                    <img src={mentor.avatar_url || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face"} alt={mentor.name} className="h-14 w-14 rounded-xl object-cover" />
-                    <div>
-                      <div className="flex items-center gap-1">
-                        <p className="font-semibold text-card-foreground">{mentor.name}</p>
-                        {isVerifiedMentor && <BadgeCheck className="h-4 w-4 text-secondary" />}
-                      </div>
+                  <div className="mb-4 flex items-center gap-3">
+                    <img
+                      src={mentor.avatar_url || fallbackAvatar}
+                      alt={mentor.name || "Mentor"}
+                      className="h-14 w-14 rounded-xl object-cover"
+                    />
+                    <div className="min-w-0">
+                      <p className="truncate font-semibold text-card-foreground">{mentor.name || "Mentor"}</p>
+                      <TrustBadges badges={mentorBadges} compact className="mt-1" />
                       <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <p className="text-xs text-muted-foreground">{course.category}</p>
-                        <Badge variant="outline" className={isVerifiedMentor ? "rounded-full border-success/20 bg-success/10 text-success text-[10px]" : "rounded-full border-border bg-muted text-muted-foreground text-[10px]"}>
+                        <p className="text-xs text-muted-foreground">{courseDetail.category}</p>
+                        <Badge
+                          variant="outline"
+                          className={
+                            isVerifiedMentor
+                              ? "rounded-full border-success/20 bg-success/10 text-[10px] text-success"
+                              : "rounded-full border-border bg-muted text-[10px] text-muted-foreground"
+                          }
+                        >
                           {isVerifiedMentor ? "Đã xác minh" : "Chưa xác minh"}
                         </Badge>
                       </div>
                     </div>
                   </div>
-                  {mentor.bio && <p className="text-sm text-muted-foreground mb-4">{mentor.bio}</p>}
+                  {mentor.bio && <p className="mb-4 text-sm text-muted-foreground">{mentor.bio}</p>}
                   <Link to={`/mentor/${mentor.user_id}`}>
-                    <Button variant="outline" className="w-full rounded-xl">Xem hồ sơ Mentor</Button>
+                    <Button variant="outline" className="w-full rounded-xl">
+                      Xem hồ sơ Mentor
+                    </Button>
                   </Link>
                 </div>
               )}
@@ -219,6 +340,28 @@ export default function CourseDetailPage() {
           </div>
         </div>
       </div>
+
+      <ReportModal
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        type="course"
+        courseId={courseDetail.id}
+        reportedUserId={courseDetail.mentor_id}
+        contextTitle={courseDetail.title}
+        contextDescription={`Mentor: ${mentor?.name || "Mentor"} · ${courseDetail.category}`}
+      />
+      {commentReport && (
+        <ReportModal
+          open={!!commentReport}
+          onOpenChange={(open) => !open && setCommentReport(null)}
+          type="comment"
+          courseId={courseDetail.id}
+          reportedUserId={commentReport.learnerId}
+          commentId={commentReport.id}
+          contextTitle={`Bình luận của ${commentReport.userName}`}
+          contextDescription={commentReport.comment}
+        />
+      )}
     </MainLayout>
   );
 }

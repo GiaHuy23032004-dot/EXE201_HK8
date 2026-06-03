@@ -61,7 +61,7 @@ export function useLearnerTransactions(learnerId: string | undefined) {
         .eq("learner_id", learnerId!)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as LearnerTransaction[];
+      return (data ?? []) as unknown as LearnerTransaction[];
     },
   });
 }
@@ -92,7 +92,7 @@ export function useLearnerReceipt(bookingId: string | undefined, learnerId: stri
         .eq("booking_id", bookingId!)
         .maybeSingle();
 
-      return { booking, transaction } as LearnerReceipt;
+      return { booking, transaction } as unknown as LearnerReceipt;
     },
   });
 }

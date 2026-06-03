@@ -5,13 +5,16 @@ import { categories } from "@/data/mockData";
 import { useLearnerSearchCourses } from "@/hooks/useLearnerCourses";
 import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List, Sparkles, Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { usePublicMentorTrustBadgeMap } from "@/hooks/usePublicMentorVerification";
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
+  const [locationQuery, setLocationQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [format, setFormat] = useState<"all" | "online" | "offline">("all");
@@ -25,17 +28,23 @@ export default function SearchPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const q = params.get("q");
+    const location = params.get("location");
     if (q) setQuery(q);
+    if (location) setLocationQuery(location);
   }, []);
 
   // Fetch courses từ Supabase
   const { data: courses = [], isLoading } = useLearnerSearchCourses({
     query,
+    location: locationQuery,
     category: selectedCategory,
     format,
     minPrice: priceRange[0],
     maxPrice: priceRange[1],
   });
+  const { data: mentorTrustBadges = new Map() } = usePublicMentorTrustBadgeMap(
+    courses.map((course) => course.mentor?.user_id || course.mentor_id),
+  );
 
   // AI search suggestions
   const fetchAiSuggestions = useCallback(async (searchQuery: string) => {
@@ -54,7 +63,18 @@ export default function SearchPage() {
           raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
-            setAiSuggestions(parsed.map((s: any) => s.title || s).slice(0, 5));
+            const suggestions = parsed
+              .map((item: unknown) => {
+                if (typeof item === "string") return item;
+                if (item && typeof item === "object" && "title" in item) {
+                  const title = (item as { title?: unknown }).title;
+                  return typeof title === "string" ? title : "";
+                }
+                return "";
+              })
+              .filter(Boolean)
+              .slice(0, 5);
+            setAiSuggestions(suggestions);
             setShowAiPanel(true);
           }
         }
@@ -85,6 +105,7 @@ export default function SearchPage() {
     location: c.location || undefined,
     promoted: c.is_promoted,
     studentsCount: c.students_count,
+    mentorBadges: mentorTrustBadges.get(c.mentor?.user_id || c.mentor_id) ?? [],
   }));
 
   return (
@@ -152,7 +173,7 @@ export default function SearchPage() {
             <SlidersHorizontal className="mr-2 h-4 w-4" />
             Bộ lọc
           </Button>
-          <Link to="/map">
+          <Link to={locationQuery ? `/map?location=${encodeURIComponent(locationQuery)}` : "/map"}>
             <Button variant="outline" size="sm">
               <MapPin className="mr-2 h-4 w-4" />
               Bản đồ
@@ -182,6 +203,22 @@ export default function SearchPage() {
             </button>
           ))}
         </div>
+        {locationQuery && (
+          <div className="container flex pb-3">
+            <Badge variant="outline" className="gap-2 rounded-full border-primary/20 bg-primary/5 px-3 py-1.5 text-primary">
+              <MapPin className="h-3.5 w-3.5" />
+              Khu vực: {locationQuery}
+              <button
+                type="button"
+                onClick={() => setLocationQuery("")}
+                className="rounded-full p-0.5 text-primary/70 hover:bg-primary/10 hover:text-primary"
+                aria-label="Xóa khu vực tìm kiếm"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          </div>
+        )}
       </div>
 
       {/* Filters panel */}

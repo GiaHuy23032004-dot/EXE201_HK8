@@ -16,6 +16,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { MentorVerificationStatus } from "@/hooks/useMentorVerification";
 import {
+  isEditableVerificationStatus,
   isValidProofItem,
   useMentorVerificationProofs,
   type MentorVerificationProof,
@@ -30,7 +31,11 @@ interface TrustProofManagerProps {
 }
 
 function getErrorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "Đã xảy ra lỗi không xác định.";
+  if (error instanceof Error && error.message) return error.message;
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message?: unknown }).message || "Đã xảy ra lỗi không xác định.");
+  }
+  return "Đã xảy ra lỗi không xác định.";
 }
 
 export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
@@ -42,7 +47,7 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
 
   const proofs = proofsQuery.data ?? [];
   const validProofCount = proofs.filter(isValidProofItem).length;
-  const readOnly = status === "pending" || status === "approved";
+  const readOnly = !isEditableVerificationStatus(status);
   const isBusy =
     proofsQuery.createProof.isPending ||
     proofsQuery.updateProof.isPending ||
@@ -116,13 +121,19 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
       <CardContent className="space-y-4">
         {status === "pending" && (
           <div className="rounded-2xl border border-warning/20 bg-warning/5 p-4 text-sm text-muted-foreground">
-            Hồ sơ của bạn đang được xem xét. Bạn sẽ nhận được thông báo khi có kết quả.
+            Hồ sơ đang chờ duyệt, bạn không thể chỉnh sửa bằng chứng.
           </div>
         )}
 
         {status === "approved" && (
           <div className="rounded-2xl border border-success/20 bg-success/5 p-4 text-sm text-success">
-            Bạn đã được xác minh. Huy hiệu Verified Mentor sẽ hiển thị trên hồ sơ và khóa học của bạn.
+            Hồ sơ đã được xác minh.
+          </div>
+        )}
+
+        {status !== "pending" && status !== "approved" && readOnly && (
+          <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
+            Trạng thái hồ sơ hiện tại không cho phép chỉnh sửa bằng chứng.
           </div>
         )}
 

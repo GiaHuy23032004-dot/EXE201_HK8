@@ -18,6 +18,8 @@ const STATUS_STYLE: Record<MentorVerificationStatus, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
   approved: "bg-success/10 text-success border-success/20",
   rejected: "bg-destructive/10 text-destructive border-destructive/20",
+  revision_requested: "bg-primary/10 text-primary border-primary/20",
+  revoked: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
 function getStatusMessage(status: MentorVerificationStatus, adminNote?: string | null) {
@@ -26,8 +28,12 @@ function getStatusMessage(status: MentorVerificationStatus, adminNote?: string |
       return "Hồ sơ của bạn đang chờ duyệt.";
     case "approved":
       return "Bạn đã được xác minh.";
+    case "revision_requested":
+      return adminNote || "Admin yêu cầu chỉnh sửa một số thông tin trước khi duyệt.";
     case "rejected":
-      return adminNote || "Hồ sơ cần bổ sung thêm thông tin.";
+      return adminNote || "Hồ sơ đã bị từ chối.";
+    case "revoked":
+      return adminNote || "Trạng thái xác minh của bạn đã bị thu hồi.";
     case "draft":
       return "Hồ sơ xác minh chưa hoàn tất. Bạn có thể tiếp tục bổ sung thông tin trước khi gửi duyệt.";
     case "unverified":

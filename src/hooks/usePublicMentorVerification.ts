@@ -1,41 +1,139 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
+export type PublicTrustBadgeType =
+  | "vet_verified"
+  | "certificate_verified"
+  | "portfolio_verified"
+  | "trusted_mentor";
+
+export interface PublicMentorTrustBadge {
+  id: string;
+  mentor_id: string;
+  badge_type: PublicTrustBadgeType;
+  status: "active";
+  public_visible: true;
+}
+
+const PUBLIC_BADGE_TYPES = new Set<PublicTrustBadgeType>([
+  "vet_verified",
+  "certificate_verified",
+  "portfolio_verified",
+  "trusted_mentor",
+]);
+
+function normalizeMentorIds(mentorIds: Array<string | null | undefined>) {
+  return Array.from(new Set(mentorIds.filter((mentorId): mentorId is string => Boolean(mentorId)))).sort();
+}
+
+function toPublicBadge(row: {
+  id: string;
+  mentor_id: string;
+  badge_type: string;
+  status: string;
+  public_visible: boolean;
+}): PublicMentorTrustBadge | null {
+  if (!PUBLIC_BADGE_TYPES.has(row.badge_type as PublicTrustBadgeType)) return null;
+  if (row.status !== "active" || row.public_visible !== true) return null;
+
+  return {
+    id: row.id,
+    mentor_id: row.mentor_id,
+    badge_type: row.badge_type as PublicTrustBadgeType,
+    status: "active",
+    public_visible: true,
+  };
+}
+
+async function fetchPublicTrustBadges(mentorIds: string[]) {
+  const badgeMap = new Map<string, PublicMentorTrustBadge[]>();
+  if (mentorIds.length === 0) return badgeMap;
+
+  const { data: badgeRows, error: badgeError } = await supabase
+    .from("mentor_trust_badges")
+    .select("id, mentor_id, badge_type, status, public_visible")
+    .in("mentor_id", mentorIds)
+    .eq("status", "active")
+    .eq("public_visible", true);
+
+  if (badgeError) throw badgeError;
+
+  (badgeRows ?? []).forEach((row) => {
+    const badge = toPublicBadge(row);
+    if (!badge) return;
+    badgeMap.set(badge.mentor_id, [...(badgeMap.get(badge.mentor_id) ?? []), badge]);
+  });
+
+  // Backward compatibility for approved mentors created before trust badges existed.
+  const mentorsWithoutVetBadge = mentorIds.filter((mentorId) =>
+    !(badgeMap.get(mentorId) ?? []).some((badge) => badge.badge_type === "vet_verified"),
+  );
+
+  if (mentorsWithoutVetBadge.length > 0) {
+    const { data: approvedRows, error: approvedError } = await supabase
+      .from("mentor_verifications")
+      .select("mentor_id")
+      .eq("status", "approved")
+      .in("mentor_id", mentorsWithoutVetBadge);
+
+    if (approvedError) throw approvedError;
+
+    (approvedRows ?? []).forEach((row) => {
+      if (!row.mentor_id) return;
+      badgeMap.set(row.mentor_id, [
+        ...(badgeMap.get(row.mentor_id) ?? []),
+        {
+          id: `legacy-vet-verified-${row.mentor_id}`,
+          mentor_id: row.mentor_id,
+          badge_type: "vet_verified",
+          status: "active",
+          public_visible: true,
+        },
+      ]);
+    });
+  }
+
+  return badgeMap;
+}
+
 export function usePublicMentorVerification(mentorId: string | null | undefined) {
   return useQuery({
     queryKey: ["public-mentor-verification", mentorId],
     enabled: !!mentorId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mentor_verifications")
-        .select("mentor_id")
-        .eq("mentor_id", mentorId!)
-        .eq("status", "approved")
-        .maybeSingle();
-
-      if (error) throw error;
-      return { verified: Boolean(data) };
+      const badgeMap = await fetchPublicTrustBadges([mentorId!]);
+      const badges = badgeMap.get(mentorId!) ?? [];
+      return {
+        verified: badges.some((badge) => badge.badge_type === "vet_verified"),
+        badges,
+      };
     },
   });
 }
 
+export function usePublicMentorTrustBadgeMap(mentorIds: Array<string | null | undefined>) {
+  const uniqueIds = normalizeMentorIds(mentorIds);
+
+  return useQuery({
+    queryKey: ["public-mentor-trust-badges", uniqueIds],
+    enabled: uniqueIds.length > 0,
+    queryFn: () => fetchPublicTrustBadges(uniqueIds),
+  });
+}
+
 export function usePublicMentorVerificationMap(mentorIds: Array<string | null | undefined>) {
-  const uniqueIds = Array.from(
-    new Set(mentorIds.filter((mentorId): mentorId is string => Boolean(mentorId))),
-  );
+  const uniqueIds = normalizeMentorIds(mentorIds);
 
   return useQuery({
     queryKey: ["public-mentor-verifications", uniqueIds],
     enabled: uniqueIds.length > 0,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mentor_verifications")
-        .select("mentor_id")
-        .eq("status", "approved")
-        .in("mentor_id", uniqueIds);
-
-      if (error) throw error;
-      return new Set((data ?? []).map((row) => row.mentor_id));
+      const badgeMap = await fetchPublicTrustBadges(uniqueIds);
+      return new Set(
+        Array.from(badgeMap.entries())
+          .filter(([, badges]) => badges.some((badge) => badge.badge_type === "vet_verified"))
+          .map(([mentorId]) => mentorId),
+      );
     },
   });
 }

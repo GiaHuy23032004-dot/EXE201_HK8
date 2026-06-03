@@ -9,6 +9,7 @@ export interface UserProfile {
   avatar?: string;
   role: "learner" | "mentor";
   phone?: string;
+  address?: string;
   bio?: string;
   isBlocked?: boolean;
 }
@@ -28,6 +29,7 @@ interface AuthContextType {
   }) => Promise<{ error?: string; needsEmailConfirmation?: boolean }>;
   logout: () => Promise<void>;
   updateProfile: (data: Partial<UserProfile>) => Promise<void>;
+  refreshProfile: () => Promise<void>;
   resetPassword: (email: string) => Promise<{ error?: string }>;
 }
 
@@ -53,10 +55,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser({
         name: data.name || authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "User",
         email: data.email || authUser.email || "",
-        username: (data as any).username || undefined,
+        username: data.username || undefined,
         avatar: data.avatar_url || authUser.user_metadata?.avatar_url,
         role: productRole,
         phone: data.phone || undefined,
+        address: data.address || undefined,
         bio: data.bio || undefined,
         isBlocked: data.is_blocked ?? false,
       });
@@ -153,6 +156,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const updates: Record<string, unknown> = {};
     if (data.name !== undefined) updates.name = data.name;
     if (data.phone !== undefined) updates.phone = data.phone;
+    if (data.address !== undefined) updates.address = data.address;
     if (data.bio !== undefined) updates.bio = data.bio;
     if (data.avatar !== undefined) updates.avatar_url = data.avatar;
 
@@ -162,6 +166,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("user_id", session.user.id);
 
     setUser((prev) => (prev ? { ...prev, ...data } : null));
+  };
+
+  const refreshProfile = async () => {
+    if (!session?.user) return;
+    await fetchProfile(session.user);
   };
 
   const resetPassword = async (email: string) => {
@@ -183,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         register,
         logout,
         updateProfile,
+        refreshProfile,
         resetPassword,
       }}
     >

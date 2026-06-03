@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
 import { Star, BadgeCheck, BookOpen } from "lucide-react";
 import { motion } from "framer-motion";
+import { TrustBadges } from "@/components/marketplace/TrustBadges";
+import type { PublicMentorTrustBadge } from "@/hooks/usePublicMentorVerification";
 
 export interface MentorData {
   id: string;
@@ -11,6 +13,7 @@ export interface MentorData {
   reviewCount: number;
   coursesCount: number;
   verified: boolean;
+  badges?: PublicMentorTrustBadge[];
   bio: string;
 }
 
@@ -27,7 +30,7 @@ export function MentorCard({ mentor }: { mentor: MentorData }) {
       >
         <div className="relative">
           <img src={mentor.avatar} alt={mentor.name} className="h-16 w-16 rounded-2xl object-cover ring-2 ring-transparent group-hover:ring-primary/20 transition-all" />
-          {mentor.verified && (
+          {(mentor.verified || (mentor.badges?.length ?? 0) > 0) && (
             <div className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-white shadow">
               <BadgeCheck className="h-4 w-4 text-primary" />
             </div>
@@ -37,6 +40,7 @@ export function MentorCard({ mentor }: { mentor: MentorData }) {
           <div className="flex items-center gap-2 mb-1">
             <h3 className="font-semibold text-card-foreground truncate group-hover:text-primary transition-colors">{mentor.name}</h3>
           </div>
+          <TrustBadges badges={mentor.badges ?? []} compact className="mb-2" />
           <p className="text-xs text-muted-foreground mb-2">{mentor.specialty}</p>
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">

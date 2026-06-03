@@ -1,23 +1,26 @@
+import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useLearnerReceipt } from "@/hooks/useLearnerPayments";
 import { useAuth } from "@/contexts/AuthContext";
-import { CheckCircle2, Download, ArrowLeft, Loader2, Calendar, Clock, BookOpen, User, CreditCard } from "lucide-react";
+import { CheckCircle2, Download, ArrowLeft, Loader2, Calendar, Clock, User, CreditCard, Flag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { ReportModal } from "@/components/reports/ReportModal";
 
 export default function ReceiptPage() {
   const { bookingId } = useParams();
   const { session } = useAuth();
   const { toast } = useToast();
+  const [reportOpen, setReportOpen] = useState(false);
 
   const { data, isLoading } = useLearnerReceipt(bookingId, session?.user?.id);
 
   const handleDownload = () => {
     if (!data) return;
-    const { booking, txn } = data;
+    const { booking, transaction: txn } = data;
     const content = [
       "=== BIÊN LAI ĐẶT LỊCH HỌC ===",
       `Mã biên lai: ${txn?.reference_code || booking.id.slice(0, 8).toUpperCase()}`,
@@ -70,7 +73,7 @@ export default function ReceiptPage() {
     );
   }
 
-  const { booking, txn } = data;
+  const { booking, transaction: txn } = data;
   const refCode = txn?.reference_code || `BK-${booking.id.slice(0, 8).toUpperCase()}`;
 
   const statusInfo = {
@@ -99,9 +102,14 @@ export default function ReceiptPage() {
               <p className="text-sm text-muted-foreground font-mono">{refCode}</p>
             </div>
           </div>
-          <Button variant="outline" onClick={handleDownload} className="gap-2">
-            <Download className="h-4 w-4" />Tải biên lai
-          </Button>
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button variant="outline" onClick={handleDownload} className="gap-2">
+              <Download className="h-4 w-4" />Tải biên lai
+            </Button>
+            <Button variant="ghost" onClick={() => setReportOpen(true)} className="gap-2 text-muted-foreground hover:text-destructive">
+              <Flag className="h-4 w-4" />Báo cáo thanh toán
+            </Button>
+          </div>
         </div>
 
         {/* Receipt card */}
@@ -193,6 +201,17 @@ export default function ReceiptPage() {
           </div>
         </div>
       </div>
+      <ReportModal
+        open={reportOpen}
+        onOpenChange={setReportOpen}
+        type="payment"
+        courseId={booking.course_id}
+        reportedUserId={booking.mentor_id}
+        bookingId={booking.id}
+        transactionId={txn?.id ?? null}
+        contextTitle={booking.course?.title || "Buổi học đã đặt"}
+        contextDescription={`${new Date(booking.booking_date).toLocaleDateString("vi-VN")} · ${booking.start_time} - ${booking.end_time} · ${refCode}`}
+      />
     </MainLayout>
   );
 }

@@ -1,40 +1,108 @@
 import { useState, useEffect, useCallback } from "react";
-import { MainLayout } from "@/components/layout/MainLayout";
-import { Users, BookOpen, DollarSign, TrendingUp, Shield, Check, X, Eye, BarChart3, Flag, Megaphone, UserX, UserCheck, Crown, Loader2, Search, Trash2, AlertCircle, CheckCircle2, EyeOff, FileText, UserCircle2, History, Send, AlertTriangle, Gavel, Wallet, Copy, Banknote, Download, BookText } from "lucide-react";
+import { Users, BookOpen, DollarSign, TrendingUp, Shield, Check, X, Eye, BarChart3, Flag, Megaphone, UserX, UserCheck, Crown, Loader2, Search, AlertCircle, Wallet, Copy, Banknote, Download, BookText } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { useAuth } from "@/contexts/AuthContext";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "hsl(var(--warning, 38 92% 50%))", "hsl(var(--muted-foreground))"];
 
+type AdminSection = "analytics" | "users" | "mentors" | "courses" | "reports" | "promoted" | "payouts" | "ledger";
+
+const adminRouteSections: Record<string, AdminSection> = {
+  "/admin/dashboard": "analytics",
+  "/admin/users": "users",
+  "/admin/mentors": "mentors",
+  "/admin/mentor-verifications": "mentors",
+  "/admin/courses": "courses",
+  "/admin/reports": "reports",
+  "/admin/promotions": "promoted",
+  "/admin/withdrawals": "payouts",
+  "/admin/ledger": "ledger",
+};
+
+const adminSectionMeta: Record<AdminSection, { title: string; description: string; icon: typeof Shield }> = {
+  analytics: {
+    title: "Admin Dashboard",
+    description: "Tổng quan số liệu, doanh thu và hoạt động marketplace.",
+    icon: Shield,
+  },
+  users: {
+    title: "Người dùng",
+    description: "Quản lý tài khoản, trạng thái khóa và quyền hệ thống.",
+    icon: Users,
+  },
+  mentors: {
+    title: "Duyệt Mentor",
+    description: "Theo dõi mentor cần xét duyệt và xử lý hồ sơ.",
+    icon: UserCheck,
+  },
+  courses: {
+    title: "Khóa học",
+    description: "Kiểm duyệt và quản lý khóa học trên marketplace.",
+    icon: BookOpen,
+  },
+  reports: {
+    title: "Báo cáo",
+    description: "Xử lý báo cáo vi phạm và điều phối moderation.",
+    icon: Flag,
+  },
+  promoted: {
+    title: "Quảng cáo",
+    description: "Theo dõi các listing đang được quảng bá.",
+    icon: Megaphone,
+  },
+  payouts: {
+    title: "Rút tiền",
+    description: "Đối soát và xác nhận yêu cầu rút tiền của mentor.",
+    icon: Wallet,
+  },
+  ledger: {
+    title: "Sổ cái dòng tiền",
+    description: "Theo dõi dòng tiền, hoa hồng và giao dịch hệ thống.",
+    icon: BookText,
+  },
+};
+
 type UserRecord = {
   user_id: string;
   name: string | null;
+  username: string | null;
   email: string | null;
-  role: string;
+  avatar_url: string | null;
+  product_role: "learner" | "mentor";
+  role?: string;
   created_at: string;
   is_blocked: boolean;
   roles: string[];
+  is_admin?: boolean;
 };
 
-type ReportItem = {
-  id: string; title: string; type: "course" | "mentor" | "comment" | "payment";
-  reason: string; reporter: string; reportedUser: string; reports: number;
-  date: string; status: "pending" | "resolved" | "dismissed" | "appealed"; detail: string;
-  mentorStrikes: number;
-};
+type UserActionDialogState = {
+  type: "block" | "grant_admin" | "revoke_admin";
+  user: UserRecord;
+} | null;
 
 type PayoutOrder = { code: string; date: string; gross: number };
 type PayoutRequest = {
@@ -53,32 +121,34 @@ export default function AdminDashboard() {
   const { toast } = useToast();
   const { session } = useAuth();
   const qc = useQueryClient();
+  const location = useLocation();
   const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
   const FEE = 0.15;
+  const currentSection = adminRouteSections[location.pathname] ?? "analytics";
+  const currentMeta = adminSectionMeta[currentSection];
+  const PageIcon = currentMeta.icon;
 
   // ── UI state ──────────────────────────────────────────────
-  const [courseFilter, setCourseFilter] = useState<"all" | "pending" | "approved" | "rejected">("all");
-  const [reportFilter, setReportFilter] = useState<"all" | "pending" | "resolved" | "dismissed" | "appealed">("all");
   const [userList, setUserList] = useState<UserRecord[]>([]);
   const [userSearch, setUserSearch] = useState("");
   const [userLoading, setUserLoading] = useState(false);
+  const [usersLoaded, setUsersLoaded] = useState(false);
+  const [userLoadError, setUserLoadError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [activeReport, setActiveReport] = useState<ReportItem | null>(null);
-  const [strikeChoice, setStrikeChoice] = useState<string>("");
-  const [emailContent, setEmailContent] = useState<string>("");
+  const [userActionDialog, setUserActionDialog] = useState<UserActionDialogState>(null);
   const [activePayout, setActivePayout] = useState<PayoutRequest | null>(null);
   const [ledgerFrom, setLedgerFrom] = useState("");
   const [ledgerTo, setLedgerTo] = useState("");
   const [ledgerKind, setLedgerKind] = useState<"all" | "in" | "payout" | "refund">("all");
   const [ledgerSearch, setLedgerSearch] = useState("");
 
-  const invokeAdminUsers = useCallback((body: Record<string, unknown>) => {
+  const invokeAdminUserActions = useCallback((body: Record<string, unknown>) => {
     const accessToken = session?.access_token;
     if (!accessToken) {
       throw new Error("Missing admin session");
     }
 
-    return supabase.functions.invoke("admin-users", {
+    return supabase.functions.invoke("admin-user-actions", {
       body,
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -89,6 +159,7 @@ export default function AdminDashboard() {
   // Pending Mentors
   const { data: mentors = [], isLoading: mentorsLoading, refetch: refetchMentors } = useQuery({
     queryKey: ["admin-pending-mentors"],
+    enabled: currentSection === "mentors",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
@@ -107,60 +178,10 @@ export default function AdminDashboard() {
     },
   });
 
-  // Courses (all statuses for admin)
-  const { data: courses = [], isLoading: coursesLoading, refetch: refetchCourses } = useQuery({
-    queryKey: ["admin-courses"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("courses")
-        .select("*, mentor:profiles!courses_mentor_id_fkey(name)")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map((c: any) => ({
-        id: c.id,
-        title: c.title,
-        mentor: c.mentor?.name ?? "Mentor",
-        category: c.category,
-        price: c.price,
-        status: c.status as "pending" | "approved" | "rejected",
-        createdAt: new Date(c.created_at).toLocaleDateString("vi-VN"),
-        description: c.description ?? "",
-      }));
-    },
-  });
-
-  // Reports
-  const { data: reports = [], isLoading: reportsLoading, refetch: refetchReports } = useQuery({
-    queryKey: ["admin-reports"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("reports")
-        .select(`
-          id, type, title, reason, detail, status, created_at,
-          reporter:profiles!reports_reporter_id_fkey(name),
-          reported:profiles!reports_reported_user_id_fkey(name)
-        `)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []).map((r: any) => ({
-        id: r.id,
-        title: r.title,
-        type: r.type as ReportItem["type"],
-        reason: r.reason,
-        reporter: r.reporter?.name ?? "Ẩn danh",
-        reportedUser: r.reported?.name ?? "Không rõ",
-        reports: 1,
-        date: new Date(r.created_at).toLocaleDateString("vi-VN"),
-        status: r.status as ReportItem["status"],
-        detail: r.detail ?? "",
-        mentorStrikes: 0,
-      })) as ReportItem[];
-    },
-  });
-
   // Promoted listings
   const { data: promotedListings = [], isLoading: promotedLoading } = useQuery({
     queryKey: ["admin-promoted"],
+    enabled: currentSection === "promoted",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("promoted_listings")
@@ -181,6 +202,7 @@ export default function AdminDashboard() {
   // Withdrawal requests (payouts)
   const { data: payouts = [], isLoading: payoutsLoading, refetch: refetchPayouts } = useQuery({
     queryKey: ["admin-payouts"],
+    enabled: currentSection === "payouts",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("withdrawal_requests")
@@ -204,6 +226,7 @@ export default function AdminDashboard() {
   // Ledger (transactions)
   const { data: ledgerData = [], isLoading: ledgerLoading } = useQuery({
     queryKey: ["admin-ledger"],
+    enabled: currentSection === "ledger",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("transactions")
@@ -228,14 +251,16 @@ export default function AdminDashboard() {
   });
 
   // Analytics aggregates
-  const { data: analytics } = useQuery({
+  const { data: analytics, isLoading: analyticsLoading } = useQuery({
     queryKey: ["admin-analytics"],
+    enabled: currentSection === "analytics",
     queryFn: async () => {
-      const [usersRes, coursesRes, bookingsRes, revenueRes] = await Promise.all([
+      const [usersRes, coursesRes, bookingsRes, revenueRes, mentorsRes] = await Promise.all([
         supabase.from("profiles").select("user_id", { count: "exact", head: true }),
         supabase.from("courses").select("id", { count: "exact", head: true }),
         supabase.from("bookings").select("id", { count: "exact", head: true }),
         supabase.from("transactions").select("amount").eq("status", "success"),
+        supabase.from("profiles").select("user_id", { count: "exact", head: true }).eq("role", "mentor"),
       ]);
       const totalRevenue = (revenueRes.data ?? []).reduce((s: number, t: any) => s + t.amount, 0);
       return {
@@ -243,6 +268,7 @@ export default function AdminDashboard() {
         courses: coursesRes.count ?? 0,
         bookings: bookingsRes.count ?? 0,
         revenue: totalRevenue,
+        activeMentors: mentorsRes.count ?? 0,
       };
     },
   });
@@ -250,6 +276,7 @@ export default function AdminDashboard() {
   // Monthly revenue from transactions
   const { data: monthlyRevenue = [] } = useQuery({
     queryKey: ["admin-monthly-revenue"],
+    enabled: currentSection === "analytics",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("transactions")
@@ -272,6 +299,7 @@ export default function AdminDashboard() {
   // Category distribution
   const { data: categoryData = [] } = useQuery({
     queryKey: ["admin-categories"],
+    enabled: currentSection === "analytics",
     queryFn: async () => {
       const { data, error } = await supabase
         .from("courses")
@@ -306,41 +334,6 @@ export default function AdminDashboard() {
     onError: () => toast({ title: "Lỗi", variant: "destructive" }),
   });
 
-  const updateCourseStatus = useMutation({
-    mutationFn: async ({ id, status }: { id: string; status: "approved" | "rejected" }) => {
-      const { error } = await supabase.from("courses").update({ status }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: (_, vars) => {
-      refetchCourses();
-      toast({ title: vars.status === "approved" ? "Đã duyệt khóa học" : "Đã từ chối khóa học" });
-    },
-    onError: () => toast({ title: "Lỗi cập nhật khóa học", variant: "destructive" }),
-  });
-
-  const deleteCourse = useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase.from("courses").delete().eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => { refetchCourses(); toast({ title: "Đã xóa khóa học" }); },
-    onError: () => toast({ title: "Lỗi xóa khóa học", variant: "destructive" }),
-  });
-
-  const updateReportStatus = useMutation({
-    mutationFn: async ({ id, status, verdict, email }: { id: string; status: "pending" | "resolved" | "dismissed" | "appealed"; verdict?: string; email?: string }) => {
-      const { error } = await supabase.from("reports").update({
-        status,
-        admin_verdict: verdict,
-        admin_email: email,
-        resolved_at: new Date().toISOString(),
-      }).eq("id", id);
-      if (error) throw error;
-    },
-    onSuccess: () => { refetchReports(); },
-    onError: () => toast({ title: "Lỗi cập nhật báo cáo", variant: "destructive" }),
-  });
-
   const confirmPayoutMutation = useMutation({
     mutationFn: async (id: string) => {
       const { error } = await supabase
@@ -361,73 +354,117 @@ export default function AdminDashboard() {
 
   const fetchUsers = useCallback(async () => {
     setUserLoading(true);
+    setUserLoadError(null);
     try {
-      const { data, error } = await invokeAdminUsers({ action: "list" });
+      const { data, error } = await invokeAdminUserActions({ action: "list_users" });
+      if (import.meta.env.DEV) {
+        console.log("admin-user-actions list response", { data, error });
+      }
+
       if (!error && data?.users) {
         setUserList(data.users);
       } else {
-        toast({ title: "Lỗi", description: "Không thể tải danh sách người dùng.", variant: "destructive" });
+        const message = error?.message || data?.error || "Không thể tải danh sách người dùng.";
+        setUserLoadError(message);
+        toast({ title: "Lỗi", description: message, variant: "destructive" });
       }
-    } catch {
-      toast({ title: "Lỗi", description: "Không thể kết nối server.", variant: "destructive" });
-    }
-    setUserLoading(false);
-  }, [invokeAdminUsers, toast]);
+    } catch (error) {
+      if (import.meta.env.DEV) {
+        console.error("admin-user-actions list error", error);
+      }
 
-  const handleToggleBlock = async (userId: string, currentlyBlocked: boolean) => {
-    setActionLoading(userId + "_block");
-    try {
-      const { data, error } = await invokeAdminUsers({ action: "toggle-block", targetUserId: userId });
-      if (!error && data?.success) {
-        setUserList((prev) => prev.map((u) => u.user_id === userId ? { ...u, is_blocked: data.is_blocked } : u));
-        toast({ title: data.is_blocked ? "Đã khóa tài khoản" : "Đã mở khóa tài khoản" });
-      } else {
-        toast({ title: "Lỗi", description: "Không thể thực hiện thao tác.", variant: "destructive" });
-      }
-    } catch {
-      toast({ title: "Lỗi", description: "Có lỗi xảy ra.", variant: "destructive" });
+      const message = error instanceof Error ? error.message : "Không thể kết nối server.";
+      setUserLoadError(message);
+      toast({ title: "Lỗi", description: message, variant: "destructive" });
+    } finally {
+      setUsersLoaded(true);
+      setUserLoading(false);
     }
-    setActionLoading(null);
+  }, [invokeAdminUserActions, toast]);
+
+  useEffect(() => {
+    if (currentSection === "users" && !usersLoaded && !userLoading) {
+      void fetchUsers();
+    }
+  }, [currentSection, fetchUsers, userLoading, usersLoaded]);
+
+  const executeUserAction = async (dialogState: NonNullable<UserActionDialogState>) => {
+    const { type, user } = dialogState;
+    const isRoleAction = type === "grant_admin" || type === "revoke_admin";
+    const loadingKey = `${user.user_id}_${isRoleAction ? "role" : "block"}`;
+    const edgeAction = type === "block" ? "block_user" : type;
+
+    setActionLoading(loadingKey);
+    try {
+      const { data, error } = await invokeAdminUserActions({
+        action: edgeAction,
+        targetUserId: user.user_id,
+        confirmed: true,
+      });
+
+      if (!error && data?.success) {
+        await fetchUsers();
+        const title =
+          type === "block"
+            ? "Đã khóa tài khoản"
+            : type === "grant_admin"
+              ? "Đã cấp quyền Admin"
+              : "Đã thu hồi quyền Admin";
+        toast({ title });
+        setUserActionDialog(null);
+      } else {
+        toast({
+          title: "Lỗi",
+          description: error?.message || data?.error || "Không thể thực hiện thao tác.",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      toast({
+        title: "Lỗi",
+        description: error instanceof Error ? error.message : "Có lỗi xảy ra.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
+    }
   };
 
-  const handleAssignAdmin = async (userId: string, hasAdmin: boolean) => {
-    setActionLoading(userId + "_role");
-    const action = hasAdmin ? "remove-role" : "assign-role";
+  const handleUnblockUser = async (user: UserRecord) => {
+    const loadingKey = `${user.user_id}_block`;
+    setActionLoading(loadingKey);
     try {
-      const { data, error } = await invokeAdminUsers({ action, targetUserId: userId, role: "admin" });
+      const { data, error } = await invokeAdminUserActions({
+        action: "unblock_user",
+        targetUserId: user.user_id,
+      });
+
       if (!error && data?.success) {
-        setUserList((prev) => prev.map((u) => {
-          if (u.user_id !== userId) return u;
-          const roles = hasAdmin ? u.roles.filter((r) => r !== "admin") : [...u.roles, "admin"];
-          return { ...u, roles };
-        }));
-        toast({ title: hasAdmin ? "Đã thu hồi quyền Admin" : "Đã cấp quyền Admin" });
+        await fetchUsers();
+        toast({ title: "Đã mở khóa tài khoản" });
       } else {
-        toast({ title: "Lỗi", description: "Không thể thay đổi quyền.", variant: "destructive" });
+        toast({
+          title: "Lỗi",
+          description: error?.message || data?.error || "Không thể mở khóa tài khoản.",
+          variant: "destructive",
+        });
       }
-    } catch {
-      toast({ title: "Lỗi", description: "Có lỗi xảy ra.", variant: "destructive" });
+    } catch (error) {
+      toast({
+        title: "Lỗi",
+        description: error instanceof Error ? error.message : "Có lỗi xảy ra.",
+        variant: "destructive",
+      });
+    } finally {
+      setActionLoading(null);
     }
-    setActionLoading(null);
+  };
+
+  const handleUserAction = (type: NonNullable<UserActionDialogState>["type"], user: UserRecord) => {
+    setUserActionDialog({ type, user });
   };
 
   // ── Helpers ───────────────────────────────────────────────
-
-  const handleCourseAction = (courseId: string, action: "approve" | "reject" | "delete") => {
-    if (action === "delete") {
-      deleteCourse.mutate(courseId);
-    } else {
-      updateCourseStatus.mutate({ id: courseId, status: action === "approve" ? "approved" : "rejected" });
-    }
-  };
-
-  const handleReportAction = (reportId: string, action: "resolve" | "dismiss") => {
-    updateReportStatus.mutate({
-      id: reportId,
-      status: action === "resolve" ? "resolved" : "dismissed",
-    });
-    toast({ title: action === "resolve" ? "Đã xử lý báo cáo" : "Đã bỏ qua báo cáo" });
-  };
 
   const confirmPayout = () => {
     if (!activePayout) return;
@@ -439,60 +476,46 @@ export default function AdminDashboard() {
     toast({ title: "Đã copy số tài khoản" });
   };
 
-  const strikeOptions = [
-    { id: "ignore", label: "Bỏ qua báo cáo", desc: "Sai sự thật / Không phạt", tone: "muted", email: "Xin chào, sau khi xem xét, chúng tôi không tìm thấy vi phạm trong nội dung của bạn. Báo cáo đã được bỏ qua. Cảm ơn bạn đã đóng góp cho cộng đồng." },
-    { id: "strike1", label: "Gậy 1: Nhắc nhở", desc: "Yêu cầu sửa nội dung", tone: "warning", email: "Xin chào, nội dung của bạn vi phạm tiêu chuẩn cộng đồng (lần 1). Vui lòng chỉnh sửa nội dung trong vòng 48 giờ để tránh các biện pháp xử lý nặng hơn." },
-    { id: "strike2", label: "Gậy 2: Gỡ bài & cấm đăng 7 ngày", desc: "Tạm khóa quyền đăng nội dung mới", tone: "warning", email: "Xin chào, nội dung của bạn đã bị gỡ và bạn bị cấm đăng nội dung mới trong 7 ngày (vi phạm lần 2). Vui lòng đọc kỹ chính sách trước khi tiếp tục." },
-    { id: "strike3", label: "Gậy 3: Khóa vĩnh viễn tài khoản", desc: "Vi phạm nghiêm trọng / lặp lại 3 lần", tone: "destructive", email: "Xin chào, do vi phạm chính sách lần thứ 3, tài khoản Mentor của bạn đã bị khóa vĩnh viễn. Bạn có quyền kháng cáo trong vòng 7 ngày kể từ khi nhận được email này." },
-  ];
+  const currentAdminId = session?.user?.id ?? "";
+  const adminUserCount = new Set(userList.filter((u) => u.roles.includes("admin")).map((u) => u.user_id)).size;
+  const userSearchText = userSearch.trim().toLowerCase();
+  const filteredUsers = userList.filter((u) => {
+    if (!userSearchText) return true;
+    return [u.name, u.email, u.username]
+      .filter(Boolean)
+      .some((value) => value!.toLowerCase().includes(userSearchText));
+  });
 
-  const openReportModal = (r: ReportItem) => {
-    setActiveReport(r);
-    setStrikeChoice("");
-    setEmailContent("");
+  const formatUserDate = (value?: string | null) => {
+    if (!value) return "";
+    return new Date(value).toLocaleString("vi-VN");
   };
 
-  const handleStrikeChange = (val: string) => {
-    setStrikeChoice(val);
-    const opt = strikeOptions.find((o) => o.id === val);
-    if (opt) setEmailContent(opt.email);
+  const escapeCsvCell = (value: unknown) => {
+    const text = String(value ?? "");
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
   };
 
-  const submitVerdict = () => {
-    if (!activeReport || !strikeChoice) return;
-    const opt = strikeOptions.find((o) => o.id === strikeChoice)!;
-    const newStatus = strikeChoice === "ignore" ? "dismissed" : "resolved";
-    updateReportStatus.mutate({
-      id: activeReport.id,
-      status: newStatus,
-      verdict: opt.label,
-      email: emailContent,
-    });
-    toast({ title: "Đã gửi phán quyết", description: `${opt.label} → đã gửi email cho mentor.` });
-    setActiveReport(null);
-  };
-
-  const filteredCourses = courses.filter(c => courseFilter === "all" || c.status === courseFilter);
-  const filteredReports = reports.filter(r => reportFilter === "all" || r.status === reportFilter);
-
-  const reportTypeIcon = (type: string) => {
-    switch (type) {
-      case "course": return <BookOpen className="h-4 w-4" />;
-      case "mentor": return <Users className="h-4 w-4" />;
-      case "comment": return <AlertCircle className="h-4 w-4" />;
-      case "payment": return <DollarSign className="h-4 w-4" />;
-      default: return <Flag className="h-4 w-4" />;
-    }
-  };
-
-  const reportStatusBadge = (status: string) => {
-    switch (status) {
-      case "pending": return <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ xử lý</Badge>;
-      case "resolved": return <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã xử lý</Badge>;
-      case "dismissed": return <Badge className="bg-muted text-muted-foreground border-0 text-[10px]">Bỏ qua</Badge>;
-      case "appealed": return <Badge className="bg-primary/10 text-primary border-0 text-[10px]">Kháng cáo</Badge>;
-      default: return null;
-    }
+  const exportUsersCsv = () => {
+    const rows = filteredUsers.map((u) => [
+      u.name ?? "",
+      u.email ?? "",
+      u.product_role,
+      u.roles.includes("admin") ? "Yes" : "No",
+      u.is_blocked ? "Yes" : "No",
+      formatUserDate(u.created_at),
+    ]);
+    const header = ["Name", "Email", "Product Role", "Is Admin", "Is Blocked", "Created At"];
+    const csv = [header, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\n");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const date = new Date().toISOString().slice(0, 10);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `vet-users-${date}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Đã tải danh sách người dùng", description: `${rows.length} tài khoản trong file CSV.` });
   };
 
   // ── Ledger filter logic ───────────────────────────────────
@@ -541,51 +564,49 @@ export default function AdminDashboard() {
     toast({ title: "Đã xuất file CSV", description: `${filteredLedger.length} giao dịch` });
   };
 
+  const renderChartEmpty = (message: string) => (
+    <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed bg-muted/30 px-6 text-center text-sm text-muted-foreground">
+      {message}
+    </div>
+  );
+
   // ── Render ────────────────────────────────────────────────
   return (
-    <MainLayout>
-      <div className="container py-8">
+    <>
+      <div className="mx-auto max-w-7xl">
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-1">
-            <Shield className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
+            <PageIcon className="h-6 w-6 text-primary" />
+            <h1 className="text-2xl font-bold text-foreground">{currentMeta.title}</h1>
           </div>
-          <p className="text-sm text-muted-foreground">Quản lý marketplace và giám sát hoạt động</p>
+          <p className="text-sm text-muted-foreground">{currentMeta.description}</p>
         </div>
 
+        {currentSection === "analytics" && (
+          <>
         {/* Metrics */}
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-5">
           {[
-            { icon: Users, label: "Tổng người dùng", value: analytics ? analytics.users.toLocaleString("vi-VN") : "—", color: "text-secondary" },
-            { icon: BookOpen, label: "Tổng khóa học", value: analytics ? analytics.courses.toLocaleString("vi-VN") : "—", color: "text-primary" },
-            { icon: BarChart3, label: "Tổng booking", value: analytics ? analytics.bookings.toLocaleString("vi-VN") : "—", color: "text-success" },
-            { icon: DollarSign, label: "Doanh thu", value: analytics ? (analytics.revenue >= 1_000_000 ? (analytics.revenue / 1_000_000).toFixed(1) + "M" : fmtVnd(analytics.revenue)) : "—", color: "text-warning" },
-            { icon: TrendingUp, label: "Mentor hoạt động", value: mentors.length.toString(), color: "text-accent-foreground" },
+            { icon: Users, label: "Tổng người dùng", value: analytics?.users.toLocaleString("vi-VN"), color: "text-secondary" },
+            { icon: BookOpen, label: "Tổng khóa học", value: analytics?.courses.toLocaleString("vi-VN"), color: "text-primary" },
+            { icon: BarChart3, label: "Tổng booking", value: analytics?.bookings.toLocaleString("vi-VN"), color: "text-success" },
+            { icon: DollarSign, label: "Doanh thu", value: analytics ? (analytics.revenue >= 1_000_000 ? (analytics.revenue / 1_000_000).toFixed(1) + "M" : fmtVnd(analytics.revenue)) : undefined, color: "text-warning" },
+            { icon: TrendingUp, label: "Mentor hoạt động", value: analytics?.activeMentors.toLocaleString("vi-VN"), color: "text-accent-foreground" },
           ].map((stat) => (
             <div key={stat.label} className="rounded-2xl border bg-card p-5 shadow-card">
               <div className="flex items-center gap-2 mb-2">
                 <stat.icon className={`h-5 w-5 ${stat.color}`} />
                 <span className="text-xs text-muted-foreground">{stat.label}</span>
               </div>
-              <p className="text-2xl font-bold text-foreground">{stat.value}</p>
+              {analyticsLoading ? (
+                <Skeleton className="h-8 w-20" />
+              ) : (
+                <p className="text-2xl font-bold text-foreground">{stat.value ?? "0"}</p>
+              )}
             </div>
           ))}
         </div>
-
-        <Tabs defaultValue="analytics">
-          <TabsList className="mb-6 flex-wrap h-auto gap-1">
-            <TabsTrigger value="analytics">📊 Thống kê</TabsTrigger>
-            <TabsTrigger value="users" onClick={fetchUsers}>👥 Người dùng</TabsTrigger>
-            <TabsTrigger value="mentors">Duyệt Mentor ({mentors.length})</TabsTrigger>
-            <TabsTrigger value="courses">📚 Khóa học ({courses.filter(c => c.status === "pending").length})</TabsTrigger>
-            <TabsTrigger value="reports">🚩 Báo cáo ({reports.filter(r => r.status === "pending").length})</TabsTrigger>
-            <TabsTrigger value="promoted">Quảng cáo</TabsTrigger>
-            <TabsTrigger value="payouts">💸 Rút tiền ({payouts.filter(p => p.status === "pending").length})</TabsTrigger>
-            <TabsTrigger value="ledger">📒 Sổ cái dòng tiền</TabsTrigger>
-          </TabsList>
-
-          {/* Analytics Tab */}
-          <TabsContent value="analytics">
+          {/* Analytics section */}
             <div className="grid gap-6 md:grid-cols-3 mb-6">
               {[
                 { label: "Tổng doanh thu tháng", value: analytics ? (analytics.revenue >= 1_000_000 ? (analytics.revenue / 1_000_000).toFixed(1) + "M VNĐ" : fmtVnd(analytics.revenue)) : "—", change: "", icon: DollarSign },
@@ -597,7 +618,11 @@ export default function AdminDashboard() {
                     <span className="text-sm text-muted-foreground">{kpi.label}</span>
                     <kpi.icon className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <p className="text-3xl font-bold text-foreground">{kpi.value}</p>
+                  {analyticsLoading ? (
+                    <Skeleton className="h-9 w-28" />
+                  ) : (
+                    <p className="text-3xl font-bold text-foreground">{kpi.value}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -605,115 +630,166 @@ export default function AdminDashboard() {
             <div className="grid gap-6 md:grid-cols-2">
               <div className="rounded-2xl border bg-card p-6 shadow-card">
                 <h3 className="font-semibold text-foreground mb-4">Doanh thu theo tháng (triệu VNĐ)</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={monthlyRevenue}>
-                    <defs>
-                      <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
-                    <Area type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorRevenue)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {monthlyRevenue.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <AreaChart data={monthlyRevenue}>
+                      <defs>
+                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
+                      <Area type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorRevenue)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : renderChartEmpty("Chưa có dữ liệu doanh thu")}
               </div>
 
               <div className="rounded-2xl border bg-card p-6 shadow-card">
                 <h3 className="font-semibold text-foreground mb-4">Bookings theo tháng</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <BarChart data={monthlyRevenue}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
-                    <Bar dataKey="bookings" fill="hsl(var(--secondary))" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
+                {monthlyRevenue.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={monthlyRevenue}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
+                      <Bar dataKey="bookings" fill="hsl(var(--secondary))" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : renderChartEmpty("Chưa có dữ liệu booking")}
               </div>
 
               <div className="rounded-2xl border bg-card p-6 shadow-card">
                 <h3 className="font-semibold text-foreground mb-4">Phân bổ danh mục</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <PieChart>
-                    <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} fontSize={11}>
-                      {categoryData.map((_, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
-                  </PieChart>
-                </ResponsiveContainer>
+                {categoryData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <PieChart>
+                      <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} fontSize={11}>
+                        {categoryData.map((_, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : renderChartEmpty("Chưa có dữ liệu danh mục")}
               </div>
 
               <div className="rounded-2xl border bg-card p-6 shadow-card">
                 <h3 className="font-semibold text-foreground mb-4">Tăng trưởng người dùng</h3>
-                <ResponsiveContainer width="100%" height={280}>
-                  <AreaChart data={monthlyRevenue}>
-                    <defs>
-                      <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="hsl(var(--secondary))" stopOpacity={0.3} />
-                        <stop offset="95%" stopColor="hsl(var(--secondary))" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                    <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                    <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                    <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
-                    <Area type="monotone" dataKey="users" stroke="hsl(var(--secondary))" fillOpacity={1} fill="url(#colorUsers)" strokeWidth={2} />
-                  </AreaChart>
-                </ResponsiveContainer>
+                {monthlyRevenue.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <AreaChart data={monthlyRevenue}>
+                      <defs>
+                        <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--secondary))" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="hsl(var(--secondary))" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
+                      <Area type="monotone" dataKey="users" stroke="hsl(var(--secondary))" fillOpacity={1} fill="url(#colorUsers)" strokeWidth={2} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : renderChartEmpty("Chưa có dữ liệu tăng trưởng")}
               </div>
             </div>
-          </TabsContent>
+          </>)}
 
-          {/* User Management Tab */}
-          <TabsContent value="users">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="relative flex-1 max-w-sm">
+          {/* User management section */}
+          {currentSection === "users" && (<>
+            <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="relative w-full md:max-w-md">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input placeholder="Tìm theo tên hoặc email..." className="pl-10" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} />
+                <Input placeholder="Tìm theo tên, email hoặc username..." className="pl-10" value={userSearch} onChange={(e) => setUserSearch(e.target.value)} />
               </div>
-              <Button variant="outline" onClick={fetchUsers} disabled={userLoading} className="rounded-xl">
-                {userLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Tải danh sách"}
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={fetchUsers} disabled={userLoading} className="rounded-xl">
+                  {userLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Làm mới"}
+                </Button>
+                <Button variant="outline" onClick={exportUsersCsv} disabled={userLoading || userList.length === 0} className="rounded-xl">
+                  <Download className="mr-2 h-4 w-4" />
+                  Tải danh sách
+                </Button>
+              </div>
             </div>
             {userLoading ? (
-              <div className="flex items-center justify-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+              <div className="space-y-3">
+                {[1, 2, 3, 4].map((item) => (
+                  <Skeleton key={item} className="h-20 rounded-2xl" />
+                ))}
+              </div>
+            ) : userLoadError ? (
+              <div className="flex flex-col items-center rounded-2xl border border-destructive/20 bg-destructive/5 py-14 text-center">
+                <AlertCircle className="mb-3 h-10 w-10 text-destructive" />
+                <p className="font-semibold text-foreground">Không thể tải danh sách người dùng</p>
+                <p className="mt-1 text-sm text-muted-foreground">{userLoadError}</p>
+                <Button variant="outline" onClick={fetchUsers} className="mt-4 rounded-xl">Thử lại</Button>
+              </div>
             ) : userList.length === 0 ? (
               <div className="flex flex-col items-center py-16 text-center">
                 <Users className="h-12 w-12 text-muted mb-3" />
-                <p className="text-muted-foreground text-sm">Bấm "Tải danh sách" để xem người dùng</p>
+                <p className="text-muted-foreground text-sm">Chưa có người dùng nào trong hệ thống</p>
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="flex flex-col items-center py-16 text-center">
+                <Search className="h-12 w-12 text-muted mb-3" />
+                <p className="font-medium text-foreground">Không tìm thấy người dùng phù hợp</p>
+                <p className="text-muted-foreground text-sm">Thử đổi từ khóa tìm kiếm.</p>
               </div>
             ) : (
               <div className="space-y-2">
-                {userList
-                  .filter((u) => !userSearch || (u.name || "").toLowerCase().includes(userSearch.toLowerCase()) || (u.email || "").toLowerCase().includes(userSearch.toLowerCase()))
+                {filteredUsers
                   .map((u) => {
                     const isAdminUser = u.roles.includes("admin");
+                    const isSelf = u.user_id === currentAdminId;
+                    const cannotRevokeAdmin = isSelf || (isAdminUser && adminUserCount <= 1);
+                    const blockLoading = actionLoading === `${u.user_id}_block`;
+                    const roleLoading = actionLoading === `${u.user_id}_role`;
                     return (
-                      <div key={u.user_id} className={`flex items-center gap-3 rounded-2xl border bg-card p-4 shadow-card ${u.is_blocked ? "opacity-60" : ""}`}>
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl gradient-primary text-primary-foreground text-sm font-bold">
-                          {(u.name || u.email || "?")[0].toUpperCase()}
-                        </div>
+                      <div key={u.user_id} className={`flex flex-col gap-3 rounded-2xl border bg-card p-4 shadow-card md:flex-row md:items-center ${u.is_blocked ? "opacity-75" : ""}`}>
+                        <Avatar className="h-10 w-10 shrink-0 rounded-xl">
+                          <AvatarImage src={u.avatar_url ?? undefined} />
+                          <AvatarFallback className="rounded-xl bg-primary text-primary-foreground text-sm font-bold">
+                            {(u.name || u.email || "?")[0].toUpperCase()}
+                          </AvatarFallback>
+                        </Avatar>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="font-semibold text-card-foreground text-sm truncate">{u.name || "Không có tên"}</p>
                             {isAdminUser && <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]"><Crown className="mr-1 h-2.5 w-2.5" />Admin</Badge>}
                             {u.is_blocked && <Badge className="bg-muted text-muted-foreground border-0 text-[10px]">Đã khóa</Badge>}
-                            <Badge variant="outline" className="text-[10px]">{u.role}</Badge>
+                            <Badge variant="outline" className="text-[10px]">{u.product_role}</Badge>
+                            {isSelf && <Badge variant="outline" className="text-[10px]">Bạn</Badge>}
                           </div>
                           <p className="text-xs text-muted-foreground truncate">{u.email}</p>
+                          {u.username && <p className="text-xs text-muted-foreground truncate">@{u.username}</p>}
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button size="sm" variant={u.is_blocked ? "default" : "outline"} className={`rounded-lg h-8 text-xs ${u.is_blocked ? "gradient-primary border-0 text-primary-foreground" : "text-destructive hover:text-destructive"}`} disabled={actionLoading === u.user_id + "_block"} onClick={() => handleToggleBlock(u.user_id, u.is_blocked)}>
-                            {actionLoading === u.user_id + "_block" ? <Loader2 className="h-3 w-3 animate-spin" /> : u.is_blocked ? <><UserCheck className="mr-1 h-3 w-3" />Mở khóa</> : <><UserX className="mr-1 h-3 w-3" />Khóa</>}
+                        <div className="flex flex-wrap items-center gap-2 shrink-0 md:justify-end">
+                          <Button
+                            size="sm"
+                            variant={u.is_blocked ? "default" : "outline"}
+                            className={`rounded-lg h-8 text-xs ${u.is_blocked ? "gradient-primary border-0 text-primary-foreground" : "text-destructive hover:text-destructive"}`}
+                            disabled={blockLoading || (isSelf && !u.is_blocked)}
+                            onClick={() => u.is_blocked ? handleUnblockUser(u) : handleUserAction("block", u)}
+                          >
+                            {blockLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : u.is_blocked ? <><UserCheck className="mr-1 h-3 w-3" />Mở khóa</> : <><UserX className="mr-1 h-3 w-3" />Khóa</>}
                           </Button>
-                          <Button size="sm" variant="outline" className={`rounded-lg h-8 text-xs ${isAdminUser ? "text-destructive hover:text-destructive" : ""}`} disabled={actionLoading === u.user_id + "_role"} onClick={() => handleAssignAdmin(u.user_id, isAdminUser)}>
-                            {actionLoading === u.user_id + "_role" ? <Loader2 className="h-3 w-3 animate-spin" /> : isAdminUser ? <><Crown className="mr-1 h-3 w-3" />Thu hồi Admin</> : <><Crown className="mr-1 h-3 w-3" />Cấp Admin</>}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={`rounded-lg h-8 text-xs ${isAdminUser ? "text-destructive hover:text-destructive" : ""}`}
+                            disabled={roleLoading || (isAdminUser && cannotRevokeAdmin)}
+                            onClick={() => handleUserAction(isAdminUser ? "revoke_admin" : "grant_admin", u)}
+                          >
+                            {roleLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : isAdminUser ? <><Crown className="mr-1 h-3 w-3" />Thu hồi Admin</> : <><Crown className="mr-1 h-3 w-3" />Cấp Admin</>}
                           </Button>
                         </div>
                       </div>
@@ -721,10 +797,10 @@ export default function AdminDashboard() {
                   })}
               </div>
             )}
-          </TabsContent>
+          </>)}
 
-          {/* Mentors Tab */}
-          <TabsContent value="mentors" className="space-y-3">
+          {/* Mentor verification section */}
+          {currentSection === "mentors" && (<div className="space-y-3">
             {mentorsLoading ? (
               <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
             ) : mentors.length === 0 ? (
@@ -747,108 +823,10 @@ export default function AdminDashboard() {
                 </div>
               </div>
             ))}
-          </TabsContent>
+          </div>)}
 
-          {/* Course Management Tab */}
-          <TabsContent value="courses">
-            <div className="mb-4 flex items-center gap-2 flex-wrap">
-              {(["all", "pending", "approved", "rejected"] as const).map((f) => (
-                <Button key={f} size="sm" variant={courseFilter === f ? "default" : "outline"} className={`rounded-lg text-xs ${courseFilter === f ? "gradient-primary border-0 text-primary-foreground" : ""}`} onClick={() => setCourseFilter(f)}>
-                  {f === "all" ? "Tất cả" : f === "pending" ? "Chờ duyệt" : f === "approved" ? "Đã duyệt" : "Từ chối"}
-                  {f !== "all" && ` (${courses.filter(c => c.status === f).length})`}
-                </Button>
-              ))}
-            </div>
-            {coursesLoading ? (
-              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-            ) : (
-              <div className="space-y-3">
-                {filteredCourses.map((c) => (
-                  <div key={c.id} className="rounded-2xl border bg-card p-4 shadow-card">
-                    <div className="flex items-start gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <p className="font-semibold text-card-foreground">{c.title}</p>
-                          {c.status === "pending" && <Badge className="bg-warning/10 text-warning border-0 text-[10px]">Chờ duyệt</Badge>}
-                          {c.status === "approved" && <Badge className="bg-success/10 text-success border-0 text-[10px]">Đã duyệt</Badge>}
-                          {c.status === "rejected" && <Badge className="bg-destructive/10 text-destructive border-0 text-[10px]">Từ chối</Badge>}
-                        </div>
-                        <p className="text-xs text-muted-foreground">Mentor: {c.mentor} • {c.category} • {c.createdAt}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{c.description}</p>
-                        <p className="text-sm font-bold text-primary mt-2">{c.price.toLocaleString("vi-VN")}đ/buổi</p>
-                      </div>
-                      <div className="flex gap-2 shrink-0">
-                        {c.status === "pending" && (
-                          <>
-                            <Button size="sm" onClick={() => handleCourseAction(c.id, "approve")} className="gradient-primary border-0 text-primary-foreground rounded-lg" disabled={updateCourseStatus.isPending}><Check className="mr-1 h-4 w-4" />Duyệt</Button>
-                            <Button size="sm" variant="outline" onClick={() => handleCourseAction(c.id, "reject")} className="rounded-lg" disabled={updateCourseStatus.isPending}><X className="mr-1 h-4 w-4" />Từ chối</Button>
-                          </>
-                        )}
-                        <Button size="sm" variant="outline" onClick={() => handleCourseAction(c.id, "delete")} className="rounded-lg text-destructive hover:text-destructive" disabled={deleteCourse.isPending}><Trash2 className="h-4 w-4" /></Button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-                {filteredCourses.length === 0 && <p className="text-center text-muted-foreground py-8">Không có khóa học nào</p>}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Reports Tab */}
-          <TabsContent value="reports">
-            <div className="mb-4 flex items-center gap-2 flex-wrap">
-              {(["all", "pending", "appealed", "resolved", "dismissed"] as const).map((f) => (
-                <Button key={f} size="sm" variant={reportFilter === f ? "default" : "outline"} className={`rounded-lg text-xs ${reportFilter === f ? "gradient-primary border-0 text-primary-foreground" : ""}`} onClick={() => setReportFilter(f)}>
-                  {f === "all" ? "Tất cả" : f === "pending" ? "Chờ xử lý" : f === "appealed" ? "Kháng cáo" : f === "resolved" ? "Đã xử lý" : "Bỏ qua"}
-                  {f !== "all" && ` (${reports.filter(r => r.status === f).length})`}
-                </Button>
-              ))}
-            </div>
-            {reportsLoading ? (
-              <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-            ) : (
-              <div className="space-y-3">
-                {filteredReports.map((r) => (
-                  <div key={r.id} className="rounded-2xl border bg-card p-4 shadow-card">
-                    <div className="flex items-start gap-4">
-                      <div className="rounded-xl bg-destructive/10 p-3 shrink-0">{reportTypeIcon(r.type)}</div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1 flex-wrap">
-                          <p className="font-semibold text-card-foreground">{r.title}</p>
-                          {reportStatusBadge(r.status)}
-                          <Badge variant="outline" className="text-[10px]">{r.reports} báo cáo</Badge>
-                          {r.reports >= 5 && (
-                            <Badge className="bg-warning/15 text-warning border-0 text-[10px] gap-1">
-                              <EyeOff className="h-3 w-3" /> Hệ thống tự động ẩn
-                            </Badge>
-                          )}
-                          {r.status === "appealed" && (
-                            <Badge className="bg-primary/10 text-primary border-0 text-[10px] gap-1">
-                              <AlertTriangle className="h-3 w-3" /> Mentor kháng cáo
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-xs text-muted-foreground">Lý do: {r.reason}</p>
-                        <p className="text-xs text-muted-foreground">Người báo cáo: {r.reporter} → Bị báo cáo: {r.reportedUser}</p>
-                        <p className="text-xs text-muted-foreground mt-1 italic">{r.detail}</p>
-                        <p className="text-xs text-muted-foreground mt-1">{r.date} • Lịch sử vi phạm Mentor: {r.mentorStrikes}/3</p>
-                      </div>
-                      {(r.status === "pending" || r.status === "appealed") && (
-                        <div className="flex gap-2 shrink-0">
-                          <Button size="sm" onClick={() => openReportModal(r)} className="gradient-primary border-0 text-primary-foreground rounded-lg"><Gavel className="mr-1 h-4 w-4" />Xử lý</Button>
-                          <Button size="sm" variant="outline" onClick={() => handleReportAction(r.id, "dismiss")} className="rounded-lg"><X className="mr-1 h-4 w-4" />Bỏ qua</Button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-                {filteredReports.length === 0 && <p className="text-center text-muted-foreground py-8">Không có báo cáo nào</p>}
-              </div>
-            )}
-          </TabsContent>
-
-          {/* Promoted Tab */}
-          <TabsContent value="promoted" className="space-y-3">
+          {/* Promotions section */}
+          {currentSection === "promoted" && (<div className="space-y-3">
             {promotedLoading ? <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
               : promotedListings.length > 0 ? promotedListings.map((p: any) => (
                 <div key={p.id} className="flex items-center gap-4 rounded-2xl border bg-card p-4 shadow-card">
@@ -862,10 +840,10 @@ export default function AdminDashboard() {
                   </Badge>
                 </div>
               )) : <p className="text-center text-muted-foreground py-8">Chưa có tin quảng cáo nào</p>}
-          </TabsContent>
+          </div>)}
 
-          {/* Payouts Tab */}
-          <TabsContent value="payouts">
+          {/* Withdrawals section */}
+          {currentSection === "payouts" && (<>
             <div className="rounded-2xl border bg-card shadow-card overflow-hidden">
               <div className="p-5 border-b flex items-center gap-2">
                 <Wallet className="h-5 w-5 text-primary" />
@@ -913,10 +891,10 @@ export default function AdminDashboard() {
                 </Table>
               )}
             </div>
-          </TabsContent>
+          </>)}
 
-          {/* Ledger Tab */}
-          <TabsContent value="ledger">
+          {/* Ledger section */}
+          {currentSection === "ledger" && (<>
             <div className="space-y-4">
               <div className="rounded-2xl border bg-card p-4 shadow-card">
                 <div className="flex flex-wrap items-end gap-3">
@@ -1014,9 +992,45 @@ export default function AdminDashboard() {
                 )}
               </div>
             </div>
-          </TabsContent>
-        </Tabs>
+          </>)}
       </div>
+
+      <AlertDialog open={!!userActionDialog} onOpenChange={(open) => !open && setUserActionDialog(null)}>
+        <AlertDialogContent className="rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {userActionDialog?.type === "block"
+                ? "Khóa tài khoản?"
+                : userActionDialog?.type === "grant_admin"
+                  ? "Cấp quyền Admin?"
+                  : "Thu hồi quyền Admin?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {userActionDialog?.type === "block"
+                ? `Bạn có chắc muốn khóa tài khoản ${userActionDialog.user.email || userActionDialog.user.name || "này"} không?`
+                : userActionDialog?.type === "grant_admin"
+                  ? "Bạn có chắc muốn cấp quyền Admin cho tài khoản này không?"
+                  : "Bạn có chắc muốn thu hồi quyền Admin của tài khoản này không?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-xl">Hủy</AlertDialogCancel>
+            <AlertDialogAction
+              className={`rounded-xl ${userActionDialog?.type === "grant_admin" ? "gradient-primary border-0 text-primary-foreground" : "bg-destructive text-destructive-foreground hover:bg-destructive/90"}`}
+              disabled={!!actionLoading}
+              onClick={(event) => {
+                event.preventDefault();
+                if (userActionDialog) {
+                  void executeUserAction(userActionDialog);
+                }
+              }}
+            >
+              {actionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Xác nhận
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Payout Modal */}
       <Dialog open={!!activePayout} onOpenChange={(o) => !o && setActivePayout(null)}>
@@ -1053,50 +1067,6 @@ export default function AdminDashboard() {
         </DialogContent>
       </Dialog>
 
-      {/* Verdict Modal */}
-      <Dialog open={!!activeReport} onOpenChange={(o) => !o && setActiveReport(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Gavel className="h-5 w-5 text-primary" />Xử lý báo cáo
-            </DialogTitle>
-          </DialogHeader>
-          {activeReport && (
-            <div className="space-y-4">
-              <div className="rounded-xl border bg-accent/30 p-4">
-                <p className="font-semibold text-foreground">{activeReport.title}</p>
-                <p className="text-xs text-muted-foreground mt-1">Lý do: {activeReport.reason}</p>
-                <p className="text-xs text-muted-foreground italic mt-1">{activeReport.detail}</p>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground mb-3">Chọn hình thức xử lý</p>
-                <RadioGroup value={strikeChoice} onValueChange={handleStrikeChange} className="space-y-2">
-                  {strikeOptions.map((o) => (
-                    <Label key={o.id} htmlFor={o.id}
-                      className={`flex items-start gap-3 rounded-xl border p-3 cursor-pointer transition-colors ${strikeChoice === o.id ? "border-primary bg-primary/5" : "hover:bg-accent/40"}`}>
-                      <RadioGroupItem id={o.id} value={o.id} className="mt-1" />
-                      <div>
-                        <p className="font-medium text-sm text-foreground">{o.label}</p>
-                        <p className="text-xs text-muted-foreground">{o.desc}</p>
-                      </div>
-                    </Label>
-                  ))}
-                </RadioGroup>
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-foreground mb-2">Nội dung email gửi Mentor</p>
-                <Textarea rows={4} value={emailContent} onChange={(e) => setEmailContent(e.target.value)} placeholder="Chọn hình thức xử lý để tự sinh nội dung..." />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setActiveReport(null)} className="rounded-lg">Hủy</Button>
-            <Button disabled={!strikeChoice || updateReportStatus.isPending} onClick={submitVerdict} className="gradient-primary border-0 text-primary-foreground rounded-lg">
-              {updateReportStatus.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Send className="mr-1 h-4 w-4" />Xác nhận & Gửi</>}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </MainLayout>
+    </>
   );
 }

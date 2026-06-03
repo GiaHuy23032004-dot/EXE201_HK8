@@ -1,11 +1,10 @@
 /**
- * useLearnerProfile.ts
- * Toàn bộ logic hồ sơ dành cho Learner
- * - Xem & cập nhật thông tin cá nhân
- * - Upload avatar
- * - Đổi mật khẩu
+ * Learner profile data access.
+ *
+ * Keeps the remote learner profile/stats behavior and the local map-location
+ * fields used by the nearby course experience.
  */
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface LearnerProfile {
@@ -14,138 +13,189 @@ export interface LearnerProfile {
   username: string | null;
   email: string | null;
   phone: string | null;
+  address: string | null;
+  district: string | null;
+  city: string | null;
+  location_updated_at: string | null;
   avatar_url: string | null;
   bio: string | null;
   role: string;
-  is_blocked: boolean;
-  created_at: string;
+  is_blocked: boolean | null;
+  created_at: string | null;
 }
 
-// ── Lấy profile của learner ───────────────────────────────────────────────────
+export interface UpdateLearnerProfilePayload {
+  userId: string;
+  name: string;
+  phone?: string | null;
+  address?: string | null;
+  district?: string | null;
+  city?: string | null;
+  bio?: string | null;
+  avatar_url?: string | null;
+  previousAddress?: string | null;
+}
+
+type UpdateLearnerAvatarPayload =
+  | { userId: string; avatarUrl: string; file?: never }
+  | { userId: string; file: File; avatarUrl?: never };
+
+const PROFILE_SELECT =
+  "user_id, name, username, email, phone, address, district, city, location_updated_at, avatar_url, bio, role, is_blocked, created_at";
+
+const AVATAR_BUCKET = "avatars";
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
+const ALLOWED_AVATAR_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+
+const normalizeOptional = (value?: string | null) => {
+  const trimmed = value?.trim() ?? "";
+  return trimmed.length > 0 ? trimmed : null;
+};
+
+const getFileExtension = (fileName: string) => {
+  const extension = fileName.split(".").pop()?.toLowerCase();
+  return extension || "jpg";
+};
+
+async function uploadLearnerAvatar(userId: string, file: File) {
+  if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
+    throw new Error("Chỉ hỗ trợ ảnh JPG, PNG hoặc WEBP.");
+  }
+
+  if (file.size > MAX_AVATAR_SIZE) {
+    throw new Error("Ảnh đại diện tối đa 5MB.");
+  }
+
+  const path = `${userId}/avatar-${Date.now()}.${getFileExtension(file.name)}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from(AVATAR_BUCKET)
+    .upload(path, file, { upsert: true });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
+  return data.publicUrl;
+}
+
 export function useLearnerProfile(userId: string | undefined) {
   return useQuery({
     queryKey: ["learner-profile", userId],
-    enabled: !!userId,
+    enabled: Boolean(userId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("user_id, name, username, email, phone, avatar_url, bio, role, is_blocked, created_at")
+        .select(PROFILE_SELECT)
         .eq("user_id", userId!)
-        .single();
+        .maybeSingle();
+
       if (error) throw error;
-      return data as LearnerProfile;
+      return data as LearnerProfile | null;
     },
   });
 }
 
-// ── Cập nhật thông tin cá nhân ────────────────────────────────────────────────
 export function useUpdateLearnerProfile() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async ({
       userId,
       name,
       phone,
+      address,
+      district,
+      city,
       bio,
-    }: {
-      userId: string;
-      name?: string;
-      phone?: string;
-      bio?: string;
-    }) => {
-      const updates: Record<string, string> = {};
-      if (name !== undefined) updates.name = name.trim();
-      if (phone !== undefined) updates.phone = phone.trim();
-      if (bio !== undefined) updates.bio = bio.trim();
+      avatar_url,
+      previousAddress,
+    }: UpdateLearnerProfilePayload) => {
+      const normalizedAddress = normalizeOptional(address);
+      const normalizedPreviousAddress = normalizeOptional(previousAddress);
+      const addressChanged = normalizedAddress !== normalizedPreviousAddress;
+
+      const updates = {
+        name: name.trim(),
+        phone: normalizeOptional(phone),
+        address: normalizedAddress,
+        bio: normalizeOptional(bio),
+        ...(district !== undefined ? { district: normalizeOptional(district) } : {}),
+        ...(city !== undefined ? { city: normalizeOptional(city) } : {}),
+        ...(avatar_url !== undefined ? { avatar_url: normalizeOptional(avatar_url) } : {}),
+        ...(addressChanged && normalizedAddress ? { location_updated_at: new Date().toISOString() } : {}),
+      };
 
       const { data, error } = await supabase
         .from("profiles")
         .update(updates)
         .eq("user_id", userId)
-        .select()
+        .select(PROFILE_SELECT)
         .single();
+
       if (error) throw error;
       return data as LearnerProfile;
     },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["learner-profile", vars.userId] });
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["learner-profile", variables.userId] });
     },
   });
 }
-
-// ── Upload avatar ─────────────────────────────────────────────────────────────
-const AVATAR_BUCKET = "avatars";
-const MAX_SIZE = 2 * 1024 * 1024; // 2MB
-const ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 export function useUpdateLearnerAvatar() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
+
   return useMutation({
-    mutationFn: async ({ userId, file }: { userId: string; file: File }) => {
-      if (!ALLOWED_TYPES.includes(file.type)) {
-        throw new Error("Chỉ hỗ trợ ảnh JPG, PNG, WebP.");
-      }
-      if (file.size > MAX_SIZE) {
-        throw new Error("Ảnh không được vượt quá 2MB.");
-      }
+    mutationFn: async (payload: UpdateLearnerAvatarPayload) => {
+      const avatarUrl = "avatarUrl" in payload ? payload.avatarUrl : await uploadLearnerAvatar(payload.userId, payload.file);
 
-      const ext = file.name.split(".").pop();
-      const path = `${userId}/avatar-${Date.now()}.${ext}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from(AVATAR_BUCKET)
-        .upload(path, file, { upsert: true });
-      if (uploadError) throw uploadError;
-
-      const { data } = supabase.storage.from(AVATAR_BUCKET).getPublicUrl(path);
-      const avatarUrl = data.publicUrl;
-
-      const { error: updateError } = await supabase
+      const { data, error } = await supabase
         .from("profiles")
         .update({ avatar_url: avatarUrl })
-        .eq("user_id", userId);
-      if (updateError) throw updateError;
+        .eq("user_id", payload.userId)
+        .select(PROFILE_SELECT)
+        .single();
 
-      return avatarUrl;
+      if (error) throw error;
+      return data as LearnerProfile;
     },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["learner-profile", vars.userId] });
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["learner-profile", variables.userId] });
     },
   });
 }
 
-// ── Đổi mật khẩu ─────────────────────────────────────────────────────────────
 export function useChangeLearnerPassword() {
   return useMutation({
     mutationFn: async ({ newPassword }: { newPassword: string }) => {
       if (newPassword.length < 6) {
         throw new Error("Mật khẩu phải có ít nhất 6 ký tự.");
       }
+
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
     },
   });
 }
 
-// ── Thống kê học viên ─────────────────────────────────────────────────────────
 export function useLearnerStats(learnerId: string | undefined) {
   return useQuery({
     queryKey: ["learner-stats", learnerId],
-    enabled: !!learnerId,
+    enabled: Boolean(learnerId),
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bookings")
         .select("status")
         .eq("learner_id", learnerId!);
+
       if (error) throw error;
 
       const bookings = data ?? [];
       return {
         total: bookings.length,
-        pending: bookings.filter((b) => b.status === "pending").length,
-        upcoming: bookings.filter((b) => b.status === "upcoming").length,
-        completed: bookings.filter((b) => b.status === "completed").length,
-        cancelled: bookings.filter((b) => b.status === "cancelled").length,
+        pending: bookings.filter((booking) => booking.status === "pending").length,
+        upcoming: bookings.filter((booking) => booking.status === "upcoming").length,
+        completed: bookings.filter((booking) => booking.status === "completed").length,
+        cancelled: bookings.filter((booking) => booking.status === "cancelled").length,
       };
     },
   });

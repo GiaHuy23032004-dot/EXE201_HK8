@@ -42,7 +42,7 @@ type FormErrorKey = keyof ProofFormValues | "file";
 type FormErrors = Partial<Record<FormErrorKey, string>>;
 
 const SOCIAL_PLATFORMS = Object.keys(SOCIAL_PLATFORM_LABELS) as SocialPlatform[];
-const IMAGE_AND_PDF_ACCEPT = "image/png,image/jpeg,image/webp,application/pdf";
+const IMAGE_AND_PDF_ACCEPT = "image/png,image/jpeg,image/jpg,image/webp,application/pdf";
 const MAX_PROOF_FILE_SIZE = 5 * 1024 * 1024;
 
 const EMPTY_FORM: ProofFormValues = {
@@ -64,8 +64,8 @@ function proofToForm(proof: MentorVerificationProof): ProofFormValues {
       : "",
     platform: (metadata.platform as SocialPlatform | undefined) ?? "",
     title: metadata.title ?? proof.title ?? "",
-    issuer: metadata.issuer ?? "",
-    issued_year: metadata.issued_year ? String(metadata.issued_year) : "",
+    issuer: metadata.issuer ?? proof.issuer ?? "",
+    issued_year: metadata.issued_year ? String(metadata.issued_year) : proof.issued_year ? String(proof.issued_year) : "",
     url: metadata.url ?? proof.url ?? "",
     description: metadata.description ?? proof.description ?? "",
     file: null,
@@ -73,7 +73,7 @@ function proofToForm(proof: MentorVerificationProof): ProofFormValues {
 }
 
 function validateFile(file: File, type: ProofType) {
-  if (!["image/png", "image/jpeg", "image/webp", "application/pdf"].includes(file.type)) {
+  if (!["image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf"].includes(file.type)) {
     return "Chỉ hỗ trợ PNG, JPG, JPEG, WEBP hoặc PDF.";
   }
 
@@ -93,6 +93,10 @@ function validateForm(values: ProofFormValues, editing?: MentorVerificationProof
     return errors;
   }
 
+  if (values.proof_type !== "social" && !values.title.trim()) {
+    errors.title = "Vui lòng nhập tiêu đề bằng chứng.";
+  }
+
   if (values.proof_type === "social") {
     if (!values.url.trim()) {
       errors.url = "URL là bắt buộc.";
@@ -103,9 +107,8 @@ function validateForm(values: ProofFormValues, editing?: MentorVerificationProof
   }
 
   if (values.proof_type === "certificate") {
-    if (!values.title.trim()) errors.title = "Vui lòng nhập tên chứng chỉ / bằng cấp.";
     if (!values.url.trim() && !values.file && !existingFile) {
-      errors.file = "Vui lòng thêm URL hoặc tải lên tệp chứng chỉ / bằng cấp.";
+      errors.file = "Vui lòng nhập URL hoặc tải lên tệp bằng chứng.";
     }
     if (values.url.trim() && !isValidUrl(values.url)) errors.url = "URL xác thực không hợp lệ.";
     if (values.issued_year.trim() && Number.isNaN(Number(values.issued_year))) {
@@ -116,7 +119,7 @@ function validateForm(values: ProofFormValues, editing?: MentorVerificationProof
 
   if (values.url.trim() && !isValidUrl(values.url)) errors.url = "URL không hợp lệ.";
   if (!values.url.trim() && !values.file && !existingFile) {
-    errors.file = "Vui lòng thêm URL hoặc tải lên tệp bằng chứng.";
+    errors.file = "Vui lòng nhập URL hoặc tải lên tệp bằng chứng.";
   }
 
   return errors;
@@ -305,6 +308,7 @@ export function ProofFormDialog({ open, onClose, editing, isBusy, onSubmit }: Pr
                   placeholder={selectedType === "portfolio" ? "VD: Bộ dự án GitHub, video biểu diễn..." : "VD: Video buổi dạy thử, phản hồi học viên..."}
                   className="rounded-xl"
                 />
+                {errors.title && <p className="text-xs text-destructive">{errors.title}</p>}
               </div>
 
               <div className="space-y-2">
@@ -326,8 +330,8 @@ export function ProofFormDialog({ open, onClose, editing, isBusy, onSubmit }: Pr
                 {selectedType === "certificate"
                   ? "Tệp chứng chỉ / bằng cấp"
                   : selectedType === "portfolio"
-                  ? "Tệp portfolio"
-                  : "Tệp minh chứng giảng dạy"}
+                    ? "Tệp portfolio"
+                    : "Tệp minh chứng giảng dạy"}
               </Label>
               <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-dashed p-4 text-sm text-muted-foreground transition-colors hover:border-primary/40">
                 <FileUp className="h-5 w-5 text-primary" />

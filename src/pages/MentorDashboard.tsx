@@ -87,6 +87,15 @@ const verificationBannerCopy: Record<Exclude<MentorVerificationStatus, "approved
     description: "Hồ sơ cần bổ sung thêm thông tin.",
     button: "Bổ sung hồ sơ",
   },
+  revision_requested: {
+    title: "Hồ sơ cần chỉnh sửa",
+    description: "Admin đã yêu cầu chỉnh sửa một số thông tin trong hồ sơ xác minh.",
+    button: "Bổ sung hồ sơ",
+  },
+  revoked: {
+    title: "Xác minh đã bị thu hồi",
+    description: "Trạng thái Verified Mentor không còn hiệu lực. Vui lòng xem ghi chú hoặc liên hệ Admin nếu cần.",
+  },
 };
 
 // Build a simple monthly revenue chart from transactions

@@ -35,7 +35,10 @@ function getSubtitle(proof: MentorVerificationProof) {
   }
 
   if (proof.proof_type === "certificate") {
-    const parts = [metadata.issuer, metadata.issued_year ? String(metadata.issued_year) : null].filter(Boolean);
+    const parts = [
+      metadata.issuer ?? proof.issuer,
+      metadata.issued_year ? String(metadata.issued_year) : proof.issued_year ? String(proof.issued_year) : null,
+    ].filter(Boolean);
     return parts.length > 0 ? parts.join(" · ") : "Chứng chỉ / bằng cấp";
   }
 
@@ -113,7 +116,7 @@ export function ProofCard({ proof, disabled, onEdit, onDelete }: ProofCardProps)
           {filePath && (
             <div className="flex min-w-0 items-center gap-2 text-muted-foreground">
               <FileText className="h-4 w-4 shrink-0" />
-              <span className="truncate">{getFileName(filePath)}</span>
+              <span className="truncate">{proof.file_name || getFileName(filePath)}</span>
             </div>
           )}
         </div>

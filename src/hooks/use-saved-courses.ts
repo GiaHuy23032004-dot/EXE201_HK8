@@ -11,11 +11,13 @@ export function useSavedCourses(userId: string | undefined) {
         .from("saved_courses")
         .select(`
           *,
-          course:courses(id, title, image_url, price, rating, review_count, format, category,
+          course:courses!inner(id, title, image_url, price, rating, review_count, format, category, status, is_hidden,
             mentor:profiles!courses_mentor_id_fkey(name, avatar_url)
           )
         `)
         .eq("user_id", userId!)
+        .eq("course.status", "approved")
+        .eq("course.is_hidden", false)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];

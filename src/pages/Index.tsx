@@ -11,7 +11,7 @@ import { Music, Globe, Code, Palette, Dumbbell, ChefHat, Briefcase, Pencil, Arro
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
-import { usePublicMentorVerificationMap } from "@/hooks/usePublicMentorVerification";
+import { usePublicMentorTrustBadgeMap, type PublicMentorTrustBadge } from "@/hooks/usePublicMentorVerification";
 
 const categoryIcons = [
   { icon: Music, label: "Âm nhạc", slug: "music" },
@@ -33,7 +33,8 @@ interface HomeMentor {
 }
 
 // Helper map course từ Supabase sang CourseCard props
-function mapCourse(c: LearnerCourse) {
+function mapCourse(c: LearnerCourse, badgeMap = new Map<string, PublicMentorTrustBadge[]>()) {
+  const mentorId = c.mentor?.user_id || c.mentor_id;
   return {
     id: c.id,
     title: c.title,
@@ -48,6 +49,7 @@ function mapCourse(c: LearnerCourse) {
     location: c.location || undefined,
     promoted: c.is_promoted,
     studentsCount: c.students_count,
+    mentorBadges: badgeMap.get(mentorId) ?? [],
   };
 }
 
@@ -71,8 +73,16 @@ export default function HomePage() {
       return (data ?? []) as HomeMentor[];
     },
   });
-  const { data: approvedMentorIds = new Set<string>() } = usePublicMentorVerificationMap(
-    mentors.map((mentor) => mentor.user_id),
+  const { data: mentorTrustBadges = new Map() } = usePublicMentorTrustBadgeMap(
+    [
+      ...mentors.map((mentor) => mentor.user_id),
+      ...allCourses.map((course) => course.mentor?.user_id || course.mentor_id),
+    ],
+  );
+  const approvedMentorIds = new Set(
+    Array.from(mentorTrustBadges.entries())
+      .filter(([, badges]) => badges.some((badge) => badge.badge_type === "vet_verified"))
+      .map(([mentorId]) => mentorId),
   );
 
   // Map mentors sang MentorCard props
@@ -85,6 +95,7 @@ export default function HomePage() {
     reviewCount: 0,
     coursesCount: 0,
     verified: approvedMentorIds.has(m.user_id),
+    badges: mentorTrustBadges.get(m.user_id) ?? [],
     bio: m.bio || "",
   }));
 
@@ -135,7 +146,7 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {recommended.map((c) => <CourseCard key={c.id} course={mapCourse(c)} />)}
+              {recommended.map((c) => <CourseCard key={c.id} course={mapCourse(c, mentorTrustBadges)} />)}
             </div>
           )}
         </div>
@@ -157,7 +168,7 @@ export default function HomePage() {
               </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {featured.map((c) => <CourseCard key={c.id} course={mapCourse(c)} />)}
+              {featured.map((c) => <CourseCard key={c.id} course={mapCourse(c, mentorTrustBadges)} />)}
             </div>
           </div>
         </section>
@@ -182,7 +193,7 @@ export default function HomePage() {
               </Link>
             </div>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              {nearby.map((c) => <CourseCard key={c.id} course={mapCourse(c)} />)}
+              {nearby.map((c) => <CourseCard key={c.id} course={mapCourse(c, mentorTrustBadges)} />)}
             </div>
           </div>
         </section>

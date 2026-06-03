@@ -145,7 +145,7 @@ export function useLearnerBookingById(bookingId: string | undefined, learnerId: 
         .from("bookings")
         .select(`
           *,
-          course:courses(title, image_url, price, category, format),
+          course:courses(title, image_url, price, start_date, category, format),
           mentor:profiles!bookings_mentor_id_fkey(name, avatar_url)
         `)
         .eq("id", bookingId!)

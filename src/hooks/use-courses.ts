@@ -19,6 +19,9 @@ export interface Course {
   format: "online" | "offline";
   price: number;
   location: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  location_geocoded_at?: string | null;
   meeting_link: string | null;
   image_url: string | null;
   status: "pending" | "approved" | "rejected";
@@ -27,6 +30,14 @@ export interface Course {
   rating: number;
   review_count: number;
   start_date: string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  rejection_reason?: string | null;
+  admin_note?: string | null;
+  is_hidden: boolean;
+  hidden_reason?: string | null;
+  hidden_at?: string | null;
+  hidden_by?: string | null;
   created_at: string;
   updated_at?: string;
   course_schedules?: CourseScheduleSummary[];
@@ -41,6 +52,7 @@ export interface Course {
 
 export interface CourseFilters {
   query?: string;
+  location?: string;
   category?: string | null;
   format?: "all" | "online" | "offline";
   minPrice?: number;
@@ -82,6 +94,7 @@ export function useCourses(filters?: CourseFilters) {
           mentor:profiles!courses_mentor_id_fkey(name, avatar_url, user_id)
         `)
         .eq("status", "approved")
+        .eq("is_hidden", false)
         .order("is_promoted", { ascending: false })
         .order("created_at", { ascending: false });
 
@@ -90,6 +103,10 @@ export function useCourses(filters?: CourseFilters) {
       if (filters?.minPrice !== undefined) q = q.gte("price", filters.minPrice);
       if (filters?.maxPrice !== undefined) q = q.lte("price", filters.maxPrice);
       if (filters?.query) q = q.ilike("title", `%${filters.query}%`);
+      if (filters?.location) {
+        const locationTerm = filters.location.split(",")[0]?.trim() || filters.location.trim();
+        if (locationTerm) q = q.ilike("location", `%${locationTerm}%`);
+      }
 
       const { data, error } = await q;
       if (error) throw error;
@@ -112,6 +129,8 @@ export function useCourse(id: string | undefined) {
           course_schedules(*)
         `)
         .eq("id", id!)
+        .eq("status", "approved")
+        .eq("is_hidden", false)
         .single();
       if (error) throw error;
       return data;
@@ -174,10 +193,40 @@ export interface UpdateCoursePayload {
   start_date: string | null;
 }
 
+async function ensureMentorCanManageCourses(mentorId: string) {
+  const { data, error } = await supabase
+    .from("mentor_restrictions")
+    .select("restriction_type, reason, expires_at")
+    .eq("mentor_id", mentorId)
+    .in("restriction_type", ["posting_suspended", "account_locked"]);
+
+  if (error) throw error;
+
+  const now = Date.now();
+  const activeRestrictions = (data ?? []).filter((restriction) => {
+    return !restriction.expires_at || new Date(restriction.expires_at).getTime() > now;
+  });
+
+  const accountLock = activeRestrictions.find((restriction) => restriction.restriction_type === "account_locked");
+  if (accountLock) {
+    throw new Error(accountLock.reason || "Tài khoản mentor đang bị khóa, không thể quản lý khóa học.");
+  }
+
+  const postingSuspension = activeRestrictions.find((restriction) => restriction.restriction_type === "posting_suspended");
+  if (postingSuspension) {
+    const until = postingSuspension.expires_at
+      ? ` đến ${new Date(postingSuspension.expires_at).toLocaleDateString("vi-VN")}`
+      : "";
+    throw new Error(`Bạn đang bị tạm khóa quyền đăng/chỉnh sửa khóa học${until}.`);
+  }
+}
+
 export function useUpdateCourse() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ id, mentor_id, ...fields }: UpdateCoursePayload) => {
+      await ensureMentorCanManageCourses(mentor_id);
+
       const { data, error } = await supabase
         .from("courses")
         .update(fields)
@@ -216,6 +265,8 @@ export function useCreateCourse() {
       schedules?: { day_of_week: string; start_time: string; end_time: string }[];
     }) => {
       const { schedules, ...courseData } = payload;
+      await ensureMentorCanManageCourses(payload.mentor_id);
+
       const { data, error } = await supabase
         .from("courses")
         .insert(courseData)

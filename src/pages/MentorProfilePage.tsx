@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { CourseCard } from "@/components/marketplace/CourseCard";
@@ -5,11 +6,14 @@ import { ReviewBlock } from "@/components/marketplace/ReviewBlock";
 import { useMentorCourses } from "@/hooks/use-courses";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Star, BadgeCheck, BookOpen, Users, Award, Loader2 } from "lucide-react";
+import { Star, BookOpen, Users, Award, Loader2, Flag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { motion } from "framer-motion";
 import { usePublicMentorVerification } from "@/hooks/usePublicMentorVerification";
+import { ReportModal } from "@/components/reports/ReportModal";
+import { TrustBadges } from "@/components/marketplace/TrustBadges";
 
 interface MentorReviewRow {
   id: string;
@@ -24,6 +28,7 @@ interface MentorReviewRow {
 
 export default function MentorProfilePage() {
   const { id } = useParams();
+  const [reportOpen, setReportOpen] = useState(false);
 
   // Fetch mentor profile
   const { data: mentor, isLoading: mentorLoading } = useQuery({
@@ -42,17 +47,18 @@ export default function MentorProfilePage() {
 
   // Fetch mentor courses
   const { data: courses = [], isLoading: coursesLoading } = useMentorCourses(id);
+  const publicCourses = courses.filter((course) => course.status === "approved" && !course.is_hidden);
   const { data: mentorVerification } = usePublicMentorVerification(id);
 
   // Fetch reviews cho tất cả courses của mentor
   const { data: reviews = [] } = useQuery<MentorReviewRow[]>({
     queryKey: ["mentor-reviews", id],
-    enabled: !!id && courses.length > 0,
+    enabled: !!id && publicCourses.length > 0,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("reviews")
         .select(`*, learner:profiles!reviews_learner_id_fkey(name, avatar_url), course:courses(title)`)
-        .in("course_id", courses.map((c) => c.id))
+        .in("course_id", publicCourses.map((c) => c.id))
         .order("created_at", { ascending: false })
         .limit(10);
       if (error) return [];
@@ -80,7 +86,8 @@ export default function MentorProfilePage() {
     );
   }
 
-  const mappedCourses = courses.map((c) => ({
+  const mentorBadges = mentorVerification?.badges ?? [];
+  const mappedCourses = publicCourses.map((c) => ({
     id: c.id,
     title: c.title,
     mentorName: mentor.name || "Mentor",
@@ -94,6 +101,7 @@ export default function MentorProfilePage() {
     location: c.location || undefined,
     promoted: c.is_promoted,
     studentsCount: c.students_count,
+    mentorBadges,
   }));
 
   const mappedReviews = reviews.map((r) => ({
@@ -126,31 +134,42 @@ export default function MentorProfilePage() {
               <div className="flex-1">
                 <div className="flex items-center justify-center sm:justify-start gap-2 mb-1">
                   <h1 className="text-2xl font-bold text-foreground">{mentor.name}</h1>
-                  {isVerifiedMentor && <BadgeCheck className="h-5 w-5 text-secondary" />}
                 </div>
+                <TrustBadges badges={mentorBadges} className="mb-3 justify-center sm:justify-start" />
                 <p className="text-muted-foreground mb-3">{mentor.role === "mentor" ? "Mentor" : "Giảng viên"}</p>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4 text-sm text-muted-foreground">
                   <span className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-warning text-warning" />{avgRating} ({reviews.length} đánh giá)
                   </span>
-                  <span className="flex items-center gap-1"><BookOpen className="h-4 w-4" />{courses.length} khóa học</span>
+                  <span className="flex items-center gap-1"><BookOpen className="h-4 w-4" />{publicCourses.length} khóa học</span>
                   <span className="flex items-center gap-1">
                     <Users className="h-4 w-4" />
-                    {courses.reduce((s, c) => s + c.students_count, 0)} học viên
+                    {publicCourses.reduce((s, c) => s + c.students_count, 0)} học viên
                   </span>
                 </div>
               </div>
               {isMentorProfile && (
-                <Badge
-                  className={
-                    isVerifiedMentor
-                      ? "bg-success/10 text-success border-0 gap-1"
-                      : "bg-muted text-muted-foreground border-0 gap-1"
-                  }
-                >
-                  <Award className="h-3 w-3" />
-                  {isVerifiedMentor ? "Đã xác minh" : "Chưa xác minh"}
-                </Badge>
+                <div className="flex flex-col items-center gap-2 sm:items-end">
+                  <Badge
+                    className={
+                      isVerifiedMentor
+                        ? "bg-success/10 text-success border-0 gap-1"
+                        : "bg-muted text-muted-foreground border-0 gap-1"
+                    }
+                  >
+                    <Award className="h-3 w-3" />
+                    {isVerifiedMentor ? "Đã xác minh" : "Chưa xác minh"}
+                  </Badge>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl text-muted-foreground hover:text-destructive"
+                    onClick={() => setReportOpen(true)}
+                  >
+                    <Flag className="mr-2 h-4 w-4" />
+                    Báo cáo Mentor
+                  </Button>
+                </div>
               )}
             </div>
 
@@ -187,6 +206,16 @@ export default function MentorProfilePage() {
           )}
         </motion.div>
       </div>
+      {isMentorProfile && (
+        <ReportModal
+          open={reportOpen}
+          onOpenChange={setReportOpen}
+          type="mentor"
+          reportedUserId={mentor.user_id}
+          contextTitle={mentor.name || "Mentor"}
+          contextDescription={mentor.bio || "Hồ sơ mentor trên VET"}
+        />
+      )}
     </MainLayout>
   );
 }

@@ -5,7 +5,7 @@ import { useLearnerSavedCourses } from "@/hooks/useLearnerCourses";
 import { useLearnerReviews, useCreateLearnerReview } from "@/hooks/useLearnerReviews";
 import { useLearnerTransactions } from "@/hooks/useLearnerPayments";
 import { useAuth } from "@/contexts/AuthContext";
-import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Loader2, Receipt, CheckCircle2, RotateCcw, FileText } from "lucide-react";
+import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Loader2, Receipt, CheckCircle2, RotateCcw, FileText, Flag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,6 +16,7 @@ import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { useQueryClient } from "@tanstack/react-query";
+import { ReportModal } from "@/components/reports/ReportModal";
 
 const statusMap: Record<string, { label: string; color: string }> = {
   pending:   { label: "Chờ xác nhận", color: "bg-warning/10 text-warning border-warning/20" },
@@ -29,6 +30,16 @@ type ReviewTarget = {
   bookingId: string;
   courseId: string;
   courseTitle: string;
+};
+
+type LearnerReportTarget = {
+  type: "payment";
+  courseId: string | null;
+  reportedUserId: string;
+  bookingId: string;
+  transactionId?: string | null;
+  contextTitle: string;
+  contextDescription?: string;
 };
 
 export default function LearnerDashboard() {
@@ -49,6 +60,7 @@ export default function LearnerDashboard() {
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewHover, setReviewHover] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
+  const [reportTarget, setReportTarget] = useState<LearnerReportTarget | null>(null);
 
   const pending   = bookings.filter((b) => b.status === "pending");
   const upcoming  = bookings.filter((b) => b.status === "upcoming");
@@ -93,8 +105,20 @@ export default function LearnerDashboard() {
     }
   };
 
+  const openBookingReport = (booking: typeof bookings[0]) => {
+    setReportTarget({
+      type: "payment",
+      courseId: booking.course_id,
+      reportedUserId: booking.mentor_id,
+      bookingId: booking.id,
+      contextTitle: booking.course?.title || "Buổi học đã đặt",
+      contextDescription: `${new Date(booking.booking_date).toLocaleDateString("vi-VN")} · ${booking.start_time} - ${booking.end_time}`,
+    });
+  };
+
   function BookingItem({ booking }: { booking: typeof bookings[0] }) {
     const s = statusMap[booking.status] ?? statusMap.pending;
+    const existingReview = reviews.some((review: any) => review.booking_id === booking.id);
     return (
       <div className="flex gap-4 rounded-2xl border bg-card p-4 shadow-card">
         <img
@@ -112,7 +136,7 @@ export default function LearnerDashboard() {
             <span className="flex items-center gap-1"><Calendar className="h-3 w-3" />{new Date(booking.booking_date).toLocaleDateString("vi-VN")}</span>
             <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{booking.start_time} - {booking.end_time}</span>
           </div>
-          {booking.status === "completed" && (
+          {booking.status === "completed" && !existingReview && (
             <Button
               variant="outline"
               size="sm"
@@ -121,6 +145,11 @@ export default function LearnerDashboard() {
             >
               <Star className="mr-1 h-3 w-3" />Đánh giá khóa học
             </Button>
+          )}
+          {booking.status === "completed" && existingReview && (
+            <Badge variant="outline" className="mt-2 w-fit text-xs">
+              Đã đánh giá
+            </Badge>
           )}
           {booking.status === "upcoming" && (
             <Button
@@ -132,6 +161,15 @@ export default function LearnerDashboard() {
               Hủy đặt lịch
             </Button>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2 h-7 text-xs rounded-lg text-muted-foreground hover:text-destructive"
+            onClick={() => openBookingReport(booking)}
+          >
+            <Flag className="mr-1 h-3 w-3" />
+            Báo cáo buổi học
+          </Button>
         </div>
       </div>
     );
@@ -141,7 +179,8 @@ export default function LearnerDashboard() {
     <MainLayout>
       <div className="container max-w-4xl py-8">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
-          <div className="flex items-center gap-3 mb-1">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl gradient-primary text-primary-foreground shadow-glow">
               <GraduationCap className="h-5 w-5" />
             </div>
@@ -151,6 +190,13 @@ export default function LearnerDashboard() {
               </h1>
               <p className="text-muted-foreground text-sm">Trang học viên – quản lý lịch học & tiến trình</p>
             </div>
+            </div>
+            <Link to="/learner/reports">
+              <Button variant="outline" className="rounded-xl">
+                <Flag className="mr-2 h-4 w-4" />
+                Báo cáo của tôi
+              </Button>
+            </Link>
           </div>
         </motion.div>
 
@@ -277,12 +323,29 @@ export default function LearnerDashboard() {
                       </div>
                     </div>
                     {t.booking_id && (
-                      <div className="mt-3 flex justify-end">
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
                         <Link to={`/receipt/${t.booking_id}`}>
                           <Button variant="outline" size="sm" className="h-7 text-xs rounded-lg gap-1">
                             <FileText className="h-3 w-3" />Xem biên lai
                           </Button>
                         </Link>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs rounded-lg text-muted-foreground hover:text-destructive"
+                          onClick={() => setReportTarget({
+                            type: "payment",
+                            courseId: t.course_id,
+                            reportedUserId: t.mentor_id,
+                            bookingId: t.booking_id,
+                            transactionId: t.id,
+                            contextTitle: t.course?.title || "Giao dịch thanh toán",
+                            contextDescription: `Mã giao dịch: ${t.reference_code || t.id.slice(0, 8).toUpperCase()}`,
+                          })}
+                        >
+                          <Flag className="mr-1 h-3 w-3" />
+                          Báo cáo thanh toán
+                        </Button>
                       </div>
                     )}
                   </div>
@@ -308,6 +371,20 @@ export default function LearnerDashboard() {
           </Link>
         </div>
       </div>
+
+      {reportTarget && (
+        <ReportModal
+          open={!!reportTarget}
+          onOpenChange={(open) => !open && setReportTarget(null)}
+          type={reportTarget.type}
+          courseId={reportTarget.courseId}
+          reportedUserId={reportTarget.reportedUserId}
+          bookingId={reportTarget.bookingId}
+          transactionId={reportTarget.transactionId}
+          contextTitle={reportTarget.contextTitle}
+          contextDescription={reportTarget.contextDescription}
+        />
+      )}
 
       {/* Review Dialog */}
       <Dialog open={!!reviewTarget} onOpenChange={(open) => !open && setReviewTarget(null)}>

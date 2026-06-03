@@ -32,6 +32,7 @@ export interface LearnerCourse {
 
 export interface CourseSearchFilters {
   query?: string;
+  location?: string;
   category?: string | null;
   format?: "all" | "online" | "offline";
   minPrice?: number;
@@ -55,6 +56,7 @@ export function useLearnerSearchCourses(filters?: CourseSearchFilters) {
       if (filters?.minPrice !== undefined) q = q.gte("price", filters.minPrice);
       if (filters?.maxPrice !== undefined) q = q.lte("price", filters.maxPrice);
       if (filters?.query) q = q.ilike("title", `%${filters.query}%`);
+      if (filters?.location) q = q.ilike("location", `%${filters.location}%`);
 
       const { data, error } = await q;
       if (error) throw error;

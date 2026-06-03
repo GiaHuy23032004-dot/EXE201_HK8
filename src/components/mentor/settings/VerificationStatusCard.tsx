@@ -20,6 +20,8 @@ const STATUS_STYLE: Record<MentorVerificationStatus, string> = {
   pending: "bg-warning/10 text-warning border-warning/20",
   approved: "bg-success/10 text-success border-success/20",
   rejected: "bg-destructive/10 text-destructive border-destructive/20",
+  revision_requested: "bg-primary/10 text-primary border-primary/20",
+  revoked: "bg-destructive/10 text-destructive border-destructive/20",
 };
 
 export function VerificationStatusCard({ status, adminNote, completion }: VerificationStatusCardProps) {
@@ -29,7 +31,9 @@ export function VerificationStatusCard({ status, adminNote, completion }: Verifi
     draft: "Hồ sơ xác minh của bạn chưa hoàn tất.",
     pending: "Hồ sơ của bạn đang chờ admin duyệt.",
     approved: "Bạn đã được xác minh.",
-    rejected: "Hồ sơ cần bổ sung.",
+    revision_requested: "Admin yêu cầu bổ sung hồ sơ xác minh.",
+    rejected: "Hồ sơ đã bị từ chối.",
+    revoked: "Huy hiệu xác minh đã bị thu hồi.",
   };
 
   return (
@@ -47,7 +51,7 @@ export function VerificationStatusCard({ status, adminNote, completion }: Verifi
             </Badge>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">{message[status]}</p>
-          {status === "rejected" && adminNote && (
+          {(status === "rejected" || status === "revision_requested" || status === "revoked") && adminNote && (
             <p className="mt-2 rounded-xl bg-destructive/5 px-3 py-2 text-sm text-destructive">{adminNote}</p>
           )}
           {completion && !approved && (

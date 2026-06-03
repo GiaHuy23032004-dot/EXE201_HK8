@@ -6,7 +6,14 @@ import {
   type MentorVerificationProof,
 } from "@/hooks/useMentorVerificationProofs";
 
-export type MentorVerificationStatus = "unverified" | "draft" | "pending" | "approved" | "rejected";
+export type MentorVerificationStatus =
+  | "unverified"
+  | "draft"
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "revision_requested"
+  | "revoked";
 
 export interface MentorVerification {
   id: string;
@@ -49,8 +56,10 @@ const VALID_STATUSES: MentorVerificationStatus[] = [
   "pending",
   "approved",
   "rejected",
+  "revision_requested",
+  "revoked",
 ];
-const SUBMITTABLE_STATUSES: MentorVerificationStatus[] = ["unverified", "draft", "rejected"];
+const SUBMITTABLE_STATUSES: MentorVerificationStatus[] = ["unverified", "draft", "revision_requested", "rejected"];
 
 function devLog(label: string, value: unknown) {
   if (import.meta.env.DEV) {
@@ -65,8 +74,9 @@ function devLogError(label: string, value: unknown) {
 }
 
 function normalizeVerificationStatus(status: string | null | undefined): MentorVerificationStatus {
-  return VALID_STATUSES.includes(status as MentorVerificationStatus)
-    ? (status as MentorVerificationStatus)
+  const normalized = status === "revision_required" ? "revision_requested" : status;
+  return VALID_STATUSES.includes(normalized as MentorVerificationStatus)
+    ? (normalized as MentorVerificationStatus)
     : "unverified";
 }
 
@@ -216,7 +226,7 @@ async function fetchVerificationContext(userId: string): Promise<VerificationQue
 
   const { data: proofs, error: proofError } = await supabase
     .from("mentor_verification_proofs")
-    .select("id, mentor_id, proof_type, title, url, file_path, description, metadata, created_at, updated_at")
+    .select("*")
     .eq("mentor_id", currentUserId);
 
   if (proofError) {
@@ -226,7 +236,7 @@ async function fetchVerificationContext(userId: string): Promise<VerificationQue
   return {
     profile,
     verification,
-    completion: buildCompletion(profile, (proofs ?? []) as MentorVerificationProof[], verification.status),
+    completion: buildCompletion(profile, (proofs ?? []) as unknown as MentorVerificationProof[], verification.status),
   };
 }
 
@@ -292,5 +302,7 @@ export const VERIFICATION_STATUS_LABELS: Record<MentorVerificationStatus, string
   draft: "Đang bổ sung",
   pending: "Đang chờ duyệt",
   approved: "Đã xác minh",
-  rejected: "Cần bổ sung",
+  revision_requested: "Cần bổ sung",
+  rejected: "Bị từ chối",
+  revoked: "Đã thu hồi",
 };

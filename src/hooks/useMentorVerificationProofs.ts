@@ -29,13 +29,22 @@ export interface ProofMetadata {
 
 export interface MentorVerificationProof {
   id: string;
+  verification_id: string;
   mentor_id: string;
   proof_type: StoredProofType;
   title: string;
   url: string | null;
   file_path: string | null;
   description: string | null;
+  issuer: string | null;
+  issued_year: number | null;
+  file_name: string | null;
+  file_size_bytes: number | null;
+  file_mime_type: string | null;
   metadata: ProofMetadata | null;
+  status?: string;
+  review_status?: string;
+  admin_note?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -62,7 +71,7 @@ export const PROOF_TYPE_EXAMPLES: Record<ProofType, string> = {
   social: "Chọn nền tảng nghề nghiệp và dán URL hồ sơ hoặc kênh nội dung của bạn.",
   certificate: "Tải lên chứng chỉ, bằng cấp hoặc tài liệu chuyên môn có liên quan.",
   portfolio: "Thêm URL portfolio hoặc tải lên sản phẩm cá nhân tiêu biểu.",
-  teaching_evidence: "Thêm video, ảnh lớp học, tài liệu giảng dạy hoặc phản hồi học viên.",
+  teaching_evidence: "Thêm hình ảnh, video URL, tài liệu giảng dạy hoặc phản hồi học viên cũ.",
 };
 
 export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
@@ -78,9 +87,9 @@ export const SOCIAL_PLATFORM_LABELS: Record<SocialPlatform, string> = {
 
 export const SUPPORTED_PROOF_TYPES: ProofType[] = ["social", "certificate", "portfolio", "teaching_evidence"];
 
-const IMAGE_AND_PDF_TYPES = ["image/png", "image/jpeg", "image/webp", "application/pdf"];
+const IMAGE_AND_PDF_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/webp", "application/pdf"];
 const MAX_PROOF_FILE_SIZE = 5 * 1024 * 1024;
-const EDITABLE_STATUSES: MentorVerificationStatus[] = ["unverified", "draft", "rejected"];
+const EDITABLE_STATUSES: MentorVerificationStatus[] = ["unverified", "draft", "revision_requested", "rejected"];
 
 function normalizeString(value: string | null | undefined) {
   const trimmed = value?.trim() ?? "";
@@ -90,6 +99,10 @@ function normalizeString(value: string | null | undefined) {
 function normalizeMetadata(value: Json | ProofMetadata | null | undefined): ProofMetadata | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   return value as ProofMetadata;
+}
+
+export function isEditableVerificationStatus(status: MentorVerificationStatus | undefined) {
+  return !status || EDITABLE_STATUSES.includes(status);
 }
 
 export function isSupportedProofType(value: string | null | undefined): value is ProofType {
@@ -117,14 +130,14 @@ export function isValidProofItem(proof: Pick<MentorVerificationProof, "proof_typ
   const title = metadata.title ?? proof.title;
 
   if (proof.proof_type === "certificate") {
-    return Boolean(title?.trim()) && (Boolean(filePath) || isValidUrl(url));
+    return Boolean(title?.trim()) && Boolean(filePath);
   }
 
   return Boolean(filePath) || isValidUrl(url);
 }
 
 function assertEditable(status: MentorVerificationStatus | undefined) {
-  if (status && !EDITABLE_STATUSES.includes(status)) {
+  if (!isEditableVerificationStatus(status)) {
     throw new Error("Bạn không thể chỉnh sửa bằng chứng khi hồ sơ đang chờ duyệt hoặc đã được xác minh.");
   }
 }
@@ -143,6 +156,14 @@ function validateFile(file: File, type: ProofType) {
   if (file.size > getMaxFileSize(type)) {
     throw new Error("Tệp bằng chứng không được vượt quá 5MB.");
   }
+}
+
+function normalizeSupabaseError(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) return error;
+  if (error && typeof error === "object" && "message" in error) {
+    return new Error(String((error as { message?: unknown }).message || fallback));
+  }
+  return new Error(fallback);
 }
 
 function safeFileName(fileName: string) {
@@ -183,6 +204,50 @@ async function markDraftIfAllowed(userId: string) {
   if (insertError) throw insertError;
 }
 
+async function ensureMentorVerification(userId: string) {
+  const { data: authData, error: authError } = await supabase.auth.getUser();
+  if (authError) throw normalizeSupabaseError(authError, "Không thể xác thực người dùng.");
+  if (!authData.user?.id) throw new Error("Vui lòng đăng nhập.");
+  if (authData.user.id !== userId) throw new Error("Bạn không thể gửi bằng chứng cho mentor khác.");
+
+  const { data: profile, error: profileError } = await supabase
+    .from("profiles")
+    .select("user_id, role")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (profileError) throw normalizeSupabaseError(profileError, "Không thể tải hồ sơ mentor.");
+  if (profile?.role !== "mentor") throw new Error("Chỉ mentor mới có thể gửi xác minh.");
+
+  const { data: verification, error: verificationError } = await supabase
+    .from("mentor_verifications")
+    .select("id, mentor_id, status")
+    .eq("mentor_id", userId)
+    .maybeSingle();
+
+  if (verificationError) throw normalizeSupabaseError(verificationError, "Không thể tải hồ sơ xác minh.");
+  if (verification?.id) return verification;
+
+  const { data: created, error: createError } = await supabase
+    .from("mentor_verifications")
+    .insert({ mentor_id: userId, status: "unverified" })
+    .select("id, mentor_id, status")
+    .single();
+
+  if (createError) {
+    console.error("Ensure verification row error:", createError);
+    const { data: refetched, error: refetchError } = await supabase
+      .from("mentor_verifications")
+      .select("id, mentor_id, status")
+      .eq("mentor_id", userId)
+      .maybeSingle();
+    if (!refetchError && refetched?.id) return refetched;
+    throw normalizeSupabaseError(createError, "Không thể tạo hồ sơ xác minh.");
+  }
+
+  return created;
+}
+
 async function uploadProofFile(userId: string, type: ProofType, file: File) {
   validateFile(file, type);
   const path = `${userId}/${Date.now()}-${safeFileName(file.name)}`;
@@ -193,13 +258,26 @@ async function uploadProofFile(userId: string, type: ProofType, file: File) {
       contentType: file.type,
     });
 
-  if (error) throw error;
+  if (error) {
+    console.error("Upload proof file error:", error);
+    throw normalizeSupabaseError(error, "Không thể tải tệp bằng chứng.");
+  }
   return path;
+}
+
+function normalizeIssuedYear(value: string) {
+  if (!value.trim()) return null;
+  const year = Number(value);
+  if (!Number.isInteger(year)) throw new Error("Năm cấp phải là số.");
+  return year;
 }
 
 function validateProof(values: ProofFormValues, filePath?: string | null) {
   if (!values.proof_type || !isSupportedProofType(values.proof_type)) {
     throw new Error("Vui lòng chọn loại bằng chứng.");
+  }
+  if (!values.title.trim() && values.proof_type !== "social") {
+    throw new Error("Vui lòng nhập tiêu đề bằng chứng.");
   }
 
   const url = normalizeString(values.url);
@@ -211,15 +289,16 @@ function validateProof(values: ProofFormValues, filePath?: string | null) {
   }
 
   if (values.proof_type === "certificate") {
-    if (!values.title.trim()) throw new Error("Vui lòng nhập tên chứng chỉ / bằng cấp.");
-    if (!url && !values.file && !filePath) throw new Error("Vui lòng thêm URL hoặc tải lên tệp chứng chỉ / bằng cấp.");
+    if (!url && !values.file && !filePath) throw new Error("Vui lòng nhập URL hoặc tải lên tệp bằng chứng.");
     if (url && !isValidUrl(url)) throw new Error("URL xác thực không hợp lệ.");
+    normalizeIssuedYear(values.issued_year);
     return;
   }
 
   if (url && !isValidUrl(url)) throw new Error("URL không hợp lệ.");
+  normalizeIssuedYear(values.issued_year);
   if (!url && !values.file && !filePath) {
-    throw new Error("Vui lòng thêm URL hoặc tải lên tệp bằng chứng.");
+    throw new Error("Vui lòng nhập URL hoặc tải lên tệp bằng chứng.");
   }
 }
 
@@ -230,25 +309,20 @@ function getStoredTitle(values: ProofFormValues, filePath?: string | null) {
   if (values.proof_type === "social") return "Mạng xã hội nghề nghiệp";
   if (values.title.trim()) return values.title.trim();
   if (normalizeString(values.url)) {
-    return values.proof_type === "teaching_evidence"
-      ? "Minh chứng giảng dạy"
-      : "Portfolio / sản phẩm cá nhân";
+    return values.proof_type === "teaching_evidence" ? "Minh chứng giảng dạy" : "Portfolio / sản phẩm cá nhân";
   }
   if (filePath) return safeFileName(filePath.split("/").pop() ?? filePath);
   return "Bằng chứng xác minh";
 }
 
 function buildMetadata(values: ProofFormValues, filePath: string | null): ProofMetadata {
-  const issuedYear = Number(values.issued_year);
+  const issuedYear = normalizeIssuedYear(values.issued_year);
   return {
     type: values.proof_type || undefined,
     platform: values.proof_type === "social" ? values.platform || undefined : undefined,
     title: normalizeString(values.title) ?? undefined,
     issuer: values.proof_type === "certificate" ? normalizeString(values.issuer) ?? undefined : undefined,
-    issued_year:
-      values.proof_type === "certificate" && values.issued_year.trim() && !Number.isNaN(issuedYear)
-        ? issuedYear
-        : undefined,
+    issued_year: values.proof_type === "certificate" && issuedYear ? issuedYear : undefined,
     url: normalizeString(values.url) ?? undefined,
     file_url: filePath ?? undefined,
     description: normalizeString(values.description) ?? undefined,
@@ -289,24 +363,39 @@ export function useMentorVerificationProofs(
       assertEditable(verificationStatus);
       validateProof(values);
 
+      const verification = await ensureMentorVerification(userId);
       const filePath = values.file && values.proof_type ? await uploadProofFile(userId, values.proof_type, values.file) : null;
       const metadata = buildMetadata(values, filePath);
+      const issuedYear = normalizeIssuedYear(values.issued_year);
+      const selectedFile = values.file ?? null;
 
       const { data, error } = await supabase
         .from("mentor_verification_proofs")
         .insert({
+          verification_id: verification.id,
           mentor_id: userId,
           proof_type: values.proof_type as ProofType,
           title: getStoredTitle(values, filePath),
           url: normalizeString(values.url),
           file_path: filePath,
           description: normalizeString(values.description),
+          issuer: normalizeString(values.issuer),
+          issued_year: issuedYear,
+          file_name: selectedFile?.name ?? null,
+          file_size_bytes: selectedFile?.size ?? null,
+          file_mime_type: selectedFile?.type ?? null,
           metadata: metadata as Json,
         })
         .select("*")
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Insert proof error:", error);
+        if (filePath) {
+          await supabase.storage.from("mentor-verification").remove([filePath]);
+        }
+        throw normalizeSupabaseError(error, "Không thể lưu bằng chứng.");
+      }
       await markDraftIfAllowed(userId);
       return normalizeProof(data as MentorVerificationProof);
     },
@@ -333,6 +422,20 @@ export function useMentorVerificationProofs(
         ? await uploadProofFile(userId, values.proof_type, values.file)
         : retainedFilePath;
       const metadata = buildMetadata(values, filePath);
+      const issuedYear = normalizeIssuedYear(values.issued_year);
+      const fileUpdates = values.file
+        ? {
+            file_name: values.file.name,
+            file_size_bytes: values.file.size,
+            file_mime_type: values.file.type,
+          }
+        : filePath
+          ? {}
+          : {
+              file_name: null,
+              file_size_bytes: null,
+              file_mime_type: null,
+            };
 
       const { data, error } = await supabase
         .from("mentor_verification_proofs")
@@ -342,6 +445,9 @@ export function useMentorVerificationProofs(
           url: normalizeString(values.url),
           file_path: filePath,
           description: normalizeString(values.description),
+          issuer: normalizeString(values.issuer),
+          issued_year: issuedYear,
+          ...fileUpdates,
           metadata: metadata as Json,
         })
         .eq("id", id)
@@ -349,7 +455,13 @@ export function useMentorVerificationProofs(
         .select("*")
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Update proof error:", error);
+        if (values.file && filePath && filePath !== currentFilePath) {
+          await supabase.storage.from("mentor-verification").remove([filePath]);
+        }
+        throw normalizeSupabaseError(error, "Không thể lưu bằng chứng.");
+      }
 
       if (currentFilePath && currentFilePath !== filePath && (!verificationStatus || EDITABLE_STATUSES.includes(verificationStatus))) {
         const { error: storageError } = await supabase.storage
