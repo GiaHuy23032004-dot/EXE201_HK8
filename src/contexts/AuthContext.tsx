@@ -77,18 +77,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (event, newSession) => {
         setSession(newSession);
         if (newSession?.user) {
-          setTimeout(() => fetchProfile(newSession.user), 0);
+          setIsLoading(true);
+          setTimeout(() => {
+            fetchProfile(newSession.user).finally(() => setIsLoading(false));
+          }, 0);
         } else {
           setUser(null);
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session: existingSession } }) => {
+    supabase.auth.getSession().then(async ({ data: { session: existingSession } }) => {
       setSession(existingSession);
       if (existingSession?.user) {
-        fetchProfile(existingSession.user);
+        await fetchProfile(existingSession.user);
+      } else {
+        setUser(null);
       }
       setIsLoading(false);
     });

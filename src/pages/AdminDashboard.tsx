@@ -336,10 +336,12 @@ export default function AdminDashboard() {
 
   const confirmPayoutMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("withdrawal_requests")
-        .update({ status: "paid", processed_at: new Date().toISOString() })
-        .eq("id", id);
+      const { error } = await supabase.rpc("admin_process_withdrawal_request", {
+        withdrawal_request_id: id,
+        new_status: "paid",
+        admin_note: null,
+        processed_reference: null,
+      });
       if (error) throw error;
     },
     onSuccess: () => {

@@ -433,6 +433,86 @@ export type Database = {
           { foreignKeyName: "mentor_wallets_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] }
         ]
       }
+      mentor_payout_methods: {
+        Row: {
+          id: string
+          mentor_id: string
+          method_type: string
+          provider_name: string
+          provider_code: string | null
+          account_number: string
+          account_holder: string
+          branch: string | null
+          nickname: string | null
+          is_default: boolean
+          status: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          mentor_id: string
+          method_type: string
+          provider_name: string
+          provider_code?: string | null
+          account_number: string
+          account_holder: string
+          branch?: string | null
+          nickname?: string | null
+          is_default?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          mentor_id?: string
+          method_type?: string
+          provider_name?: string
+          provider_code?: string | null
+          account_number?: string
+          account_holder?: string
+          branch?: string | null
+          nickname?: string | null
+          is_default?: boolean
+          status?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "mentor_payout_methods_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] }
+        ]
+      }
+      payout_method_audit_logs: {
+        Row: {
+          id: string
+          mentor_id: string
+          payout_method_id: string | null
+          action: string
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          mentor_id: string
+          payout_method_id?: string | null
+          action: string
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          mentor_id?: string
+          payout_method_id?: string | null
+          action?: string
+          metadata?: Json
+          created_at?: string
+        }
+        Relationships: [
+          { foreignKeyName: "payout_method_audit_logs_mentor_id_fkey"; columns: ["mentor_id"]; referencedRelation: "profiles"; referencedColumns: ["user_id"] },
+          { foreignKeyName: "payout_method_audit_logs_payout_method_id_fkey"; columns: ["payout_method_id"]; referencedRelation: "mentor_payout_methods"; referencedColumns: ["id"] }
+        ]
+      }
       mentor_verifications: {
         Row: {
           id: string
@@ -708,36 +788,48 @@ export type Database = {
         Row: {
           id: string
           mentor_id: string
+          payout_method_id: string | null
+          reference_code: string | null
           amount: number
           bank_name: string
           bank_account: string
           bank_holder: string
           status: Database["public"]["Enums"]["withdrawal_status"]
           admin_note: string | null
+          rejection_reason: string | null
+          processed_reference: string | null
           processed_at: string | null
           created_at: string
         }
         Insert: {
           id?: string
           mentor_id: string
+          payout_method_id?: string | null
+          reference_code?: string | null
           amount: number
           bank_name: string
           bank_account: string
           bank_holder: string
           status?: Database["public"]["Enums"]["withdrawal_status"]
           admin_note?: string | null
+          rejection_reason?: string | null
+          processed_reference?: string | null
           processed_at?: string | null
           created_at?: string
         }
         Update: {
           id?: string
           mentor_id?: string
+          payout_method_id?: string | null
+          reference_code?: string | null
           amount?: number
           bank_name?: string
           bank_account?: string
           bank_holder?: string
           status?: Database["public"]["Enums"]["withdrawal_status"]
           admin_note?: string | null
+          rejection_reason?: string | null
+          processed_reference?: string | null
           processed_at?: string | null
           created_at?: string
         }
@@ -952,6 +1044,44 @@ export type Database = {
       has_role: {
         Args: { _user_id: string; _role: Database["public"]["Enums"]["app_role"] }
         Returns: boolean
+      }
+      create_mentor_payout_method: {
+        Args: {
+          method_type: string
+          provider_name: string
+          provider_code?: string | null
+          account_number: string
+          account_holder: string
+          branch?: string | null
+          nickname?: string | null
+          is_default?: boolean
+          confirmed: boolean
+        }
+        Returns: Database["public"]["Tables"]["mentor_payout_methods"]["Row"]
+      }
+      set_default_mentor_payout_method: {
+        Args: { payout_method_id: string }
+        Returns: Database["public"]["Tables"]["mentor_payout_methods"]["Row"]
+      }
+      delete_mentor_payout_method: {
+        Args: { payout_method_id: string }
+        Returns: boolean
+      }
+      request_mentor_withdrawal: {
+        Args: {
+          amount: number
+          payout_method_id: string
+        }
+        Returns: Database["public"]["Tables"]["withdrawal_requests"]["Row"]
+      }
+      admin_process_withdrawal_request: {
+        Args: {
+          withdrawal_request_id: string
+          new_status: Database["public"]["Enums"]["withdrawal_status"]
+          admin_note?: string | null
+          processed_reference?: string | null
+        }
+        Returns: Database["public"]["Tables"]["withdrawal_requests"]["Row"]
       }
     }
     Enums: {

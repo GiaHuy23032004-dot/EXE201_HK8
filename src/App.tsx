@@ -4,7 +4,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import type { ReactNode } from "react";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { Loader2 } from "lucide-react";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AiChatAssistant } from "@/components/AiChatAssistant";
 import { AdminGuard } from "@/components/AdminGuard";
 import { MentorGuard } from "@/components/MentorGuard";
@@ -24,6 +25,7 @@ import MentorDashboard from "./pages/MentorDashboard";
 import MentorCourses from "./pages/MentorCourses";
 import MentorSchedule from "./pages/mentor/MentorSchedule";
 import MentorStudents from "./pages/mentor/MentorStudents";
+import MentorWallet from "./pages/mentor/MentorWallet";
 import MentorProfile from "./pages/mentor/MentorProfile";
 import MentorSettings from "./pages/mentor/MentorSettings";
 import MentorVerification from "./pages/mentor/MentorVerification";
@@ -58,6 +60,27 @@ function AdminRoute({ children }: { children: ReactNode }) {
   );
 }
 
+function HomeRoute() {
+  const { isLoading, session, user } = useAuth();
+
+  if (isLoading || (session && !user)) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="h-7 w-7 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Đang tải...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (user?.role === "mentor") {
+    return <Navigate to="/mentor/dashboard" replace />;
+  }
+
+  return <Index />;
+}
+
 function AppExtras() {
   const location = useLocation();
 
@@ -76,7 +99,7 @@ const App = () => (
         <Sonner />
         <BrowserRouter>
           <Routes>
-            <Route path="/" element={<Index />} />
+            <Route path="/" element={<HomeRoute />} />
             <Route path="/auth" element={<AuthPage />} />
             <Route path="/reset-password" element={<ResetPasswordPage />} />
             <Route path="/admin/login" element={<AdminLoginPage />} />
@@ -91,7 +114,8 @@ const App = () => (
             <Route path="/mentor/dashboard" element={<MentorGuard><MentorDashboard /></MentorGuard>} />
             <Route path="/mentor/courses"   element={<MentorGuard><MentorCourses /></MentorGuard>} />
             <Route path="/mentor/schedule"  element={<MentorGuard><MentorSchedule /></MentorGuard>} />
-            <Route path="/mentor/wallet"    element={<MentorGuard><MentorDashboard /></MentorGuard>} />
+            <Route path="/mentor/wallet"    element={<MentorGuard><MentorWallet /></MentorGuard>} />
+            <Route path="/mentor/revenue"   element={<MentorGuard><MentorWallet /></MentorGuard>} />
             <Route path="/mentor/students"  element={<MentorGuard><MentorStudents /></MentorGuard>} />
             <Route path="/mentor/profile"   element={<MentorGuard><MentorProfile /></MentorGuard>} />
             <Route path="/mentor/settings"  element={<MentorGuard><MentorSettings /></MentorGuard>} />

@@ -79,7 +79,7 @@ export function MentorLayout({ children }: MentorLayoutProps) {
       {/* Nav */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
         {navItems.map(({ label, path, icon: Icon }) => {
-          const active = location.pathname === path;
+          const active = location.pathname === path || (path === "/mentor/wallet" && location.pathname === "/mentor/revenue");
           return (
             <Link
               key={path}

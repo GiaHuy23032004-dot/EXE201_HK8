@@ -40,9 +40,12 @@ export function Navbar() {
   const dashboardPath = user?.role === "mentor" ? "/mentor/dashboard" : "/learner/dashboard";
   const dashboardLabel = user?.role === "mentor" ? "Quản lý dạy học" : "Trang học viên";
   const DashboardIcon = user?.role === "mentor" ? Mic2 : GraduationCap;
+  const homePath = user?.role === "mentor" ? "/mentor/dashboard" : "/";
+  const profilePath = user?.role === "mentor" ? "/mentor/profile" : "/profile";
+  const settingsPath = user?.role === "mentor" ? "/mentor/settings" : "/settings";
 
   const baseLinks = [
-    { label: "Trang chủ", path: "/" },
+    { label: "Trang chủ", path: homePath },
     { label: "Tìm kiếm", path: "/search" },
     { label: "Bản đồ", path: "/map" },
   ];
@@ -62,7 +65,7 @@ export function Navbar() {
   return (
     <nav className="sticky top-0 z-50 border-b bg-background backdrop-blur-lg">
       <div className="container flex h-16 items-center justify-between">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to={homePath} className="flex items-center gap-2">
           <img src={logoImg} alt="EduMarket" className="h-9 w-auto" />
         </Link>
 
@@ -161,7 +164,7 @@ export function Navbar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate("/profile")}>
+                  <DropdownMenuItem onClick={() => navigate(profilePath)}>
                     <User className="mr-2 h-4 w-4" />
                     Hồ sơ cá nhân
                   </DropdownMenuItem>
@@ -177,7 +180,7 @@ export function Navbar() {
                       Admin Panel
                     </DropdownMenuItem>
                   )}
-                  <DropdownMenuItem onClick={() => navigate("/settings")}>
+                  <DropdownMenuItem onClick={() => navigate(settingsPath)}>
                     <Settings className="mr-2 h-4 w-4" />
                     Cài đặt
                   </DropdownMenuItem>
@@ -245,10 +248,10 @@ export function Navbar() {
                       <Shield className="h-4 w-4" />Admin Panel
                     </Link>
                   )}
-                  <Link to="/profile" onClick={() => setMobileOpen(false)} className="rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
+                  <Link to={profilePath} onClick={() => setMobileOpen(false)} className="rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
                     Hồ sơ cá nhân
                   </Link>
-                  <Link to="/settings" onClick={() => setMobileOpen(false)} className="rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
+                  <Link to={settingsPath} onClick={() => setMobileOpen(false)} className="rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
                     Cài đặt
                   </Link>
                   <button onClick={() => { handleLogout(); setMobileOpen(false); }} className="rounded-lg px-4 py-3 text-left text-sm font-medium text-destructive hover:bg-muted">

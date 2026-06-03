@@ -1,125 +1,39 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
+import { useMutation } from "@tanstack/react-query";
+import { useMentorWallet as useMentorWalletQuery } from "@/hooks/useMentorWallet";
+import { useMentorWalletHistory } from "@/hooks/useMentorWalletHistory";
+import { useMentorWithdrawals, useCreateWithdrawalRequest } from "@/hooks/useMentorWithdrawals";
 
-// Lấy ví của mentor
-export function useMentorWallet(mentorId: string | undefined) {
-  return useQuery({
-    queryKey: ["wallet", mentorId],
-    enabled: !!mentorId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("mentor_wallets")
-        .select("*")
-        .eq("mentor_id", mentorId!)
-        .single();
-      if (error) throw error;
-      return data;
-    },
-  });
+export { useMentorWithdrawals, useCreateWithdrawalRequest };
+export type { MentorWallet } from "@/hooks/useMentorWallet";
+export type { MentorWalletTransaction, MentorRevenueTransaction as MentorTransaction } from "@/hooks/useMentorWalletHistory";
+export type { MentorWithdrawal } from "@/hooks/useMentorWithdrawals";
+
+export function useMentorWallet(_mentorId?: string) {
+  return useMentorWalletQuery();
 }
 
-// Lịch sử giao dịch ví
-export function useWalletTransactions(mentorId: string | undefined) {
-  return useQuery({
-    queryKey: ["wallet-txns", mentorId],
-    enabled: !!mentorId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("wallet_transactions")
-        .select("*")
-        .eq("mentor_id", mentorId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+export function useWalletTransactions(_mentorId?: string) {
+  const history = useMentorWalletHistory();
+  return {
+    ...history,
+    data: history.data?.walletTransactions ?? [],
+  };
 }
 
-// Lịch sử doanh thu (transactions)
-export function useMentorTransactions(mentorId: string | undefined) {
-  return useQuery({
-    queryKey: ["mentor-txns", mentorId],
-    enabled: !!mentorId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("transactions")
-        .select(`*, course:courses(title, image_url)`)
-        .eq("mentor_id", mentorId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
+export function useMentorTransactions(_mentorId?: string) {
+  const history = useMentorWalletHistory();
+  return {
+    ...history,
+    data: history.data?.transactions ?? [],
+  };
 }
 
-// Yêu cầu rút tiền
+// Legacy dashboard compatibility. New withdrawals require selecting a payout method
+// and must be created via useCreateWithdrawalRequest on /mentor/wallet.
 export function useCreateWithdrawal() {
-  const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: {
-      mentor_id: string;
-      amount: number;
-      bank_name: string;
-      bank_account: string;
-      bank_holder: string;
-    }) => {
-      const { data, error } = await supabase
-        .from("withdrawal_requests")
-        .insert(payload)
-        .select()
-        .single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["wallet", vars.mentor_id] });
-    },
-  });
-}
-
-// Cập nhật thông tin ngân hàng
-export function useUpdateBankInfo() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: {
-      mentor_id: string;
-      bank_name: string;
-      bank_account: string;
-      bank_holder: string;
-    }) => {
-      const { error } = await supabase
-        .from("mentor_wallets")
-        .update({
-          bank_name: payload.bank_name,
-          bank_account: payload.bank_account,
-          bank_holder: payload.bank_holder,
-        })
-        .eq("mentor_id", payload.mentor_id);
-      if (error) throw error;
-    },
-    onSuccess: (_, vars) => {
-      qc.invalidateQueries({ queryKey: ["wallet", vars.mentor_id] });
-    },
-  });
-}
-
-// Lịch sử thanh toán của learner
-export function useLearnerTransactions(learnerId: string | undefined) {
-  return useQuery({
-    queryKey: ["learner-transactions", learnerId],
-    enabled: !!learnerId,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("transactions")
-        .select(`
-          *,
-          course:courses(title, image_url),
-          booking:bookings(booking_date, start_time, end_time)
-        `)
-        .eq("learner_id", learnerId!)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data ?? [];
+    mutationFn: async (_payload?: unknown) => {
+      throw new Error("Vui lòng tạo yêu cầu rút tiền tại trang Doanh thu & Ví.");
     },
   });
 }

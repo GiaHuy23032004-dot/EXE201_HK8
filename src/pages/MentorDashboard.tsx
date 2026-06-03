@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { MentorLayout } from "@/components/layout/MentorLayout";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMentorCourses } from "@/hooks/use-courses";
@@ -118,6 +118,7 @@ function getErrorMessage(error: unknown) {
 export default function MentorDashboard() {
   const { session } = useAuth();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const mentorId = session?.user?.id;
 
   const { data: courses  = [], isLoading: coursesLoading  } = useMentorCourses(mentorId);
@@ -173,11 +174,7 @@ export default function MentorDashboard() {
   };
 
   const openWithdraw = () => {
-    setWithdrawAmount(available);
-    setBankName(wallet?.bank_name    ?? "");
-    setBankAccount(wallet?.bank_account ?? "");
-    setBankHolder(wallet?.bank_holder  ?? "");
-    setWithdrawOpen(true);
+    navigate("/mentor/wallet?tab=withdraw");
   };
 
   const confirmWithdraw = async () => {

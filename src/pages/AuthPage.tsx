@@ -55,9 +55,9 @@ export default function AuthPage() {
     }
     toast({ title: "Đăng nhập thành công!", description: "Chào mừng bạn trở lại." });
     if (result.role === "mentor") {
-      navigate("/mentor/dashboard");
+      navigate("/mentor/dashboard", { replace: true });
     } else {
-      navigate("/");
+      navigate("/", { replace: true });
     }
   };
 
@@ -95,9 +95,9 @@ export default function AuthPage() {
     } else {
       toast({ title: "Đăng ký thành công!", description: "Tài khoản đã sẵn sàng." });
       if (role === "mentor") {
-        navigate("/mentor/dashboard");
+        navigate("/mentor/dashboard", { replace: true });
       } else {
-        navigate("/");
+        navigate("/", { replace: true });
       }
     }
   };
