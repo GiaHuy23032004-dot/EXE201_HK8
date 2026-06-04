@@ -15,6 +15,9 @@ verify_jwt = false
 [functions.admin-user-actions]
 verify_jwt = false
 
+[functions.admin-settings-actions]
+verify_jwt = false
+
 [functions.admin-course-actions]
 verify_jwt = false
 
