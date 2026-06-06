@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Menu, X, Bell, LogOut, Settings, User, BookOpen, ChevronDown, Shield, GraduationCap, Mic2, Calendar, MessageSquare, CheckCircle2, DollarSign, Star } from "lucide-react";
+import { Menu, X, Bell, LogOut, Settings, User, BookOpen, ChevronDown, Shield, GraduationCap, Mic2, Calendar, MessageSquare, CheckCircle2, DollarSign, Star, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -48,6 +48,7 @@ export function Navbar() {
     { label: "Trang chủ", path: homePath },
     { label: "Tìm kiếm", path: "/search" },
     { label: "Bản đồ", path: "/map" },
+    { label: "VET Plus", path: "/pricing" },
   ];
 
   const mentorNotifs = [
@@ -174,6 +175,12 @@ export function Navbar() {
                       {dashboardLabel}
                     </DropdownMenuItem>
                   )}
+                  {!isAdmin && user?.role !== "mentor" && (
+                    <DropdownMenuItem onClick={() => navigate("/learner/subscription")}>
+                      <Crown className="mr-2 h-4 w-4" />
+                      Gói của tôi
+                    </DropdownMenuItem>
+                  )}
                   {isAdmin && (
                     <DropdownMenuItem onClick={() => navigate("/admin/dashboard")} className="text-destructive focus:text-destructive">
                       <Shield className="mr-2 h-4 w-4" />
@@ -241,6 +248,11 @@ export function Navbar() {
                   {!isAdmin && (
                     <Link to={dashboardPath} onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
                       <DashboardIcon className="h-4 w-4" />{dashboardLabel}
+                    </Link>
+                  )}
+                  {!isAdmin && user?.role !== "mentor" && (
+                    <Link to="/learner/subscription" onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-muted-foreground hover:bg-muted">
+                      <Crown className="h-4 w-4" />Gói của tôi
                     </Link>
                   )}
                   {isAdmin && (

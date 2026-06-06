@@ -7,22 +7,26 @@ import { MentorCard } from "@/components/marketplace/MentorCard";
 import { CategoryChip } from "@/components/marketplace/CategoryChip";
 import { useLearnerSearchCourses, type LearnerCourse } from "@/hooks/useLearnerCourses";
 import { useQuery } from "@tanstack/react-query";
-import { Music, Globe, Code, Palette, Dumbbell, ChefHat, Briefcase, Pencil, ArrowRight, TrendingUp, MapPin, Sparkles, Brain, Zap, Loader2 } from "lucide-react";
+import { ArrowRight, TrendingUp, MapPin, Sparkles, Brain, Zap, Globe, Dumbbell, Coffee, Mic2, type LucideIcon } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { usePublicMentorTrustBadgeMap, type PublicMentorTrustBadge } from "@/hooks/usePublicMentorVerification";
+import { COURSE_CATEGORIES, type CourseCategorySlug } from "@/constants/courseCategories";
 
-const categoryIcons = [
-  { icon: Music, label: "Âm nhạc", slug: "music" },
-  { icon: Globe, label: "Ngoại ngữ", slug: "language" },
-  { icon: Code, label: "Lập trình", slug: "coding" },
-  { icon: Palette, label: "Nghệ thuật", slug: "art" },
-  { icon: Dumbbell, label: "Thể dục", slug: "fitness" },
-  { icon: ChefHat, label: "Nấu ăn", slug: "cooking" },
-  { icon: Briefcase, label: "Kinh doanh", slug: "business" },
-  { icon: Pencil, label: "Thiết kế", slug: "design" },
-];
+const CATEGORY_ICON_BY_SLUG: Record<CourseCategorySlug, LucideIcon> = {
+  "mind-sports": Brain,
+  "career-english": Globe,
+  "modern-sports": Dumbbell,
+  "barista-beverage": Coffee,
+  "content-speaking": Mic2,
+  "ai-productivity": Sparkles,
+};
+
+const categoryIcons = COURSE_CATEGORIES.map((category) => ({
+  ...category,
+  icon: CATEGORY_ICON_BY_SLUG[category.slug],
+}));
 
 interface HomeMentor {
   user_id: string;

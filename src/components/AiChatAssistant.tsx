@@ -2,23 +2,36 @@ import { useState, useRef, useEffect } from "react";
 import { MessageCircle, X, Send, Loader2, Sparkles, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/hooks/useSubscription";
+import { AI_CREDIT_COSTS } from "@/constants/aiCredits";
+import { AiCreditUpgradeDialog } from "@/components/subscription/AiCreditUpgradeDialog";
+import { isAiCreditRequiredPayload } from "@/lib/aiCreditErrors";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
+const CHAT_AI_COST = AI_CREDIT_COSTS.chat;
 
 const quickPrompts = [
   "Gợi ý khóa học cho người mới",
-  "Tìm mentor dạy guitar gần đây",
-  "Lộ trình học lập trình web",
+  "Tìm mentor tiếng Anh công việc gần đây",
+  "Lộ trình học AI công việc",
   "So sánh học online vs offline",
 ];
 
 export function AiChatAssistant() {
+  const { session, isLoggedIn } = useAuth();
+  const {
+    aiCreditsRemaining,
+    isLoading: subscriptionLoading,
+    refetch: refetchSubscription,
+  } = useSubscription();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [creditDialogOpen, setCreditDialogOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,6 +42,24 @@ export function AiChatAssistant() {
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
+
+    if (!session) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Vui lòng đăng nhập để dùng EduBot AI. Free có 3 AI credits dùng thử mỗi tháng." },
+      ]);
+      return;
+    }
+
+    if (aiCreditsRemaining < CHAT_AI_COST) {
+      setCreditDialogOpen(true);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Bạn đã hết AI credits. Nâng cấp VET Plus để nhận thêm credits mỗi tháng nhé." },
+      ]);
+      return;
+    }
+
     const userMsg: Msg = { role: "user", content: text.trim() };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
@@ -52,20 +83,25 @@ export function AiChatAssistant() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ messages: newMessages }),
       });
 
       if (!resp.ok || !resp.body) {
-        if (resp.status === 429) {
+        const payload = await resp.clone().json().catch(() => null);
+        if (isAiCreditRequiredPayload(payload)) {
+          setCreditDialogOpen(true);
+          upsertAssistant("Bạn đã hết AI credits. Mở VET Plus để nhận 60 AI credits mỗi tháng nhé.");
+        } else if (resp.status === 401) {
+          upsertAssistant("Vui lòng đăng nhập lại để dùng EduBot AI.");
+        } else if (resp.status === 429) {
           upsertAssistant("⏳ Quá nhiều yêu cầu, vui lòng thử lại sau một chút nhé!");
         } else if (resp.status === 402) {
           upsertAssistant("💳 Hệ thống AI tạm hết credit. Vui lòng thử lại sau!");
         } else {
-          upsertAssistant("😅 Có lỗi xảy ra, vui lòng thử lại nhé!");
+          upsertAssistant("😅 Có lỗi xảy ra, vui lòng thử lại nhé! Nếu AI đã bị lỗi, credit sẽ được hoàn qua hệ thống.");
         }
-        setIsLoading(false);
         return;
       }
 
@@ -98,9 +134,11 @@ export function AiChatAssistant() {
         }
       }
     } catch {
-      upsertAssistant("😅 Không thể kết nối. Vui lòng thử lại!");
+      upsertAssistant("😅 Không thể kết nối. Vui lòng thử lại! Nếu AI đã bị lỗi, credit sẽ được hoàn qua hệ thống.");
+    } finally {
+      await refetchSubscription();
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   return (
@@ -140,7 +178,9 @@ export function AiChatAssistant() {
                 </div>
                 <div>
                   <p className="text-sm font-semibold">EduBot AI</p>
-                  <p className="text-[10px] opacity-80">Trợ lý tìm kiếm thông minh</p>
+                  <p className="text-[10px] opacity-80">
+                    {isLoggedIn ? `Còn ${aiCreditsRemaining} credits · mỗi tin ${CHAT_AI_COST} credit` : "Đăng nhập để dùng AI"}
+                  </p>
                 </div>
               </div>
               <button onClick={() => setOpen(false)} className="rounded-lg p-1 hover:bg-white/20 transition-colors">
@@ -157,7 +197,7 @@ export function AiChatAssistant() {
                   </div>
                   <p className="text-sm font-semibold text-foreground mb-1">Chào bạn! 👋</p>
                   <p className="text-xs text-muted-foreground mb-4">
-                    Mình là EduBot, trợ lý AI giúp bạn tìm khóa học và mentor phù hợp.
+                    Mình là EduBot, trợ lý AI giúp bạn tìm khóa học và mentor phù hợp. Tính năng này dùng 1 AI credit.
                   </p>
                   <div className="space-y-2">
                     {quickPrompts.map((p) => (
@@ -220,7 +260,7 @@ export function AiChatAssistant() {
                 <Button
                   type="submit"
                   size="icon"
-                  disabled={isLoading || !input.trim()}
+                  disabled={isLoading || subscriptionLoading || !input.trim()}
                   className="h-10 w-10 rounded-xl gradient-primary border-0 text-primary-foreground shrink-0"
                 >
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -230,6 +270,7 @@ export function AiChatAssistant() {
           </motion.div>
         )}
       </AnimatePresence>
+      <AiCreditUpgradeDialog open={creditDialogOpen} onOpenChange={setCreditDialogOpen} />
     </>
   );
 }

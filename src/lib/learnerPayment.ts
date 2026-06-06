@@ -2,6 +2,7 @@ export type LearnerPaymentOption = "platform_full" | "platform_deposit" | "pay_a
 
 export const DEPOSIT_RATE = 0.2;
 export const MINIMUM_DEPOSIT = 50000;
+export const PLATFORM_FEE_RATE = 0.15;
 
 export function formatVnd(amount: number) {
   return `${Math.max(0, Math.round(amount)).toLocaleString("vi-VN")}đ`;
@@ -18,6 +19,28 @@ export function calculateDepositBreakdown(totalPrice: number) {
   return {
     depositAmount,
     remainingAmount: Math.max(0, totalPrice - depositAmount),
+  };
+}
+
+export function calculateMentorNetAmount(originalAmount: number) {
+  if (!Number.isFinite(originalAmount) || originalAmount <= 0) return 0;
+  return Math.max(0, Math.round(originalAmount * (1 - PLATFORM_FEE_RATE)));
+}
+
+export function calculateVoucherPaymentBreakdown(originalAmount: number, discountAmount: number) {
+  const safeOriginalAmount = Number.isFinite(originalAmount) ? Math.max(0, Math.round(originalAmount)) : 0;
+  const safeDiscountAmount = Number.isFinite(discountAmount)
+    ? Math.min(safeOriginalAmount, Math.max(0, Math.round(discountAmount)))
+    : 0;
+  const finalAmount = Math.max(0, safeOriginalAmount - safeDiscountAmount);
+  const mentorNetAmount = calculateMentorNetAmount(safeOriginalAmount);
+
+  return {
+    originalAmount: safeOriginalAmount,
+    discountAmount: safeDiscountAmount,
+    finalAmount,
+    mentorNetAmount,
+    platformFeeAfterDiscount: Math.max(0, finalAmount - mentorNetAmount),
   };
 }
 

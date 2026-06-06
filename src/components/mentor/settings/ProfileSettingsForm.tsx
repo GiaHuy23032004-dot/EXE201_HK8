@@ -19,7 +19,16 @@ interface ProfileSettingsFormProps {
   profile: MentorProfile;
 }
 
-const FIELD_SUGGESTIONS = ["Guitar", "Piano", "IELTS", "Lập trình", "Yoga", "Nấu ăn", "Thiết kế"];
+const FIELD_SUGGESTIONS = [
+  "Cờ vua",
+  "Tư duy chiến thuật",
+  "Tiếng Anh công việc",
+  "Pickleball",
+  "Barista",
+  "MC",
+  "Thuyết trình",
+  "AI công việc",
+];
 
 interface FormState {
   name: string;

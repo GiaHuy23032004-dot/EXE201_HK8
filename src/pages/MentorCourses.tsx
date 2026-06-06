@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
+import { getCourseCategoryLabel } from "@/constants/courseCategories";
 
 // ─── constants ────────────────────────────────────────────────────────────────
 
@@ -147,7 +148,7 @@ function CourseCard({ course: c, onEdit, onDelete, index }: CourseCardProps) {
       {/* Body */}
       <div className="p-4">
         <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-primary/70">
-          {c.category}
+          {getCourseCategoryLabel(c.category)}
         </p>
         <h3 className="mb-2 line-clamp-2 text-sm font-semibold leading-snug text-foreground">
           {c.title}
@@ -248,7 +249,7 @@ function CourseRow({ course: c, onEdit, onDelete, index }: CourseRowProps) {
             {c.format === "online" ? "Online" : "Offline"}
           </Badge>
           <span className="text-[11px] font-medium text-primary/70 uppercase tracking-wide">
-            {c.category}
+            {getCourseCategoryLabel(c.category)}
           </span>
         </div>
         <p className="truncate text-sm font-semibold text-foreground">{c.title}</p>
@@ -325,7 +326,7 @@ export default function MentorCourses() {
     const matchTab    = activeTab === "all" || c.status === activeTab;
     const matchSearch = search.trim() === "" ||
       c.title.toLowerCase().includes(search.toLowerCase()) ||
-      c.category.toLowerCase().includes(search.toLowerCase());
+      getCourseCategoryLabel(c.category).toLowerCase().includes(search.toLowerCase());
     return matchTab && matchSearch;
   });
 

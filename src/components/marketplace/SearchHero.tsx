@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
 const aiSuggestions = [
-  "Học Guitar acoustic cho người mới",
-  "Khóa tiếng Anh giao tiếp gần Quận 1",
-  "Yoga cho người đi làm văn phòng",
-  "Lập trình Python cơ bản online",
-  "Nấu ăn Nhật Bản cho gia đình",
-  "Thiết kế đồ họa Canva từ A-Z",
+  "Cờ vua chiến thuật cho người mới",
+  "Tiếng Anh công việc cho nhân viên văn phòng",
+  "Pickleball cơ bản gần Quận 1",
+  "Pha chế cà phê tại nhà",
+  "Kỹ năng MC và thuyết trình",
+  "AI tăng năng suất làm việc",
 ];
 
 export function SearchHero() {
@@ -40,7 +40,7 @@ export function SearchHero() {
     setShowSuggestions(true);
     if (!aiText) {
       setAiTyping(true);
-      const text = "🤖 Gợi ý: Bạn có thể thử tìm \"Guitar cơ bản\" hoặc \"Tiếng Anh giao tiếp gần đây\"";
+      const text = "🤖 Gợi ý: Bạn có thể thử tìm \"Tiếng Anh công việc\" hoặc \"AI tăng năng suất\"";
       let i = 0;
       const timer = setInterval(() => {
         setAiText(text.slice(0, i + 1));
@@ -105,7 +105,7 @@ export function SearchHero() {
             phù hợp gần bạn
           </h1>
           <p className="mb-10 text-muted-foreground md:text-lg max-w-2xl mx-auto">
-            Kết nối với hàng nghìn mentor chất lượng. Học mọi thứ từ âm nhạc, ngoại ngữ đến lập trình.
+            Kết nối với hàng nghìn mentor chất lượng trong 6 nhóm kỹ năng thực tế: tư duy chiến thuật, tiếng Anh, thể thao, đồ uống, thuyết trình và AI.
           </p>
 
           <div className="relative mx-auto max-w-2xl overflow-visible">
@@ -166,7 +166,7 @@ export function SearchHero() {
 
           <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
             <span className="text-xs text-muted-foreground">Phổ biến:</span>
-            {["Guitar", "Tiếng Anh", "Yoga", "Lập trình", "Nấu ăn"].map((tag) => (
+            {["Cờ vua", "Tiếng Anh công việc", "Pickleball", "Barista", "AI công việc"].map((tag) => (
               <button
                 key={tag}
                 onClick={() => { setQuery(tag); navigate(`/search?q=${encodeURIComponent(tag)}`); }}

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeCourseCategory } from "@/constants/courseCategories";
 
 export interface CourseSchedule {
   id: string;
@@ -111,8 +112,12 @@ export function useMentorSchedules(mentorId: string | undefined, courseId?: stri
       if (courseError) throw courseError;
       if (!courses?.length) return [] as CourseSchedule[];
 
-      const courseIds = courses.map((course) => course.id);
-      const courseById = Object.fromEntries(courses.map((course) => [course.id, course]));
+      const normalizedCourses = courses.map((course) => ({
+        ...course,
+        category: normalizeCourseCategory(course.category),
+      }));
+      const courseIds = normalizedCourses.map((course) => course.id);
+      const courseById = Object.fromEntries(normalizedCourses.map((course) => [course.id, course]));
 
       const { data: schedules, error: scheduleError } = await supabase
         .from("course_schedules")

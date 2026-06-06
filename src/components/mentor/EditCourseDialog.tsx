@@ -13,18 +13,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { useUpdateCourse, type Course, type UpdateCoursePayload } from "@/hooks/use-courses";
 import { cn } from "@/lib/utils";
-
-// ─── category options (must match DB enum / existing data) ───────────────────
-const CATEGORIES = [
-  { value: "music",    label: "Âm nhạc"    },
-  { value: "language", label: "Ngoại ngữ"  },
-  { value: "coding",   label: "Lập trình"  },
-  { value: "art",      label: "Nghệ thuật" },
-  { value: "fitness",  label: "Thể dục"    },
-  { value: "cooking",  label: "Nấu ăn"     },
-  { value: "business", label: "Kinh doanh" },
-  { value: "design",   label: "Thiết kế"   },
-];
+import { COURSE_CATEGORY_SELECT_OPTIONS, isValidCourseCategorySlug, normalizeCourseCategory } from "@/constants/courseCategories";
 
 // ─── form state type ──────────────────────────────────────────────────────────
 interface FormState {
@@ -43,7 +32,7 @@ function courseToForm(c: Course): FormState {
   return {
     title:        c.title,
     description:  c.description  ?? "",
-    category:     c.category,
+    category:     normalizeCourseCategory(c.category),
     start_date:   c.start_date ?? "",
     format:       c.format,
     price:        String(c.price),
@@ -119,7 +108,7 @@ export function EditCourseDialog({ course, mentorId, open, onClose }: EditCourse
     if (!form.title.trim())
       next.title = "Tên khóa học là bắt buộc.";
 
-    if (!form.category)
+    if (!form.category || !isValidCourseCategorySlug(form.category))
       next.category = "Vui lòng chọn danh mục.";
 
     if (!startDateLocked && !form.start_date)
@@ -242,7 +231,7 @@ export function EditCourseDialog({ course, mentorId, open, onClose }: EditCourse
                   </div>
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORIES.map((cat) => (
+                  {COURSE_CATEGORY_SELECT_OPTIONS.map((cat) => (
                     <SelectItem key={cat.value} value={cat.value}>
                       {cat.label}
                     </SelectItem>

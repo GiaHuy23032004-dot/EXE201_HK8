@@ -10,9 +10,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { categories } from "@/data/mockData";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { COURSE_CATEGORY_SELECT_OPTIONS, isValidCourseCategorySlug } from "@/constants/courseCategories";
 
 const days = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
 
@@ -65,6 +65,10 @@ export default function CreateCoursePage() {
     }
     if (!title.trim() || !category || !price) {
       toast({ title: "Vui lòng điền đầy đủ thông tin bắt buộc", variant: "destructive" });
+      return;
+    }
+    if (!isValidCourseCategorySlug(category)) {
+      toast({ title: "Vui lòng chọn một danh mục hợp lệ", variant: "destructive" });
       return;
     }
     if (!startDate) {
@@ -170,7 +174,7 @@ export default function CreateCoursePage() {
               <Select value={category} onValueChange={setCategory} required>
                 <SelectTrigger className="mt-1 rounded-xl"><SelectValue placeholder="Chọn danh mục" /></SelectTrigger>
                 <SelectContent>
-                  {categories.map((c) => <SelectItem key={c.slug} value={c.slug}>{c.label}</SelectItem>)}
+                  {COURSE_CATEGORY_SELECT_OPTIONS.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

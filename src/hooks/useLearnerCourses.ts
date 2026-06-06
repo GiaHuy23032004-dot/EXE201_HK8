@@ -7,6 +7,7 @@
  */
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCourseCategoryFilterValues, normalizeCourseCategory } from "@/constants/courseCategories";
 
 export interface LearnerCourse {
   id: string;
@@ -20,6 +21,7 @@ export interface LearnerCourse {
   meeting_link: string | null;
   image_url: string | null;
   status: "pending" | "approved" | "rejected";
+  is_hidden?: boolean;
   is_promoted: boolean;
   students_count: number;
   rating: number;
@@ -39,6 +41,13 @@ export interface CourseSearchFilters {
   maxPrice?: number;
 }
 
+function normalizeLearnerCourse(course: LearnerCourse): LearnerCourse {
+  return {
+    ...course,
+    category: normalizeCourseCategory(course.category),
+  };
+}
+
 // ── Tìm kiếm & lọc khóa học ──────────────────────────────────────────────────
 export function useLearnerSearchCourses(filters?: CourseSearchFilters) {
   return useQuery({
@@ -48,10 +57,11 @@ export function useLearnerSearchCourses(filters?: CourseSearchFilters) {
         .from("courses")
         .select(`*, mentor:profiles!courses_mentor_id_fkey(name, avatar_url, user_id)`)
         .eq("status", "approved")
+        .eq("is_hidden", false)
         .order("is_promoted", { ascending: false })
         .order("created_at", { ascending: false });
 
-      if (filters?.category) q = q.eq("category", filters.category);
+      if (filters?.category) q = q.in("category", getCourseCategoryFilterValues(filters.category));
       if (filters?.format && filters.format !== "all") q = q.eq("format", filters.format);
       if (filters?.minPrice !== undefined) q = q.gte("price", filters.minPrice);
       if (filters?.maxPrice !== undefined) q = q.lte("price", filters.maxPrice);
@@ -60,7 +70,7 @@ export function useLearnerSearchCourses(filters?: CourseSearchFilters) {
 
       const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []) as LearnerCourse[];
+      return ((data ?? []) as LearnerCourse[]).map(normalizeLearnerCourse);
     },
   });
 }
@@ -79,9 +89,11 @@ export function useLearnerCourseDetail(courseId: string | undefined) {
           course_schedules(id, day_of_week, start_time, end_time)
         `)
         .eq("id", courseId!)
+        .eq("status", "approved")
+        .eq("is_hidden", false)
         .single();
       if (error) throw error;
-      return data as LearnerCourse;
+      return normalizeLearnerCourse(data as LearnerCourse);
     },
   });
 }
@@ -96,15 +108,25 @@ export function useLearnerSavedCourses(userId: string | undefined) {
         .from("saved_courses")
         .select(`
           *,
-          course:courses(
-            id, title, image_url, price, rating, review_count, format, category,
+          course:courses!inner(
+            id, title, image_url, price, rating, review_count, format, category, status, is_hidden,
             mentor:profiles!courses_mentor_id_fkey(name, avatar_url)
           )
         `)
         .eq("user_id", userId!)
+        .eq("course.status", "approved")
+        .eq("course.is_hidden", false)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []).map((item: any) => ({
+        ...item,
+        course: item.course
+          ? {
+              ...item.course,
+              category: normalizeCourseCategory(item.course.category),
+            }
+          : item.course,
+      }));
     },
   });
 }

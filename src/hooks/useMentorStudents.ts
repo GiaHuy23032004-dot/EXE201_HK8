@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { BookingStatus } from "@/hooks/useMentorBookings";
+import { normalizeCourseCategory } from "@/constants/courseCategories";
 
 export type StudentLearningStatus = "pending" | "learning" | "completed" | "cancelled";
 
@@ -209,7 +210,13 @@ async function fetchMentorStudentRows(mentorId: string, learnerId?: string) {
     ((profilesResult.data ?? []) as MentorStudentProfile[]).map((profile) => [profile.user_id, profile]),
   );
   const coursesById = new Map(
-    ((coursesResult.data ?? []) as MentorStudentCourse[]).map((course) => [course.id, course]),
+    ((coursesResult.data ?? []) as MentorStudentCourse[]).map((course) => [
+      course.id,
+      {
+        ...course,
+        category: normalizeCourseCategory(course.category),
+      },
+    ]),
   );
 
   return groupStudents(bookingRows, profilesById, coursesById);

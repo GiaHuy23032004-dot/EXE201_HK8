@@ -16,6 +16,8 @@ import {
   Phone,
   Receipt,
   ShieldCheck,
+  Ticket,
+  X,
 } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useLearnerCourseDetail } from "@/hooks/useLearnerCourses";
@@ -30,6 +32,7 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import {
   calculateDepositBreakdown,
+  calculateVoucherPaymentBreakdown,
   defaultLearnerPaymentOption,
   formatVnd,
   getPaymentOptionLabel,
@@ -38,6 +41,15 @@ import {
   mapPaymentOptionToBookingMethod,
   type LearnerPaymentOption,
 } from "@/lib/learnerPayment";
+import { getCourseCategoryLabel } from "@/constants/courseCategories";
+import {
+  useApplySubscriptionVoucherToBooking,
+  useAvailableSubscriptionVouchers,
+  usePreviewSubscriptionVoucher,
+  type VoucherPreview,
+} from "@/hooks/useCheckoutVouchers";
+import { useSubscriptionVouchers } from "@/hooks/useSubscriptionVouchers";
+import type { SubscriptionVoucher } from "@/constants/subscription";
 
 const DAY_INDEX: Record<string, number> = {
   "Thứ 2": 1,
@@ -125,6 +137,33 @@ function PaymentOptionCard({
   );
 }
 
+function isVoucherExpired(voucher: SubscriptionVoucher) {
+  if (voucher.status === "expired") return true;
+  if (!voucher.expires_at) return false;
+  const expiresAt = new Date(voucher.expires_at);
+  return Number.isFinite(expiresAt.getTime()) && expiresAt.getTime() < Date.now();
+}
+
+function isVoucherUsed(voucher: SubscriptionVoucher) {
+  return voucher.status === "used" || Boolean(voucher.used_at || voucher.booking_id);
+}
+
+function getVoucherErrorMessage(reason?: string | null) {
+  switch (reason) {
+    case "minimum_booking_amount":
+    case "booking_amount_too_low":
+      return "Voucher áp dụng cho booking từ 300.000đ.";
+    case "already_used":
+      return "Voucher này đã được sử dụng.";
+    case "expired":
+      return "Voucher này đã hết hạn.";
+    case "not_found":
+      return "Không tìm thấy voucher hợp lệ.";
+    default:
+      return reason || "Không thể áp dụng voucher này.";
+  }
+}
+
 export default function BookingPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -139,24 +178,132 @@ export default function BookingPage() {
   const [paymentOption, setPaymentOption] = useState<LearnerPaymentOption>("platform_deposit");
   const [confirmed, setConfirmed] = useState(false);
   const [bookingId, setBookingId] = useState<string | null>(null);
+  const [selectedVoucher, setSelectedVoucher] = useState<SubscriptionVoucher | null>(null);
+  const [voucherPreview, setVoucherPreview] = useState<VoucherPreview | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
 
   const courseFormat = course?.format === "online" ? "online" : "offline";
   const schedules = (course as any)?.course_schedules ?? [];
   const mentor = (course as any)?.mentor;
   const totalPrice = course?.price ?? 0;
-  const { depositAmount, remainingAmount } = useMemo(() => calculateDepositBreakdown(totalPrice), [totalPrice]);
-  const platformAmount = getPlatformPaymentAmount(paymentOption, totalPrice);
+  const platformPaymentSelected = isPlatformPaymentOption(paymentOption);
+  const { vouchers: allVouchers, isLoading: subscriptionVouchersLoading } = useSubscriptionVouchers();
+  const { data: availableVouchers = [], isLoading: availableVouchersLoading } = useAvailableSubscriptionVouchers(
+    totalPrice,
+    platformPaymentSelected && totalPrice > 0,
+  );
+  const previewVoucher = usePreviewSubscriptionVoucher();
+  const applyVoucher = useApplySubscriptionVoucherToBooking();
+  const voucherBreakdown = calculateVoucherPaymentBreakdown(
+    totalPrice,
+    voucherPreview?.ok ? voucherPreview.discount_amount : 0,
+  );
+  const payableTotal = voucherPreview?.ok ? voucherBreakdown.finalAmount : totalPrice;
+  const { depositAmount, remainingAmount } = useMemo(() => calculateDepositBreakdown(payableTotal), [payableTotal]);
+  const platformAmount = getPlatformPaymentAmount(paymentOption, payableTotal);
   const selectedBookingDate = selectedSchedule
     ? getNextBookingDate(selectedSchedule.day_of_week, (course as any).start_date)
     : null;
+  const availableVoucherIds = useMemo(
+    () => new Set(availableVouchers.map((voucher) => voucher.voucher_id)),
+    [availableVouchers],
+  );
+  const selectableVouchers = useMemo(
+    () =>
+      allVouchers.filter((voucher) => {
+        if (isVoucherUsed(voucher) || isVoucherExpired(voucher)) return false;
+        return voucher.voucher_id || voucher.code;
+      }),
+    [allVouchers],
+  );
+  const voucherLoading = subscriptionVouchersLoading || availableVouchersLoading;
 
   useEffect(() => {
     if (!course) return;
     setPaymentOption(defaultLearnerPaymentOption(course.format));
   }, [course?.id, course?.format]);
 
+  useEffect(() => {
+    if (platformPaymentSelected) return;
+    setSelectedVoucher(null);
+    setVoucherPreview(null);
+    setVoucherError(null);
+  }, [platformPaymentSelected]);
+
+  useEffect(() => {
+    setSelectedVoucher(null);
+    setVoucherPreview(null);
+    setVoucherError(null);
+  }, [course?.id, totalPrice]);
+
+  const handleSelectVoucher = async (voucher: SubscriptionVoucher) => {
+    if (!platformPaymentSelected) {
+      setVoucherError("Voucher chỉ áp dụng khi thanh toán qua nền tảng.");
+      return;
+    }
+
+    if (!voucher.voucher_id) {
+      setVoucherError("Không tìm thấy mã voucher hợp lệ.");
+      return;
+    }
+
+    if (totalPrice < voucher.min_booking_amount) {
+      setVoucherError(`Voucher áp dụng cho booking từ ${formatVnd(voucher.min_booking_amount)}.`);
+      setSelectedVoucher(null);
+      setVoucherPreview(null);
+      return;
+    }
+
+    if (availableVouchers.length > 0 && !availableVoucherIds.has(voucher.voucher_id)) {
+      setVoucherError("Voucher không hợp lệ cho booking này.");
+      setSelectedVoucher(null);
+      setVoucherPreview(null);
+      return;
+    }
+
+    setSelectedVoucher(voucher);
+    setVoucherPreview(null);
+    setVoucherError(null);
+
+    try {
+      const preview = await previewVoucher.mutateAsync({
+        voucherId: voucher.voucher_id,
+        bookingAmount: totalPrice,
+      });
+
+      if (!preview.ok) {
+        setSelectedVoucher(null);
+        setVoucherPreview(null);
+        setVoucherError(getVoucherErrorMessage(preview.reason));
+        return;
+      }
+
+      setVoucherPreview(preview);
+      toast({
+        title: "Đã chọn voucher",
+        description: `Giảm ${formatVnd(preview.discount_amount)} cho booking này.`,
+      });
+    } catch (err: any) {
+      console.error("preview_subscription_voucher error:", err);
+      setSelectedVoucher(null);
+      setVoucherPreview(null);
+      setVoucherError(err?.message || "Không thể kiểm tra voucher.");
+    }
+  };
+
+  const handleClearVoucher = () => {
+    setSelectedVoucher(null);
+    setVoucherPreview(null);
+    setVoucherError(null);
+  };
+
   const handleConfirm = async () => {
     if (!session?.user?.id || !course || !selectedSchedule) return;
+
+    if (selectedVoucher && !voucherPreview?.ok) {
+      setVoucherError("Vui lòng chờ hệ thống kiểm tra voucher hoặc bỏ chọn voucher trước khi tiếp tục.");
+      return;
+    }
 
     if (courseFormat === "online" && paymentOption !== "platform_full") {
       setPaymentOption("platform_full");
@@ -188,7 +335,24 @@ export default function BookingPage() {
 
       setBookingId(booking.id);
 
-      if (isPlatformPaymentOption(paymentOption)) {
+      if (platformPaymentSelected && selectedVoucher && voucherPreview?.ok) {
+        try {
+          await applyVoucher.mutateAsync({
+            voucherId: selectedVoucher.voucher_id,
+            bookingId: booking.id,
+          });
+        } catch (voucherApplyError: any) {
+          console.error("apply_subscription_voucher_to_booking error:", voucherApplyError);
+          toast({
+            title: "Không thể áp dụng voucher",
+            description: voucherApplyError?.message || "Booking đã được tạo nhưng voucher chưa được áp dụng. Vui lòng thử lại.",
+            variant: "destructive",
+          });
+          return;
+        }
+      }
+
+      if (platformPaymentSelected) {
         navigate(`/checkout/${booking.id}`);
         return;
       }
@@ -294,7 +458,7 @@ export default function BookingPage() {
                           <><MapPin className="mr-1 h-3 w-3" />Offline</>
                         )}
                       </Badge>
-                      <Badge variant="outline" className="rounded-full">{course.category}</Badge>
+                      <Badge variant="outline" className="rounded-full">{getCourseCategoryLabel(course.category)}</Badge>
                     </div>
                     <h3 className="line-clamp-2 font-semibold text-card-foreground">{course.title}</h3>
                     <p className="text-sm text-muted-foreground">Mentor: {mentor?.name || "Mentor"}</p>
@@ -398,6 +562,125 @@ export default function BookingPage() {
                 )}
               </div>
 
+              {platformPaymentSelected && (
+                <div className="mb-6">
+                  <h2 className="mb-3 flex items-center gap-2 font-semibold text-foreground">
+                    <Ticket className="h-5 w-5 text-primary" />Voucher VET Plus
+                  </h2>
+
+                  <div className="rounded-2xl border bg-card p-4 shadow-sm">
+                    <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-foreground">Giảm học phí bằng voucher subscription</p>
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          Voucher được trừ vào phí nền tảng, mentor không bị giảm thu nhập.
+                        </p>
+                      </div>
+                      <Badge className="rounded-full border-0 bg-cyan-100 text-cyan-700">
+                        Tối thiểu {formatVnd(300000)}
+                      </Badge>
+                    </div>
+
+                    {totalPrice < 300000 ? (
+                      <Alert className="rounded-2xl border-amber-200 bg-amber-50 text-amber-800">
+                        <AlertTriangle className="h-4 w-4" />
+                        <AlertDescription>
+                          Voucher VET Plus chỉ áp dụng cho booking từ {formatVnd(300000)}.
+                        </AlertDescription>
+                      </Alert>
+                    ) : voucherLoading ? (
+                      <div className="flex items-center gap-2 rounded-xl bg-muted/60 p-3 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Đang tải voucher...
+                      </div>
+                    ) : selectableVouchers.length === 0 ? (
+                      <div className="rounded-2xl border border-dashed bg-muted/30 p-4">
+                        <p className="font-medium text-foreground">Bạn chưa có voucher khả dụng</p>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          VET Plus tặng 2 voucher 30.000đ mỗi tháng cho booking từ 300.000đ.
+                        </p>
+                        <Link to="/pricing">
+                          <Button variant="outline" size="sm" className="mt-3 rounded-xl">
+                            Xem VET Plus
+                          </Button>
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {selectableVouchers.map((voucher) => {
+                            const isSelected = selectedVoucher?.voucher_id === voucher.voucher_id;
+                            const isUnavailable =
+                              totalPrice < voucher.min_booking_amount ||
+                              (availableVouchers.length > 0 && !availableVoucherIds.has(voucher.voucher_id));
+
+                            return (
+                              <button
+                                key={voucher.voucher_id || voucher.code}
+                                type="button"
+                                disabled={previewVoucher.isPending || isUnavailable}
+                                onClick={() => handleSelectVoucher(voucher)}
+                                className={`rounded-2xl border p-4 text-left transition-all ${
+                                  isSelected
+                                    ? "border-primary bg-primary/5 shadow-card"
+                                    : "border-border bg-background hover:border-primary/30"
+                                } ${isUnavailable ? "cursor-not-allowed opacity-60" : ""}`}
+                              >
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="break-all text-sm font-bold text-foreground">
+                                      {voucher.code || "VETPLUS"}
+                                    </p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      Giảm {formatVnd(voucher.amount)}
+                                    </p>
+                                    <p className="mt-1 text-xs text-muted-foreground">
+                                      Hết hạn:{" "}
+                                      {voucher.expires_at
+                                        ? new Date(voucher.expires_at).toLocaleDateString("vi-VN")
+                                        : "Không giới hạn"}
+                                    </p>
+                                  </div>
+                                  {isSelected ? (
+                                    <CheckCircle2 className="h-5 w-5 text-primary" />
+                                  ) : (
+                                    <Ticket className="h-5 w-5 text-muted-foreground" />
+                                  )}
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {selectedVoucher && voucherPreview?.ok && (
+                          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                            <span>
+                              Đã áp dụng {selectedVoucher.code}: giảm{" "}
+                              <strong>{formatVnd(voucherPreview.discount_amount)}</strong>
+                            </span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={handleClearVoucher}
+                              className="h-8 rounded-xl text-emerald-800 hover:bg-emerald-100"
+                            >
+                              <X className="mr-1 h-4 w-4" />Bỏ chọn
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {voucherError && (
+                      <p className="mt-3 rounded-xl bg-destructive/10 p-3 text-sm text-destructive">
+                        {voucherError}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <Separator className="my-6" />
 
               <div className="mb-6 rounded-2xl border bg-muted/30 p-6">
@@ -438,9 +721,21 @@ export default function BookingPage() {
                         <span className="text-muted-foreground">Cần thanh toán</span>
                         <span className="text-foreground">100% học phí</span>
                       </div>
+                      {voucherPreview?.ok && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Học phí gốc</span>
+                            <span className="text-foreground">{formatVnd(totalPrice)}</span>
+                          </div>
+                          <div className="flex justify-between text-emerald-700">
+                            <span>Voucher VET Plus</span>
+                            <span>-{formatVnd(voucherBreakdown.discountAmount)}</span>
+                          </div>
+                        </>
+                      )}
                       <div className="flex justify-between text-base font-bold">
                         <span>Tổng cộng</span>
-                        <span className="text-primary">{formatVnd(totalPrice)}</span>
+                        <span className="text-primary">{formatVnd(payableTotal)}</span>
                       </div>
                     </>
                   )}
@@ -451,6 +746,18 @@ export default function BookingPage() {
                         <span className="text-muted-foreground">Tổng học phí</span>
                         <span className="text-foreground">{formatVnd(totalPrice)}</span>
                       </div>
+                      {voucherPreview?.ok && (
+                        <>
+                          <div className="flex justify-between text-emerald-700">
+                            <span>Voucher VET Plus</span>
+                            <span>-{formatVnd(voucherBreakdown.discountAmount)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Sau voucher</span>
+                            <span className="font-semibold text-foreground">{formatVnd(payableTotal)}</span>
+                          </div>
+                        </>
+                      )}
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Đặt cọc qua nền tảng</span>
                         <span className="font-semibold text-primary">{formatVnd(depositAmount)}</span>
@@ -482,11 +789,20 @@ export default function BookingPage() {
 
               <Button
                 onClick={handleConfirm}
-                disabled={!selectedSchedule || !phone || createBooking.isPending}
+                disabled={
+                  !selectedSchedule ||
+                  !phone ||
+                  createBooking.isPending ||
+                  previewVoucher.isPending ||
+                  applyVoucher.isPending ||
+                  Boolean(selectedVoucher && !voucherPreview?.ok)
+                }
                 className="w-full rounded-xl border-0 gradient-primary py-6 text-base text-primary-foreground"
               >
-                {createBooking.isPending ? (
+                {createBooking.isPending || applyVoucher.isPending ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang xử lý...</>
+                ) : previewVoucher.isPending ? (
+                  <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Đang kiểm tra voucher...</>
                 ) : (
                   ctaText
                 )}

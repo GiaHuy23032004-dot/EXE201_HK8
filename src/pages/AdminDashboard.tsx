@@ -25,6 +25,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
 import { useAuth } from "@/contexts/AuthContext";
+import { getCourseCategoryLabel, normalizeCourseCategory } from "@/constants/courseCategories";
 
 const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "hsl(var(--warning, 38 92% 50%))", "hsl(var(--muted-foreground))"];
 
@@ -307,11 +308,14 @@ export default function AdminDashboard() {
         .eq("status", "approved");
       if (error) throw error;
       const map: Record<string, number> = {};
-      (data ?? []).forEach((c: any) => { map[c.category] = (map[c.category] ?? 0) + 1; });
+      (data ?? []).forEach((c: any) => {
+        const category = normalizeCourseCategory(c.category);
+        map[category] = (map[category] ?? 0) + 1;
+      });
       return Object.entries(map)
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
-        .map(([name, value]) => ({ name, value }));
+        .map(([name, value]) => ({ name: getCourseCategoryLabel(name), value }));
     },
   });
 

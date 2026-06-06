@@ -29,6 +29,7 @@ import {
   buildReverseGeocodeUrl,
 } from "@/config/map";
 import { getDistanceKm } from "@/lib/distance";
+import { getCourseCategoryLabel } from "@/constants/courseCategories";
 
 const FOCUS_ZOOM = 15;
 const RADIUS_FILTERS = [
@@ -105,7 +106,7 @@ function normalize(value?: string | null) {
 
 function courseMatchesSearch(course: Course, term: string) {
   if (!term) return true;
-  const haystack = [course.title, course.location, course.category, course.mentor?.name].map(normalize).join(" ");
+  const haystack = [course.title, course.location, course.category, getCourseCategoryLabel(course.category), course.mentor?.name].map(normalize).join(" ");
   return haystack.includes(normalize(term));
 }
 

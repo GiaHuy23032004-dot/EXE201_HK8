@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { motion } from "framer-motion";
 import { TrustBadges } from "@/components/marketplace/TrustBadges";
 import type { PublicMentorTrustBadge } from "@/hooks/usePublicMentorVerification";
+import { getCourseCategoryShortLabel } from "@/constants/courseCategories";
 
 export interface CourseData {
   id: string;
@@ -80,6 +81,9 @@ export function CourseCard({ course }: { course: CourseData }) {
             <span className="min-w-0 truncate text-xs font-medium text-muted-foreground">{course.mentorName}</span>
           </div>
           <TrustBadges badges={course.mentorBadges ?? []} compact className="mb-2" />
+          <Badge variant="outline" className="mb-2 rounded-full text-[10px]">
+            {getCourseCategoryShortLabel(course.category)}
+          </Badge>
 
           <h3 className="mb-3 line-clamp-2 text-sm font-semibold leading-snug text-card-foreground group-hover:text-primary transition-colors">
             {course.title}

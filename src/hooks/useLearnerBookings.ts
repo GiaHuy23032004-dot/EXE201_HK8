@@ -8,6 +8,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { LearnerPaymentOption } from "@/lib/learnerPayment";
+import { normalizeCourseCategory } from "@/constants/courseCategories";
 
 export interface LearnerBooking {
   id: string;
@@ -22,6 +23,9 @@ export interface LearnerBooking {
   payment_method: string;
   status: "pending" | "upcoming" | "completed" | "cancelled" | "declined";
   total_price: number;
+  original_total_price?: number | null;
+  voucher_discount_amount?: number | null;
+  applied_voucher_id?: string | null;
   note: string | null;
   created_at: string;
   course?: {
@@ -29,6 +33,7 @@ export interface LearnerBooking {
     image_url: string | null;
     price: number;
     start_date: string | null;
+    category?: string;
     format: "online" | "offline";
   };
   mentor?: { name: string | null; avatar_url: string | null };
@@ -161,7 +166,15 @@ export function useLearnerBookingById(bookingId: string | undefined, learnerId: 
         .eq("learner_id", learnerId!)
         .single();
       if (error) throw error;
-      return data as LearnerBooking;
+      return {
+        ...(data as LearnerBooking),
+        course: (data as LearnerBooking).course
+          ? {
+              ...(data as LearnerBooking).course,
+              category: normalizeCourseCategory((data as LearnerBooking).course?.category),
+            }
+          : (data as LearnerBooking).course,
+      } as LearnerBooking;
     },
   });
 }

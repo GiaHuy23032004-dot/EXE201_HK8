@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { LucideIcon } from "lucide-react";
 import { motion } from "framer-motion";
+import { getCourseCategoryGradient } from "@/constants/courseCategories";
 
 interface CategoryChipProps {
   icon: LucideIcon;
@@ -8,19 +9,8 @@ interface CategoryChipProps {
   slug: string;
 }
 
-const colorMap: Record<string, string> = {
-  music: "from-pink-500 to-rose-500",
-  language: "from-blue-500 to-cyan-500",
-  coding: "from-violet-500 to-purple-500",
-  art: "from-amber-500 to-orange-500",
-  fitness: "from-green-500 to-emerald-500",
-  cooking: "from-red-500 to-pink-500",
-  business: "from-slate-600 to-slate-800",
-  design: "from-fuchsia-500 to-purple-500",
-};
-
 export function CategoryChip({ icon: Icon, label, slug }: CategoryChipProps) {
-  const gradient = colorMap[slug] || "from-primary to-secondary";
+  const gradient = getCourseCategoryGradient(slug);
 
   return (
     <motion.div whileHover={{ y: -4 }} whileTap={{ scale: 0.95 }}>

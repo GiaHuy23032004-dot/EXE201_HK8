@@ -43,6 +43,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { getCourseCategoryLabel } from "@/constants/courseCategories";
 
 type ReportStatus = "pending" | "resolved" | "dismissed" | "appealed";
 type ReportType = "course" | "mentor" | "comment" | "payment";
@@ -709,7 +710,7 @@ export default function AdminReports() {
                     </div>
                     {selectedReport.course ? (
                       <div className="grid gap-3 text-sm sm:grid-cols-3">
-                        <Info label="Danh mục" value={selectedReport.course.category} />
+                        <Info label="Danh mục" value={getCourseCategoryLabel(selectedReport.course.category)} />
                         <Info label="Trạng thái" value={selectedReport.course.status} />
                         <Info label="Hiển thị" value={selectedReport.course.is_hidden ? "Đã tạm ẩn" : "Đang hiển thị"} />
                         <Info label="Booking" value={selectedReport.course_counts?.bookings ?? 0} />

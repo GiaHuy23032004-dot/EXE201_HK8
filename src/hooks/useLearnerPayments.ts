@@ -6,6 +6,7 @@
  */
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeCourseCategory } from "@/constants/courseCategories";
 
 export interface LearnerTransaction {
   id: string;
@@ -38,6 +39,9 @@ export interface LearnerReceipt {
     payment_method: string;
     status: string;
     total_price: number;
+    original_total_price?: number | null;
+    voucher_discount_amount?: number | null;
+    applied_voucher_id?: string | null;
     created_at: string;
     course?: { title: string; image_url: string | null; price: number; category: string; format: string } | null;
     mentor?: { name: string | null; avatar_url: string | null } | null;
@@ -98,7 +102,17 @@ export function useLearnerReceipt(bookingId: string | undefined, learnerId: stri
         console.warn("Không thể tải giao dịch biên lai, dùng trạng thái mock:", txnErr.message);
       }
 
-      return { booking, transaction: txnErr ? null : transaction } as unknown as LearnerReceipt;
+      const normalizedBooking = {
+        ...booking,
+        course: (booking as any).course
+          ? {
+              ...(booking as any).course,
+              category: normalizeCourseCategory((booking as any).course.category),
+            }
+          : (booking as any).course,
+      };
+
+      return { booking: normalizedBooking, transaction: txnErr ? null : transaction } as unknown as LearnerReceipt;
     },
   });
 }

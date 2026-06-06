@@ -1,18 +1,33 @@
 import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { CourseCard } from "@/components/marketplace/CourseCard";
-import { categories } from "@/data/mockData";
 import { useLearnerSearchCourses } from "@/hooks/useLearnerCourses";
 import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List, Sparkles, Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import { motion, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { usePublicMentorTrustBadgeMap } from "@/hooks/usePublicMentorVerification";
+import { COURSE_CATEGORIES, normalizeCourseCategory } from "@/constants/courseCategories";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSubscription } from "@/hooks/useSubscription";
+import { useToast } from "@/hooks/use-toast";
+import { AI_CREDIT_COSTS } from "@/constants/aiCredits";
+import { AiCreditUpgradeDialog } from "@/components/subscription/AiCreditUpgradeDialog";
+import { isAiCreditRequiredPayload, readFunctionErrorPayload } from "@/lib/aiCreditErrors";
+
+const SEARCH_AI_COST = AI_CREDIT_COSTS.search;
 
 export default function SearchPage() {
+  const { session, isLoggedIn } = useAuth();
+  const { toast } = useToast();
+  const {
+    aiCreditsRemaining,
+    isLoading: subscriptionLoading,
+    refetch: refetchSubscription,
+  } = useSubscription();
   const [query, setQuery] = useState("");
   const [locationQuery, setLocationQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -23,15 +38,18 @@ export default function SearchPage() {
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
+  const [creditDialogOpen, setCreditDialogOpen] = useState(false);
+  const [searchParams] = useSearchParams();
 
   // Read query from URL
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const q = params.get("q");
-    const location = params.get("location");
-    if (q) setQuery(q);
-    if (location) setLocationQuery(location);
-  }, []);
+    const q = searchParams.get("q");
+    const location = searchParams.get("location");
+    const category = searchParams.get("category");
+    setQuery(q ?? "");
+    setLocationQuery(location ?? "");
+    setSelectedCategory(category ? normalizeCourseCategory(category) : null);
+  }, [searchParams]);
 
   // Fetch courses từ Supabase
   const { data: courses = [], isLoading } = useLearnerSearchCourses({
@@ -48,47 +66,94 @@ export default function SearchPage() {
 
   // AI search suggestions
   const fetchAiSuggestions = useCallback(async (searchQuery: string) => {
-    if (!searchQuery || searchQuery.length < 2) {
+    const cleanQuery = searchQuery.trim();
+    if (!cleanQuery || cleanQuery.length < 2) {
       setAiSuggestions([]);
+      toast({
+        title: "Nhập từ khóa trước khi dùng AI",
+        description: "Tính năng này dùng 1 AI credit.",
+      });
       return;
     }
+
+    if (!session) {
+      toast({
+        title: "Vui lòng đăng nhập để dùng AI",
+        description: "Free có 3 AI credits dùng thử mỗi tháng.",
+      });
+      return;
+    }
+
+    if (aiCreditsRemaining < SEARCH_AI_COST) {
+      setCreditDialogOpen(true);
+      return;
+    }
+
     setAiLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("ai-search", {
-        body: { query: searchQuery, type: "search" },
+        body: { query: cleanQuery, type: "search" },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       });
-      if (!error && data?.suggestions) {
+
+      if (error) {
+        const payload = await readFunctionErrorPayload(error);
+        if (isAiCreditRequiredPayload(payload)) {
+          setCreditDialogOpen(true);
+          return;
+        }
+        throw error;
+      }
+
+      if (isAiCreditRequiredPayload(data)) {
+        setCreditDialogOpen(true);
+        return;
+      }
+
+      if (data?.suggestions) {
         let raw = data.suggestions;
         if (typeof raw === "string") {
-          raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-          const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed)) {
-            const suggestions = parsed
-              .map((item: unknown) => {
-                if (typeof item === "string") return item;
-                if (item && typeof item === "object" && "title" in item) {
-                  const title = (item as { title?: unknown }).title;
-                  return typeof title === "string" ? title : "";
-                }
-                return "";
-              })
-              .filter(Boolean)
-              .slice(0, 5);
-            setAiSuggestions(suggestions);
-            setShowAiPanel(true);
+          try {
+            raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              const suggestions = parsed
+                .map((item: unknown) => {
+                  if (typeof item === "string") return item;
+                  if (item && typeof item === "object" && "title" in item) {
+                    const title = (item as { title?: unknown }).title;
+                    return typeof title === "string" ? title : "";
+                  }
+                  return "";
+                })
+                .filter(Boolean)
+                .slice(0, 5);
+              setAiSuggestions(suggestions);
+              setShowAiPanel(suggestions.length > 0);
+              return;
+            }
+          } catch (parseError) {
+            console.error("Parse AI suggestions error:", parseError);
           }
         }
       }
-    } catch {
-      // Silently fail
-    }
-    setAiLoading(false);
-  }, []);
 
-  useEffect(() => {
-    const timer = setTimeout(() => fetchAiSuggestions(query), 500);
-    return () => clearTimeout(timer);
-  }, [query, fetchAiSuggestions]);
+      toast({
+        title: "AI chưa có gợi ý phù hợp",
+        description: "Bạn có thể thử từ khóa cụ thể hơn.",
+      });
+    } catch (error) {
+      console.error("AI search error:", error);
+      toast({
+        title: "Không thể dùng AI lúc này",
+        description: "Vui lòng thử lại sau. Nếu AI đã bị lỗi, credit sẽ được hoàn qua hệ thống.",
+        variant: "destructive",
+      });
+    } finally {
+      setAiLoading(false);
+      await refetchSubscription();
+    }
+  }, [aiCreditsRemaining, refetchSubscription, session, toast]);
 
   // Map Supabase course sang CourseCard format
   const mappedCourses = courses.map((c) => ({
@@ -179,6 +244,19 @@ export default function SearchPage() {
               Bản đồ
             </Button>
           </Link>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchAiSuggestions(query)}
+            disabled={aiLoading || subscriptionLoading}
+            className="border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
+          >
+            {aiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4" />}
+            {aiLoading ? "Đang gợi ý..." : `AI gợi ý · ${SEARCH_AI_COST} credit`}
+          </Button>
+          <Badge variant="outline" className="hidden rounded-full border-primary/20 bg-background px-3 py-1.5 text-primary md:inline-flex">
+            {isLoggedIn ? `Bạn còn ${aiCreditsRemaining} AI credits` : "Đăng nhập để dùng AI"}
+          </Badge>
         </div>
 
         {/* Category pills */}
@@ -191,7 +269,7 @@ export default function SearchPage() {
           >
             Tất cả
           </button>
-          {categories.map((cat) => (
+          {COURSE_CATEGORIES.map((cat) => (
             <button
               key={cat.slug}
               onClick={() => setSelectedCategory(selectedCategory === cat.slug ? null : cat.slug)}
@@ -314,6 +392,8 @@ export default function SearchPage() {
           </div>
         )}
       </div>
+
+      <AiCreditUpgradeDialog open={creditDialogOpen} onOpenChange={setCreditDialogOpen} />
     </MainLayout>
   );
 }

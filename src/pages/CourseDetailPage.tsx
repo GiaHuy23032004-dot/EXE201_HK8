@@ -29,6 +29,7 @@ import {
 import { useCourseReviews } from "@/hooks/useLearnerReviews";
 import { usePublicMentorVerification } from "@/hooks/usePublicMentorVerification";
 import { useToast } from "@/hooks/use-toast";
+import { getCourseCategoryLabel } from "@/constants/courseCategories";
 
 type CourseDetailMentor = NonNullable<LearnerCourse["mentor"]> & {
   bio?: string | null;
@@ -70,6 +71,7 @@ export default function CourseDetailPage() {
   const { data: mentorVerification } = usePublicMentorVerification(mentorId);
   const isVerifiedMentor = mentorVerification?.verified === true;
   const mentorBadges = mentorVerification?.badges ?? [];
+  const categoryLabel = getCourseCategoryLabel(courseDetail?.category);
 
   const handleSave = () => {
     if (!session?.user?.id) {
@@ -144,7 +146,7 @@ export default function CourseDetailPage() {
               </div>
 
               <div className="mb-3 flex items-center gap-2">
-                <Badge variant="secondary">{courseDetail.category}</Badge>
+                <Badge variant="secondary">{categoryLabel}</Badge>
                 <Badge
                   className={
                     courseDetail.format === "online"
@@ -360,7 +362,7 @@ export default function CourseDetailPage() {
                       <p className="truncate font-semibold text-card-foreground">{mentor.name || "Mentor"}</p>
                       <TrustBadges badges={mentorBadges} compact className="mt-1" />
                       <div className="mt-1 flex flex-wrap items-center gap-2">
-                        <p className="text-xs text-muted-foreground">{courseDetail.category}</p>
+                        <p className="text-xs text-muted-foreground">{categoryLabel}</p>
                         <Badge
                           variant="outline"
                           className={
@@ -394,7 +396,7 @@ export default function CourseDetailPage() {
         courseId={courseDetail.id}
         reportedUserId={courseDetail.mentor_id}
         contextTitle={courseDetail.title}
-        contextDescription={`Mentor: ${mentor?.name || "Mentor"} · ${courseDetail.category}`}
+        contextDescription={`Mentor: ${mentor?.name || "Mentor"} · ${categoryLabel}`}
       />
       {commentReport && (
         <ReportModal

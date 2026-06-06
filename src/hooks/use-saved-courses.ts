@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeCourseCategory } from "@/constants/courseCategories";
 
 // Lấy danh sách course đã lưu của user
 export function useSavedCourses(userId: string | undefined) {
@@ -20,7 +21,15 @@ export function useSavedCourses(userId: string | undefined) {
         .eq("course.is_hidden", false)
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data ?? [];
+      return (data ?? []).map((item: any) => ({
+        ...item,
+        course: item.course
+          ? {
+              ...item.course,
+              category: normalizeCourseCategory(item.course.category),
+            }
+          : item.course,
+      }));
     },
   });
 }

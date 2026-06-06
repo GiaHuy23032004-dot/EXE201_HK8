@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import logoImg from "@/assets/logo.png";
 import { useAuth } from "@/contexts/AuthContext";
+import { COURSE_CATEGORIES } from "@/constants/courseCategories";
 
 export function Footer() {
   const { user } = useAuth();
@@ -28,12 +29,11 @@ export function Footer() {
               <Link to="/map" className="transition-colors hover:text-primary">
                 Bản đồ lớp học
               </Link>
-              <Link to="/search?category=music" className="transition-colors hover:text-primary">
-                Âm nhạc
-              </Link>
-              <Link to="/search?category=language" className="transition-colors hover:text-primary">
-                Ngoại ngữ
-              </Link>
+              {COURSE_CATEGORIES.slice(0, 2).map((category) => (
+                <Link key={category.slug} to={`/search?category=${category.slug}`} className="transition-colors hover:text-primary">
+                  {category.label}
+                </Link>
+              ))}
             </div>
           </div>
 

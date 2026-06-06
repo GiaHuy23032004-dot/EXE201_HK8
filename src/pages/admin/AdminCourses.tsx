@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
+import { getCourseCategoryLabel } from "@/constants/courseCategories";
 
 type AdminCourseStatus = "pending" | "approved" | "rejected";
 type AdminCourseFilter = "all" | AdminCourseStatus | "hidden";
@@ -188,7 +189,7 @@ export default function AdminCourses() {
 
       const matchesSearch =
         !term ||
-        [course.title, course.category, course.mentor?.name, course.mentor?.email]
+        [course.title, course.category, getCourseCategoryLabel(course.category), course.mentor?.name, course.mentor?.email]
           .filter(Boolean)
           .some((value) => value!.toLowerCase().includes(term));
 
@@ -452,7 +453,7 @@ export default function AdminCourses() {
 
                   <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                     <span>Mentor: {course.mentor?.name || "Không rõ"}</span>
-                    <span>{course.category}</span>
+                    <span>{getCourseCategoryLabel(course.category)}</span>
                     <span>{course.format === "online" ? "Online" : "Offline"}</span>
                     <span>Tạo: {formatShortDate(course.created_at)}</span>
                   </div>
@@ -522,7 +523,7 @@ export default function AdminCourses() {
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <InfoItem label="Danh mục" value={selectedCourse.category} />
+                    <InfoItem label="Danh mục" value={getCourseCategoryLabel(selectedCourse.category)} />
                     <InfoItem label="Hình thức" value={selectedCourse.format === "online" ? "Online" : "Offline"} />
                     <InfoItem label="Học phí" value={`${formatVnd(selectedCourse.price)}/buổi`} />
                     <InfoItem label="Ngày tạo" value={formatDate(selectedCourse.created_at)} />

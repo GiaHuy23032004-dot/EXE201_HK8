@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import type { Database } from "@/integrations/supabase/types";
+import { normalizeCourseCategory } from "@/constants/courseCategories";
 
 export type ReportType = Database["public"]["Enums"]["report_type"];
 export type ReportStatus = Database["public"]["Enums"]["report_status"];
@@ -284,7 +285,15 @@ export function useLearnerReports(userId: string | undefined) {
         attachmentsByReport.set(attachment.report_id, [...(attachmentsByReport.get(attachment.report_id) ?? []), attachment]);
       });
 
-      const courseById = new Map((coursesResult.data ?? []).map((course: any) => [course.id, course as ReportCourseRef]));
+      const courseById = new Map(
+        (coursesResult.data ?? []).map((course: any) => [
+          course.id,
+          {
+            ...course,
+            category: normalizeCourseCategory(course.category),
+          } as ReportCourseRef,
+        ]),
+      );
       const profileById = new Map((profilesResult.data ?? []).map((profile: any) => [profile.user_id, profile as ReportProfileRef]));
 
       return rows.map((report) => ({

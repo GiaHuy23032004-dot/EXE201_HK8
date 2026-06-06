@@ -1,5 +1,6 @@
 import { CourseData } from "@/components/marketplace/CourseCard";
 import { MentorData } from "@/components/marketplace/MentorCard";
+import { COURSE_CATEGORIES } from "@/constants/courseCategories";
 
 const avatars = [
   "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face",
@@ -22,23 +23,23 @@ const courseImages = [
 ];
 
 export const mockCourses: CourseData[] = [
-  { id: "1", title: "Guitar Acoustic cho người mới bắt đầu", mentorName: "Minh Tuấn", mentorAvatar: avatars[0], price: 200000, rating: 4.9, reviewCount: 128, image: courseImages[0], category: "music", format: "offline", location: "Quận 1, TP.HCM", distance: "1.2km", promoted: true, studentsCount: 340 },
-  { id: "2", title: "Tiếng Anh giao tiếp IELTS 6.5+", mentorName: "Thu Hà", mentorAvatar: avatars[1], price: 350000, rating: 4.8, reviewCount: 256, image: courseImages[1], category: "language", format: "online", studentsCount: 890 },
-  { id: "3", title: "Yoga & Thiền - Cân bằng cuộc sống", mentorName: "Linh Chi", mentorAvatar: avatars[3], price: 180000, rating: 4.7, reviewCount: 89, image: courseImages[2], category: "fitness", format: "offline", location: "Quận 7, TP.HCM", distance: "3.5km", studentsCount: 210 },
-  { id: "4", title: "Lập trình Web Fullstack với React", mentorName: "Đức Anh", mentorAvatar: avatars[2], price: 500000, rating: 4.9, reviewCount: 312, image: courseImages[3], category: "coding", format: "online", promoted: true, studentsCount: 1200 },
-  { id: "5", title: "Nấu ăn Nhật Bản - Sushi & Ramen", mentorName: "Yuki Nguyễn", mentorAvatar: avatars[5], price: 300000, rating: 4.6, reviewCount: 67, image: courseImages[4], category: "cooking", format: "offline", location: "Quận 3, TP.HCM", distance: "2.1km", studentsCount: 150 },
-  { id: "6", title: "Fitness & Gym cơ bản tại nhà", mentorName: "Hùng PT", mentorAvatar: avatars[4], price: 250000, rating: 4.8, reviewCount: 198, image: courseImages[5], category: "fitness", format: "online", studentsCount: 560 },
-  { id: "7", title: "Vẽ tranh sơn dầu nghệ thuật", mentorName: "Mai Anh", mentorAvatar: avatars[3], price: 280000, rating: 4.5, reviewCount: 45, image: courseImages[7], category: "art", format: "offline", location: "Quận Bình Thạnh", distance: "4.0km", studentsCount: 90 },
-  { id: "8", title: "Piano cổ điển từ cơ bản đến nâng cao", mentorName: "Hoàng Long", mentorAvatar: avatars[0], price: 400000, rating: 4.9, reviewCount: 175, image: courseImages[6], category: "music", format: "offline", location: "Quận 2, TP.HCM", distance: "5.2km", promoted: true, studentsCount: 430 },
+  { id: "1", title: "Cờ vua chiến thuật cho người mới", mentorName: "Minh Tuấn", mentorAvatar: avatars[0], price: 200000, rating: 4.9, reviewCount: 128, image: courseImages[0], category: "mind-sports", format: "offline", location: "Quận 1, TP.HCM", distance: "1.2km", promoted: true, studentsCount: 340 },
+  { id: "2", title: "Tiếng Anh công việc & IELTS 6.5+", mentorName: "Thu Hà", mentorAvatar: avatars[1], price: 350000, rating: 4.8, reviewCount: 256, image: courseImages[1], category: "career-english", format: "online", studentsCount: 890 },
+  { id: "3", title: "Pickleball cơ bản cho người đi làm", mentorName: "Linh Chi", mentorAvatar: avatars[3], price: 180000, rating: 4.7, reviewCount: 89, image: courseImages[2], category: "modern-sports", format: "offline", location: "Quận 7, TP.HCM", distance: "3.5km", studentsCount: 210 },
+  { id: "4", title: "AI tự động hóa công việc văn phòng", mentorName: "Đức Anh", mentorAvatar: avatars[2], price: 500000, rating: 4.9, reviewCount: 312, image: courseImages[3], category: "ai-productivity", format: "online", promoted: true, studentsCount: 1200 },
+  { id: "5", title: "Barista căn bản: Espresso & Latte Art", mentorName: "Yuki Nguyễn", mentorAvatar: avatars[5], price: 300000, rating: 4.6, reviewCount: 67, image: courseImages[4], category: "barista-beverage", format: "offline", location: "Quận 3, TP.HCM", distance: "2.1km", studentsCount: 150 },
+  { id: "6", title: "Tennis hiện đại cho người mới", mentorName: "Hùng PT", mentorAvatar: avatars[4], price: 250000, rating: 4.8, reviewCount: 198, image: courseImages[5], category: "modern-sports", format: "online", studentsCount: 560 },
+  { id: "7", title: "Sáng tạo nội dung video ngắn", mentorName: "Mai Anh", mentorAvatar: avatars[3], price: 280000, rating: 4.5, reviewCount: 45, image: courseImages[7], category: "content-speaking", format: "offline", location: "Quận Bình Thạnh", distance: "4.0km", studentsCount: 90 },
+  { id: "8", title: "MC & thuyết trình trước đám đông", mentorName: "Hoàng Long", mentorAvatar: avatars[0], price: 400000, rating: 4.9, reviewCount: 175, image: courseImages[6], category: "content-speaking", format: "offline", location: "Quận 2, TP.HCM", distance: "5.2km", promoted: true, studentsCount: 430 },
 ];
 
 export const mockMentors: MentorData[] = [
-  { id: "1", name: "Minh Tuấn", avatar: avatars[0], specialty: "Guitar & Âm nhạc", rating: 4.9, reviewCount: 128, coursesCount: 5, verified: true, bio: "10 năm kinh nghiệm giảng dạy guitar" },
+  { id: "1", name: "Minh Tuấn", avatar: avatars[0], specialty: "Cờ & Tư duy chiến thuật", rating: 4.9, reviewCount: 128, coursesCount: 5, verified: true, bio: "10 năm kinh nghiệm huấn luyện tư duy chiến thuật" },
   { id: "2", name: "Thu Hà", avatar: avatars[1], specialty: "IELTS & Tiếng Anh", rating: 4.8, reviewCount: 256, coursesCount: 8, verified: true, bio: "IELTS 8.5, giảng viên đại học" },
-  { id: "3", name: "Đức Anh", avatar: avatars[2], specialty: "Lập trình & Công nghệ", rating: 4.9, reviewCount: 312, coursesCount: 12, verified: true, bio: "Senior Developer tại công ty công nghệ lớn" },
-  { id: "4", name: "Linh Chi", avatar: avatars[3], specialty: "Yoga & Thiền", rating: 4.7, reviewCount: 89, coursesCount: 3, verified: false, bio: "Chứng chỉ RYT-500" },
-  { id: "5", name: "Hùng PT", avatar: avatars[4], specialty: "Fitness & Gym", rating: 4.8, reviewCount: 198, coursesCount: 6, verified: true, bio: "HLV cá nhân chuyên nghiệp" },
-  { id: "6", name: "Yuki Nguyễn", avatar: avatars[5], specialty: "Ẩm thực Nhật Bản", rating: 4.6, reviewCount: 67, coursesCount: 4, verified: true, bio: "Đầu bếp từng tu nghiệp tại Tokyo" },
+  { id: "3", name: "Đức Anh", avatar: avatars[2], specialty: "AI & Công cụ làm việc", rating: 4.9, reviewCount: 312, coursesCount: 12, verified: true, bio: "Chuyên gia tự động hóa quy trình làm việc" },
+  { id: "4", name: "Linh Chi", avatar: avatars[3], specialty: "Thể thao hiện đại", rating: 4.7, reviewCount: 89, coursesCount: 3, verified: false, bio: "Huấn luyện viên thể thao phong trào" },
+  { id: "5", name: "Hùng PT", avatar: avatars[4], specialty: "Thể thao hiện đại", rating: 4.8, reviewCount: 198, coursesCount: 6, verified: true, bio: "HLV cá nhân chuyên nghiệp" },
+  { id: "6", name: "Yuki Nguyễn", avatar: avatars[5], specialty: "Barista & Đồ uống", rating: 4.6, reviewCount: 67, coursesCount: 4, verified: true, bio: "Chuyên gia pha chế và xây dựng menu đồ uống" },
 ];
 
 export const mockReviews = [
@@ -48,13 +49,4 @@ export const mockReviews = [
   { id: "4", userName: "Quốc Bảo", userAvatar: avatars[2], rating: 5, comment: "Khóa lập trình React rất chất lượng, kiến thức thực tế.", date: "5 ngày trước" },
 ];
 
-export const categories = [
-  { slug: "music", label: "Âm nhạc" },
-  { slug: "language", label: "Ngoại ngữ" },
-  { slug: "coding", label: "Lập trình" },
-  { slug: "art", label: "Nghệ thuật" },
-  { slug: "fitness", label: "Thể dục" },
-  { slug: "cooking", label: "Nấu ăn" },
-  { slug: "business", label: "Kinh doanh" },
-  { slug: "design", label: "Thiết kế" },
-];
+export const categories = COURSE_CATEGORIES;

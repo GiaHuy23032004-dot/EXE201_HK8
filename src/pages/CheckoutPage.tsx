@@ -13,7 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLearnerReceipt } from "@/hooks/useLearnerPayments";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { calculateDepositBreakdown, formatVnd, inferPaymentOptionFromBooking } from "@/lib/learnerPayment";
+import { calculateDepositBreakdown, calculateVoucherPaymentBreakdown, formatVnd, inferPaymentOptionFromBooking } from "@/lib/learnerPayment";
 
 interface PaymentSession {
   mode: "vietqr" | "sepay" | "manual";
@@ -61,7 +61,7 @@ export default function CheckoutPage() {
     try {
       const { booking } = data;
       const courseFormat = booking.course?.format === "online" ? "online" : "offline";
-      const totalPrice = booking.total_price;
+      const totalPrice = Number(booking.total_price ?? 0);
       const paymentOption = inferPaymentOptionFromBooking({
         courseFormat, paymentMethod: booking.payment_method,
         totalPrice, transactionAmount: data.transaction?.amount,
@@ -113,7 +113,11 @@ export default function CheckoutPage() {
 
   const { booking, transaction } = data;
   const courseFormat = booking.course?.format === "online" ? "online" : "offline";
-  const totalPrice = booking.total_price;
+  const totalPrice = Number(booking.total_price ?? 0);
+  const originalTotalPrice = Number((booking as any).original_total_price ?? booking.course?.price ?? totalPrice);
+  const voucherDiscountAmount = Number((booking as any).voucher_discount_amount ?? 0);
+  const voucherBreakdown = calculateVoucherPaymentBreakdown(originalTotalPrice, voucherDiscountAmount);
+  const hasVoucherDiscount = voucherBreakdown.discountAmount > 0;
   const paymentOption = inferPaymentOptionFromBooking({
     courseFormat, paymentMethod: booking.payment_method,
     totalPrice, transactionAmount: transaction?.amount,
@@ -329,8 +333,23 @@ export default function CheckoutPage() {
               <div className="space-y-2.5 mb-5">
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-500">Tổng học phí</span>
-                  <span className="text-slate-700">{formatVnd(totalPrice)}</span>
+                  <span className="text-slate-700">{formatVnd(originalTotalPrice)}</span>
                 </div>
+                {hasVoucherDiscount && (
+                  <>
+                    <div className="flex justify-between text-sm text-emerald-700">
+                      <span>Voucher VET Plus</span>
+                      <span>-{formatVnd(voucherBreakdown.discountAmount)}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">Sau voucher</span>
+                      <span className="font-semibold text-slate-700">{formatVnd(totalPrice)}</span>
+                    </div>
+                    <p className="rounded-2xl bg-emerald-50 p-3 text-xs leading-relaxed text-emerald-800">
+                      Voucher được trừ vào phí nền tảng, mentor không bị giảm thu nhập.
+                    </p>
+                  </>
+                )}
                 {isDeposit && (
                   <div className="flex justify-between text-sm">
                     <span className="text-slate-500">Còn lại trả tại lớp</span>

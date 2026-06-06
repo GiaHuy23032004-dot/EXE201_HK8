@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { getCourseCategoryFilterValues, normalizeCourseCategory } from "@/constants/courseCategories";
 
 export interface CourseScheduleSummary {
   id: string;
@@ -77,8 +78,16 @@ function normalizeMentorCourse(course: MentorCourseRow): Course {
   const { bookings: _bookings, ...rest } = course;
   return {
     ...rest,
+    category: normalizeCourseCategory(rest.category),
     course_schedules: schedules,
     active_booking_count: activeBookingCount,
+  };
+}
+
+function normalizeCourseRow(course: Course): Course {
+  return {
+    ...course,
+    category: normalizeCourseCategory(course.category),
   };
 }
 
@@ -98,7 +107,7 @@ export function useCourses(filters?: CourseFilters) {
         .order("is_promoted", { ascending: false })
         .order("created_at", { ascending: false });
 
-      if (filters?.category) q = q.eq("category", filters.category);
+      if (filters?.category) q = q.in("category", getCourseCategoryFilterValues(filters.category));
       if (filters?.format && filters.format !== "all") q = q.eq("format", filters.format);
       if (filters?.minPrice !== undefined) q = q.gte("price", filters.minPrice);
       if (filters?.maxPrice !== undefined) q = q.lte("price", filters.maxPrice);
@@ -110,7 +119,7 @@ export function useCourses(filters?: CourseFilters) {
 
       const { data, error } = await q;
       if (error) throw error;
-      return (data ?? []) as Course[];
+      return ((data ?? []) as Course[]).map(normalizeCourseRow);
     },
   });
 }
@@ -133,7 +142,7 @@ export function useCourse(id: string | undefined) {
         .eq("is_hidden", false)
         .single();
       if (error) throw error;
-      return data;
+      return normalizeCourseRow(data as Course);
     },
   });
 }
@@ -227,9 +236,14 @@ export function useUpdateCourse() {
     mutationFn: async ({ id, mentor_id, ...fields }: UpdateCoursePayload) => {
       await ensureMentorCanManageCourses(mentor_id);
 
+      const normalizedFields = {
+        ...fields,
+        category: normalizeCourseCategory(fields.category),
+      };
+
       const { data, error } = await supabase
         .from("courses")
-        .update(fields)
+        .update(normalizedFields)
         .eq("id", id)
         .eq("mentor_id", mentor_id)
         .select()
@@ -269,7 +283,10 @@ export function useCreateCourse() {
 
       const { data, error } = await supabase
         .from("courses")
-        .insert(courseData)
+        .insert({
+          ...courseData,
+          category: normalizeCourseCategory(courseData.category),
+        })
         .select()
         .single();
       if (error) throw error;

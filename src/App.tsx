@@ -16,11 +16,13 @@ import ResetPasswordPage from "./pages/ResetPasswordPage";
 import AdminLoginPage from "./pages/AdminLoginPage";
 import SearchPage from "./pages/SearchPage";
 import MapPage from "./pages/MapPage";
+import PricingPage from "./pages/PricingPage";
 import CourseDetailPage from "./pages/CourseDetailPage";
 import BookingPage from "./pages/BookingPage";
 import CheckoutPage from "./pages/CheckoutPage";
 import LearnerDashboard from "./pages/LearnerDashboard";
 import LearnerReports from "./pages/LearnerReports";
+import LearnerSubscriptionPage from "./pages/LearnerSubscriptionPage";
 import MentorDashboard from "./pages/MentorDashboard";
 import MentorCourses from "./pages/MentorCourses";
 import MentorSchedule from "./pages/mentor/MentorSchedule";
@@ -105,12 +107,14 @@ const App = () => (
             <Route path="/admin/login" element={<AdminLoginPage />} />
             <Route path="/search" element={<SearchPage />} />
             <Route path="/map" element={<MapPage />} />
+            <Route path="/pricing" element={<PricingPage />} />
             <Route path="/dev/map-config" element={<MapConfigPage />} />
             <Route path="/course/:id" element={<CourseDetailPage />} />
             <Route path="/booking/:id" element={<BookingPage />} />
             <Route path="/checkout/:bookingId" element={<CheckoutPage />} />
             <Route path="/learner/dashboard" element={<LearnerDashboard />} />
             <Route path="/learner/reports" element={<LearnerReports />} />
+            <Route path="/learner/subscription" element={<LearnerSubscriptionPage />} />
             <Route path="/mentor/dashboard" element={<MentorGuard><MentorDashboard /></MentorGuard>} />
             <Route path="/mentor/courses"   element={<MentorGuard><MentorCourses /></MentorGuard>} />
             <Route path="/mentor/schedule"  element={<MentorGuard><MentorSchedule /></MentorGuard>} />
