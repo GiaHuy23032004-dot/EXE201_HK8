@@ -12,6 +12,7 @@ import {
   Star,
   Users,
 } from "lucide-react";
+import { AiCourseAdvisor } from "@/components/ai/AiCourseAdvisor";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { ReviewBlock } from "@/components/marketplace/ReviewBlock";
 import { TrustBadges } from "@/components/marketplace/TrustBadges";
@@ -349,6 +350,14 @@ export default function CourseDetailPage() {
                   </div>
                 )}
               </div>
+
+              {isLearner && (
+                <AiCourseAdvisor
+                  courseId={courseDetail.id}
+                  courseTitle={courseDetail.title}
+                  showBookingButton
+                />
+              )}
 
               {mentor && (
                 <div className="rounded-2xl border bg-card p-6 shadow-card">

@@ -5,12 +5,13 @@ import { useLearnerSearchCourses } from "@/hooks/useLearnerCourses";
 import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List, Sparkles, Brain, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { usePublicMentorTrustBadgeMap } from "@/hooks/usePublicMentorVerification";
-import { COURSE_CATEGORIES, normalizeCourseCategory } from "@/constants/courseCategories";
+import { COURSE_CATEGORIES, getCourseCategoryShortLabel, normalizeCourseCategory } from "@/constants/courseCategories";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/hooks/useSubscription";
 import { useToast } from "@/hooks/use-toast";
@@ -19,6 +20,169 @@ import { AiCreditUpgradeDialog } from "@/components/subscription/AiCreditUpgrade
 import { isAiCreditRequiredPayload, readFunctionErrorPayload } from "@/lib/aiCreditErrors";
 
 const SEARCH_AI_COST = AI_CREDIT_COSTS.search;
+
+type AiCourseMatchRecommendation = {
+  course_id: string;
+  match_score: number;
+  reason: string;
+  pros: string[];
+  considerations: string[];
+  course: {
+    id: string;
+    title: string;
+    mentorName: string;
+    mentorAvatar: string;
+    price: number;
+    rating: number;
+    reviewCount: number;
+    image: string;
+    category: string;
+    format: "online" | "offline";
+    location?: string;
+    studentsCount?: number;
+    promoted?: boolean;
+  };
+};
+
+type AiCourseMatchResult = {
+  intent_summary: string;
+  detected_category: string | null;
+  detected_format: "online" | "offline" | "any";
+  detected_budget: number | null;
+  recommendations: AiCourseMatchRecommendation[];
+  follow_up_question: string | null;
+  fallback?: boolean;
+  fallback_reason?: string;
+  credit_refunded?: boolean;
+};
+
+function formatVnd(value: number | null | undefined) {
+  if (!value) return "";
+  return `${Math.round(value).toLocaleString("vi-VN")}đ`;
+}
+
+function AiCourseMatchPanel({ result }: { result: AiCourseMatchResult }) {
+  return (
+    <div className="container pt-6">
+      <Card className="overflow-hidden rounded-2xl border-primary/15 bg-gradient-to-br from-primary/5 via-background to-cyan-50/60 shadow-card">
+        <CardContent className="p-5 md:p-6">
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
+                <Brain className="h-3.5 w-3.5" />
+                AI Course Match
+              </div>
+              <h2 className="text-xl font-bold text-foreground">Gợi ý khóa học phù hợp</h2>
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{result.intent_summary}</p>
+            </div>
+            {result.fallback && (
+              <Badge variant="outline" className="w-fit rounded-full border-amber-200 bg-amber-50 text-amber-700">
+                Gợi ý dự phòng
+              </Badge>
+            )}
+          </div>
+
+          <div className="mb-5 flex flex-wrap gap-2">
+            {result.detected_category && (
+              <Badge variant="outline" className="rounded-full bg-background">
+                Danh mục: {getCourseCategoryShortLabel(result.detected_category)}
+              </Badge>
+            )}
+            <Badge variant="outline" className="rounded-full bg-background">
+              Hình thức: {result.detected_format === "any" ? "Linh hoạt" : result.detected_format === "online" ? "Online" : "Offline"}
+            </Badge>
+            {result.detected_budget && (
+              <Badge variant="outline" className="rounded-full bg-background">
+                Ngân sách: dưới {formatVnd(result.detected_budget)}
+              </Badge>
+            )}
+            {result.credit_refunded && (
+              <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700">
+                Credit đã được hoàn do AI lỗi
+              </Badge>
+            )}
+          </div>
+
+          {result.recommendations.length === 0 ? (
+            <div className="rounded-2xl border border-dashed bg-background/70 p-6 text-center">
+              <p className="font-semibold text-foreground">Hiện chưa có khóa học phù hợp.</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Hãy thử nới ngân sách hoặc chọn hình thức học khác.
+              </p>
+              {result.follow_up_question && (
+                <p className="mt-3 text-sm font-medium text-primary">{result.follow_up_question}</p>
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-4 lg:grid-cols-2">
+              {result.recommendations.map((item) => (
+                <div key={item.course_id} className="overflow-hidden rounded-2xl border bg-background shadow-sm">
+                  <div className="grid gap-0 sm:grid-cols-[160px_minmax(0,1fr)]">
+                    <img
+                      src={item.course.image}
+                      alt={item.course.title}
+                      className="h-40 w-full object-cover sm:h-full"
+                    />
+                    <div className="min-w-0 p-4">
+                      <div className="mb-2 flex flex-wrap items-center gap-2">
+                        <Badge className="rounded-full bg-primary text-primary-foreground">
+                          {item.match_score}% phù hợp
+                        </Badge>
+                        <Badge variant="outline" className="rounded-full">
+                          {getCourseCategoryShortLabel(item.course.category)}
+                        </Badge>
+                        <Badge variant="outline" className="rounded-full">
+                          {item.course.format === "online" ? "Online" : "Offline"}
+                        </Badge>
+                      </div>
+                      <h3 className="line-clamp-2 font-semibold text-foreground">{item.course.title}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {item.course.mentorName} · {formatVnd(item.course.price)}
+                      </p>
+                      <p className="mt-3 text-sm text-muted-foreground">{item.reason}</p>
+
+                      {item.pros.length > 0 && (
+                        <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
+                          {item.pros.slice(0, 2).map((pro, index) => (
+                            <li key={index}>+ {pro}</li>
+                          ))}
+                        </ul>
+                      )}
+                      {item.considerations.length > 0 && (
+                        <p className="mt-2 text-xs text-amber-700">
+                          Lưu ý: {item.considerations[0]}
+                        </p>
+                      )}
+
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        <Link to={`/course/${item.course_id}`}>
+                          <Button size="sm" className="rounded-xl gradient-primary border-0 text-primary-foreground">
+                            Xem chi tiết
+                          </Button>
+                        </Link>
+                        <Link to={`/booking/${item.course_id}`}>
+                          <Button size="sm" variant="outline" className="rounded-xl">
+                            Đặt lịch
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {result.follow_up_question && result.recommendations.length > 0 && (
+            <div className="mt-4 rounded-xl bg-primary/5 px-4 py-3 text-sm text-primary">
+              {result.follow_up_question}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
 
 export default function SearchPage() {
   const { session, isLoggedIn } = useAuth();
@@ -36,6 +200,7 @@ export default function SearchPage() {
   const [priceRange, setPriceRange] = useState([0, 1000000]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
+  const [aiMatchResult, setAiMatchResult] = useState<AiCourseMatchResult | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [creditDialogOpen, setCreditDialogOpen] = useState(false);
@@ -64,11 +229,12 @@ export default function SearchPage() {
     courses.map((course) => course.mentor?.user_id || course.mentor_id),
   );
 
-  // AI search suggestions
+  // AI Course Match suggestions
   const fetchAiSuggestions = useCallback(async (searchQuery: string) => {
     const cleanQuery = searchQuery.trim();
     if (!cleanQuery || cleanQuery.length < 2) {
       setAiSuggestions([]);
+      setAiMatchResult(null);
       toast({
         title: "Nhập từ khóa trước khi dùng AI",
         description: "Tính năng này dùng 1 AI credit.",
@@ -92,7 +258,16 @@ export default function SearchPage() {
     setAiLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("ai-search", {
-        body: { query: cleanQuery, type: "search" },
+        body: {
+          query: cleanQuery,
+          type: "course_match",
+          filters: {
+            category: selectedCategory,
+            format,
+            budget: priceRange[1] < 1000000 ? priceRange[1] : undefined,
+            location: locationQuery,
+          },
+        },
         headers: { Authorization: `Bearer ${session.access_token}` },
       });
 
@@ -110,8 +285,28 @@ export default function SearchPage() {
         return;
       }
 
+      if (Array.isArray(data?.recommendations)) {
+        setAiMatchResult(data as AiCourseMatchResult);
+        setAiSuggestions([]);
+        setShowAiPanel(false);
+        if (data.recommendations.length === 0) {
+          toast({
+            title: "Chưa có khóa học phù hợp",
+            description: "Hãy thử nới ngân sách hoặc chọn hình thức học khác.",
+          });
+        }
+        return;
+      }
+
       if (data?.suggestions) {
         let raw = data.suggestions;
+        if (Array.isArray(raw)) {
+          const suggestions = raw.map((item) => String(item)).filter(Boolean).slice(0, 5);
+          setAiSuggestions(suggestions);
+          setShowAiPanel(suggestions.length > 0);
+          setAiMatchResult(null);
+          return;
+        }
         if (typeof raw === "string") {
           try {
             raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
@@ -130,6 +325,7 @@ export default function SearchPage() {
                 .slice(0, 5);
               setAiSuggestions(suggestions);
               setShowAiPanel(suggestions.length > 0);
+              setAiMatchResult(null);
               return;
             }
           } catch (parseError) {
@@ -153,7 +349,7 @@ export default function SearchPage() {
       setAiLoading(false);
       await refetchSubscription();
     }
-  }, [aiCreditsRemaining, refetchSubscription, session, toast]);
+  }, [aiCreditsRemaining, format, locationQuery, priceRange, refetchSubscription, selectedCategory, session, toast]);
 
   // Map Supabase course sang CourseCard format
   const mappedCourses = courses.map((c) => ({
@@ -183,14 +379,14 @@ export default function SearchPage() {
               <Search className="h-4 w-4 text-primary" />
               <input
                 type="text"
-                placeholder="Tìm kiếm khóa học..."
+                placeholder="Bạn muốn học gì? Ví dụ: Tôi muốn học tiếng Anh giao tiếp online buổi tối dưới 400k"
                 className="flex-1 bg-transparent py-2.5 text-sm outline-none placeholder:text-muted-foreground"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
               {aiLoading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
               {query && !aiLoading && (
-                <button onClick={() => { setQuery(""); setAiSuggestions([]); }} className="text-muted-foreground hover:text-foreground">
+                <button onClick={() => { setQuery(""); setAiSuggestions([]); setAiMatchResult(null); }} className="text-muted-foreground hover:text-foreground">
                   <X className="h-4 w-4" />
                 </button>
               )}
@@ -252,7 +448,7 @@ export default function SearchPage() {
             className="border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
           >
             {aiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4" />}
-            {aiLoading ? "Đang gợi ý..." : `AI gợi ý · ${SEARCH_AI_COST} credit`}
+            {aiLoading ? "AI đang phân tích..." : `AI Course Match · ${SEARCH_AI_COST} credit`}
           </Button>
           <Badge variant="outline" className="hidden rounded-full border-primary/20 bg-background px-3 py-1.5 text-primary md:inline-flex">
             {isLoggedIn ? `Bạn còn ${aiCreditsRemaining} AI credits` : "Đăng nhập để dùng AI"}
@@ -340,6 +536,17 @@ export default function SearchPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {aiLoading && (
+        <div className="container pt-6">
+          <div className="rounded-2xl border border-primary/15 bg-primary/5 p-5 text-sm text-primary shadow-sm">
+            <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+            AI đang phân tích nhu cầu học của bạn...
+          </div>
+        </div>
+      )}
+
+      {!aiLoading && aiMatchResult && <AiCourseMatchPanel result={aiMatchResult} />}
 
       {/* Results */}
       <div className="container py-8">

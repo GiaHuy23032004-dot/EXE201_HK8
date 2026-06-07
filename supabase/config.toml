@@ -6,6 +6,9 @@ verify_jwt = false
 [functions.ai-chat]
 verify_jwt = false
 
+[functions.ai-advisor]
+verify_jwt = false
+
 [functions.admin-check]
 verify_jwt = false
 

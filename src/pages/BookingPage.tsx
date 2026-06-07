@@ -19,6 +19,7 @@ import {
   Ticket,
   X,
 } from "lucide-react";
+import { AiCourseAdvisor } from "@/components/ai/AiCourseAdvisor";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { useLearnerCourseDetail } from "@/hooks/useLearnerCourses";
 import { useCreateLearnerBooking } from "@/hooks/useLearnerBookings";
@@ -466,6 +467,12 @@ export default function BookingPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              <AiCourseAdvisor
+                courseId={course.id}
+                courseTitle={course.title}
+                className="mb-6"
+              />
 
               <div className="mb-6">
                 <h2 className="mb-3 flex items-center gap-2 font-semibold text-foreground">
