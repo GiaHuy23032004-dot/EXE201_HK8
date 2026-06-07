@@ -89,6 +89,19 @@ type ParsedNeed = {
   keywords: string[];
 };
 
+type LearningProfile = {
+  primary_goal?: string | null;
+  current_level?: string | null;
+  preferred_categories?: string[] | null;
+  preferred_format?: "online" | "offline" | "any" | null;
+  budget_min?: number | null;
+  budget_max?: number | null;
+  location_preference?: string | null;
+  schedule_preference?: string | null;
+  learning_style?: string | null;
+  notes?: string | null;
+};
+
 type AiRecommendation = {
   course_id: string;
   match_score: number;
@@ -250,6 +263,52 @@ function parseNeed(query: string, filters: Record<string, unknown>): ParsedNeed 
     location: String(filters.location ?? "").trim() || null,
     schedulePreference: String(filters.schedulePreference ?? "").trim() || null,
     keywords: extractKeywords(query),
+  };
+}
+
+function learningProfileContext(profile: LearningProfile | null) {
+  if (!profile) return null;
+  return {
+    goal: profile.primary_goal?.slice(0, 220) ?? null,
+    level: profile.current_level?.slice(0, 80) ?? null,
+    preferred_categories: profile.preferred_categories?.slice(0, 3) ?? [],
+    preferred_format: profile.preferred_format ?? "any",
+    budget_min: profile.budget_min ?? null,
+    budget_max: profile.budget_max ?? null,
+    location_preference: profile.location_preference?.slice(0, 120) ?? null,
+    schedule_preference: profile.schedule_preference?.slice(0, 120) ?? null,
+    learning_style: profile.learning_style?.slice(0, 120) ?? null,
+    notes: profile.notes?.slice(0, 160) ?? null,
+  };
+}
+
+async function fetchLearningProfile(supabase: ReturnType<typeof createClient>, userId: string) {
+  const { data, error } = await supabase
+    .from("learner_learning_profiles")
+    .select("primary_goal, current_level, preferred_categories, preferred_format, budget_min, budget_max, location_preference, schedule_preference, learning_style, notes")
+    .eq("learner_id", userId)
+    .maybeSingle();
+  if (error) {
+    console.error("learner_learning_profiles fetch error:", { message: error.message, code: error.code });
+    return null;
+  }
+  return (data ?? null) as LearningProfile | null;
+}
+
+function applyLearningProfileToNeed(need: ParsedNeed, profile: LearningProfile | null): ParsedNeed {
+  if (!profile) return need;
+  const preferredCategory = profile.preferred_categories?.find(Boolean);
+  return {
+    ...need,
+    category: need.category ?? (preferredCategory ? normalizeCategory(preferredCategory) : null),
+    format: need.format !== "any"
+      ? need.format
+      : profile.preferred_format === "online" || profile.preferred_format === "offline"
+        ? profile.preferred_format
+        : need.format,
+    budget: need.budget ?? profile.budget_max ?? null,
+    location: need.location ?? profile.location_preference ?? null,
+    schedulePreference: need.schedulePreference ?? profile.schedule_preference ?? null,
   };
 }
 
@@ -434,7 +493,7 @@ function validateAiResult(raw: unknown, need: ParsedNeed, candidates: CourseCand
   };
 }
 
-function buildAiPrompt(query: string, need: ParsedNeed, candidates: CourseCandidate[]) {
+function buildAiPrompt(query: string, need: ParsedNeed, candidates: CourseCandidate[], profile: LearningProfile | null) {
   const compactCandidates = candidates.map((candidate) => ({
     id: candidate.id,
     title: candidate.title,
@@ -451,6 +510,9 @@ function buildAiPrompt(query: string, need: ParsedNeed, candidates: CourseCandid
 
   return `Learner need:
 ${query}
+
+Learner learning profile context, use only as secondary context and never override explicit learner query:
+${JSON.stringify(learningProfileContext(profile))}
 
 Detected by backend:
 ${JSON.stringify({
@@ -496,6 +558,7 @@ async function getAuthedSupabase(req: Request) {
     return {
       error: jsonResponse({ error: true, code: "AUTH_REQUIRED", message: "Vui lòng đăng nhập để dùng AI." }, 401),
       supabase: null,
+      userId: null,
     };
   }
 
@@ -505,6 +568,7 @@ async function getAuthedSupabase(req: Request) {
     return {
       error: jsonResponse({ error: true, message: "Supabase environment is not configured." }, 500),
       supabase: null,
+      userId: null,
     };
   }
 
@@ -512,15 +576,16 @@ async function getAuthedSupabase(req: Request) {
     global: { headers: { Authorization: `Bearer ${jwt}` } },
   });
 
-  const { error } = await supabase.auth.getUser(jwt);
-  if (error) {
+  const { data, error } = await supabase.auth.getUser(jwt);
+  if (error || !data.user) {
     return {
       error: jsonResponse({ error: true, code: "AUTH_REQUIRED", message: "Phiên đăng nhập không hợp lệ." }, 401),
       supabase: null,
+      userId: null,
     };
   }
 
-  return { error: null, supabase };
+  return { error: null, supabase, userId: data.user.id };
 }
 
 async function reserveAiUsage(
@@ -682,13 +747,16 @@ serve(async (req) => {
     const feature = resolveFeature(type);
     const credits = aiCreditCosts[feature];
     const filters = (body.filters && typeof body.filters === "object" ? body.filters : {}) as Record<string, unknown>;
-    const need = parseNeed(prompt, filters);
+    let need = parseNeed(prompt, filters);
 
-    const { error: authError, supabase } = await getAuthedSupabase(req);
-    if (authError || !supabase) {
+    const { error: authError, supabase, userId } = await getAuthedSupabase(req);
+    if (authError || !supabase || !userId) {
       return authError ?? jsonResponse({ error: true, message: "Không thể xác thực phiên đăng nhập." }, 401);
     }
     supabaseForFinalize = supabase;
+
+    const learningProfile = await fetchLearningProfile(supabase, userId);
+    need = applyLearningProfileToNeed(need, learningProfile);
 
     const reservation = await reserveAiUsage(supabase, feature, credits, prompt, {
       function: "ai-search",
@@ -698,6 +766,8 @@ serve(async (req) => {
       parsed_category: need.category,
       parsed_format: need.format,
       parsed_budget: need.budget,
+      learning_profile_used: Boolean(learningProfile),
+      profile_preferred_categories: learningProfile?.preferred_categories?.slice(0, 3) ?? [],
     });
     if (!reservation.ok) return reservation.response!;
     usageLogId = reservation.usageLogId;
@@ -711,6 +781,7 @@ serve(async (req) => {
         fallback: true,
         fallback_reason: "no_candidates",
         candidate_count: 0,
+        result_summary: "Không tìm thấy khóa học phù hợp trong bộ lọc hiện tại.",
       });
       return jsonResponse(buildFallbackResult(prompt, need, [], "no_candidates"));
     }
@@ -720,7 +791,7 @@ serve(async (req) => {
         task: "course_match",
         modelTier: "fast",
         systemPrompt: `Bạn là AI Course Match của VET. Nhiệm vụ là phân tích nhu cầu learner và chọn khóa học phù hợp từ danh sách candidates đã được backend lọc sẵn. Không được tạo khóa học mới. Không được recommend course_id ngoài danh sách candidates.`,
-        prompt: buildAiPrompt(prompt, need, candidates),
+        prompt: buildAiPrompt(prompt, need, candidates, learningProfile),
         responseMimeType: "application/json",
         temperature: 0.35,
       });
@@ -739,6 +810,7 @@ serve(async (req) => {
           task: "course_match",
           candidate_count: candidates.length,
           fallback: false,
+          result_summary: validated.intent_summary,
         });
         return jsonResponse({
           ...validated,
@@ -757,6 +829,7 @@ serve(async (req) => {
           candidate_count: candidates.length,
           fallback: true,
           fallback_reason: parseError instanceof Error ? parseError.message : "invalid_ai_output",
+          result_summary: fallback.intent_summary,
         });
         return jsonResponse(fallback);
       }
@@ -769,6 +842,7 @@ serve(async (req) => {
         candidate_count: candidates.length,
         fallback: true,
         fallback_reason: "ai_error",
+        result_summary: "AI Search gặp lỗi, kết quả dự phòng đã được trả về.",
       });
       return jsonResponse({
         ...buildFallbackResult(prompt, need, candidates, "ai_error_credit_refunded"),

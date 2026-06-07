@@ -5,7 +5,7 @@ import { useLearnerSavedCourses } from "@/hooks/useLearnerCourses";
 import { useLearnerReviews, useCreateLearnerReview } from "@/hooks/useLearnerReviews";
 import { useLearnerTransactions } from "@/hooks/useLearnerPayments";
 import { useAuth } from "@/contexts/AuthContext";
-import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Loader2, Receipt, CheckCircle2, RotateCcw, FileText, Flag, Crown, Route } from "lucide-react";
+import { Calendar, Clock, Star, GraduationCap, Heart, Search, BookOpen, Loader2, Receipt, CheckCircle2, RotateCcw, FileText, Flag, Crown, Route, Brain } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -256,6 +256,12 @@ export default function LearnerDashboard() {
                 <Button variant="outline" className="rounded-xl">
                   <Route className="mr-2 h-4 w-4" />
                   Lộ trình AI
+                </Button>
+              </Link>
+              <Link to="/learner/learning-profile">
+                <Button variant="outline" className="rounded-xl">
+                  <Brain className="mr-2 h-4 w-4" />
+                  Hồ sơ học tập
                 </Button>
               </Link>
               <Link to="/learner/subscription">

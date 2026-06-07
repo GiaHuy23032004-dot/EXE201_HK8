@@ -40,6 +40,19 @@ type CompareCourse = {
   course_schedules?: Array<{ day_of_week?: string | null; start_time?: string | null; end_time?: string | null }> | null;
 };
 
+type LearningProfile = {
+  primary_goal?: string | null;
+  current_level?: string | null;
+  preferred_categories?: string[] | null;
+  preferred_format?: "online" | "offline" | "any" | null;
+  budget_min?: number | null;
+  budget_max?: number | null;
+  location_preference?: string | null;
+  schedule_preference?: string | null;
+  learning_style?: string | null;
+  notes?: string | null;
+};
+
 type CompareResult = {
   summary: string;
   best_choice_course_id: string | null;
@@ -116,6 +129,37 @@ async function getAuthedSupabase(req: Request) {
     };
   }
   return { error: null, supabase, userId: data.user.id };
+}
+
+function learningProfileContext(profile: LearningProfile | null) {
+  if (!profile) return null;
+  return {
+    goal: profile.primary_goal?.slice(0, 220) ?? null,
+    level: profile.current_level?.slice(0, 80) ?? null,
+    preferred_categories: profile.preferred_categories?.slice(0, 3) ?? [],
+    preferred_format: profile.preferred_format ?? "any",
+    budget_min: profile.budget_min ?? null,
+    budget_max: profile.budget_max ?? null,
+    location_preference: profile.location_preference?.slice(0, 120) ?? null,
+    schedule_preference: profile.schedule_preference?.slice(0, 120) ?? null,
+    learning_style: profile.learning_style?.slice(0, 120) ?? null,
+    notes: profile.notes?.slice(0, 160) ?? null,
+  };
+}
+
+async function fetchLearningProfile(supabase: ReturnType<typeof createClient>, userId: string) {
+  const { data, error } = await supabase
+    .from("learner_learning_profiles")
+    .select("primary_goal, current_level, preferred_categories, preferred_format, budget_min, budget_max, location_preference, schedule_preference, learning_style, notes")
+    .eq("learner_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("learner_learning_profiles fetch error:", { message: error.message, code: error.code });
+    return null;
+  }
+
+  return (data ?? null) as LearningProfile | null;
 }
 
 async function isLearnerUser(userId: string) {
@@ -359,9 +403,12 @@ function validateCompare(raw: unknown, courses: CompareCourse[]): CompareResult 
   };
 }
 
-function buildPrompt(courses: CompareCourse[], context: Record<string, unknown>) {
+function buildPrompt(courses: CompareCourse[], context: Record<string, unknown>, learningProfile: LearningProfile | null) {
   return `Learner comparison context:
 ${JSON.stringify(context)}
+
+Saved learner learning profile, use only as secondary context and never override explicit comparison context:
+${JSON.stringify(learningProfileContext(learningProfile))}
 
 Courses from VET database:
 ${JSON.stringify(courses.map(publicCourse))}
@@ -407,6 +454,7 @@ serve(async (req) => {
       return jsonResponse({ error: true, code: "LEARNER_REQUIRED", message: "Chỉ learner mới có thể dùng AI Compare." }, 403);
     }
 
+    const learningProfile = await fetchLearningProfile(supabase, userId);
     const courses = await fetchCourses(courseIds);
     if (courses.length !== courseIds.length) {
       return jsonResponse({ error: true, code: "COURSE_NOT_AVAILABLE", message: "Một hoặc nhiều khóa học chưa sẵn sàng để so sánh." }, 404);
@@ -424,6 +472,8 @@ serve(async (req) => {
       feature: "compare",
       course_ids: courseIds,
       provider: "gemini",
+      learning_profile_used: Boolean(learningProfile),
+      profile_preferred_categories: learningProfile?.preferred_categories?.slice(0, 3) ?? [],
     });
     if (!reservation.ok) return reservation.response!;
     usageLogId = reservation.usageLogId;
@@ -433,7 +483,7 @@ serve(async (req) => {
         task: "compare",
         modelTier: "main",
         systemPrompt: "Bạn là AI Compare của VET. Chỉ so sánh các khóa học thật được backend cung cấp, không bịa dữ liệu và không cam kết kết quả học tập.",
-        prompt: buildPrompt(courses, context),
+        prompt: buildPrompt(courses, context, learningProfile),
         responseMimeType: "application/json",
         maxOutputTokens: 1400,
         temperature: 0.3,
@@ -452,6 +502,7 @@ serve(async (req) => {
           total_tokens: aiResult.usage?.totalTokens ?? null,
           fallback: false,
           course_ids: courseIds,
+          result_summary: comparison.summary,
         });
         return jsonResponse({ comparison, courses: courses.map(publicCourse), provider: aiResult.provider, model: aiResult.model, credit_cost: COMPARE_CREDIT_COST });
       } catch (parseError) {
@@ -466,6 +517,7 @@ serve(async (req) => {
           fallback: true,
           fallback_reason: parseError instanceof Error ? parseError.message : "invalid_ai_output",
           course_ids: courseIds,
+          result_summary: comparison.summary,
         });
         return jsonResponse({ comparison, courses: courses.map(publicCourse), provider: aiResult.provider, model: aiResult.model, credit_cost: COMPARE_CREDIT_COST, fallback: true });
       }
@@ -473,7 +525,13 @@ serve(async (req) => {
       const message = aiError instanceof Error ? aiError.message : "AI provider error";
       console.error("ai-compare provider error:", message);
       await finalizeAiUsage(supabase, usageLogId, "failed", message);
-      await updateAiUsageMetadata(usageLogId, { task: "compare", fallback: true, fallback_reason: "ai_error", course_ids: courseIds });
+      await updateAiUsageMetadata(usageLogId, {
+        task: "compare",
+        fallback: true,
+        fallback_reason: "ai_error",
+        course_ids: courseIds,
+        result_summary: "AI Compare gặp lỗi, credit sẽ được hoàn qua hệ thống.",
+      });
       return jsonResponse({ error: true, message: "Không thể dùng AI Compare lúc này. Credit sẽ được hoàn nếu AI gặp lỗi.", credit_refunded: true }, 500);
     }
   } catch (error) {

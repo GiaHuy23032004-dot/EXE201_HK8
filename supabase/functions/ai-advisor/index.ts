@@ -32,6 +32,19 @@ type LearnerContext = {
   schedule_preference?: string;
 };
 
+type LearningProfile = {
+  primary_goal?: string | null;
+  current_level?: string | null;
+  preferred_categories?: string[] | null;
+  preferred_format?: "online" | "offline" | "any" | null;
+  budget_min?: number | null;
+  budget_max?: number | null;
+  location_preference?: string | null;
+  schedule_preference?: string | null;
+  learning_style?: string | null;
+  notes?: string | null;
+};
+
 type CourseRow = {
   id: string;
   mentor_id: string;
@@ -249,6 +262,37 @@ async function getAuthedSupabase(req: Request) {
   return { error: null, supabase, userId: data.user.id };
 }
 
+function learningProfileContext(profile: LearningProfile | null) {
+  if (!profile) return null;
+  return {
+    goal: profile.primary_goal?.slice(0, 220) ?? null,
+    level: profile.current_level?.slice(0, 80) ?? null,
+    preferred_categories: profile.preferred_categories?.slice(0, 3) ?? [],
+    preferred_format: profile.preferred_format ?? "any",
+    budget_min: profile.budget_min ?? null,
+    budget_max: profile.budget_max ?? null,
+    location_preference: profile.location_preference?.slice(0, 120) ?? null,
+    schedule_preference: profile.schedule_preference?.slice(0, 120) ?? null,
+    learning_style: profile.learning_style?.slice(0, 120) ?? null,
+    notes: profile.notes?.slice(0, 160) ?? null,
+  };
+}
+
+async function fetchLearningProfile(supabase: ReturnType<typeof createClient>, userId: string) {
+  const { data, error } = await supabase
+    .from("learner_learning_profiles")
+    .select("primary_goal, current_level, preferred_categories, preferred_format, budget_min, budget_max, location_preference, schedule_preference, learning_style, notes")
+    .eq("learner_id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("learner_learning_profiles fetch error:", { message: error.message, code: error.code });
+    return null;
+  }
+
+  return (data ?? null) as LearningProfile | null;
+}
+
 async function reserveAiUsage(
   supabase: ReturnType<typeof createClient>,
   promptPreview: string,
@@ -439,10 +483,12 @@ function buildCoursePayload(course: CourseRow, mentor: MentorProfile | null, sch
 function buildAdvisorPrompt({
   question,
   learnerContext,
+  learningProfile,
   coursePayload,
 }: {
   question: string;
   learnerContext: LearnerContext | null;
+  learningProfile: LearningProfile | null;
   coursePayload: Record<string, unknown>;
 }) {
   return `Learner question:
@@ -450,6 +496,9 @@ ${question || "Learner wants to know whether this course is suitable before book
 
 Learner context:
 ${JSON.stringify(learnerContext ?? {})}
+
+Saved learner learning profile, use only as secondary context and never override the direct question:
+${JSON.stringify(learningProfileContext(learningProfile))}
 
 Course data from VET database:
 ${JSON.stringify(coursePayload)}
@@ -518,6 +567,7 @@ serve(async (req) => {
       );
     }
 
+    const learningProfile = await fetchLearningProfile(supabase, userId);
     const advisorCourse = await fetchAdvisorCourse(courseId);
     if (!advisorCourse) {
       return jsonResponse(
@@ -534,6 +584,8 @@ serve(async (req) => {
       feature: "advisor",
       course_id: course.id,
       provider: "gemini",
+      learning_profile_used: Boolean(learningProfile),
+      profile_preferred_categories: learningProfile?.preferred_categories?.slice(0, 3) ?? [],
     });
     if (!reservation.ok) return reservation.response!;
     usageLogId = reservation.usageLogId;
@@ -546,7 +598,7 @@ serve(async (req) => {
         modelTier: "fast",
         systemPrompt:
           "Bạn là AI Advisor của VET, hỗ trợ learner quyết định có nên đặt lịch một khóa học cụ thể hay không. Luôn trung thực, thận trọng, không bịa dữ liệu và chỉ dùng dữ liệu khóa học do backend cung cấp.",
-        prompt: buildAdvisorPrompt({ question, learnerContext, coursePayload }),
+        prompt: buildAdvisorPrompt({ question, learnerContext, learningProfile, coursePayload }),
         responseMimeType: "application/json",
         maxOutputTokens: 900,
         temperature: 0.35,
@@ -566,6 +618,7 @@ serve(async (req) => {
           task: "advisor",
           course_id: course.id,
           fallback: false,
+          result_summary: advisor.summary,
         });
 
         return jsonResponse({
@@ -587,6 +640,7 @@ serve(async (req) => {
           course_id: course.id,
           fallback: true,
           fallback_reason: parseError instanceof Error ? parseError.message : "invalid_ai_output",
+          result_summary: advisor.summary,
         });
 
         return jsonResponse({
@@ -607,6 +661,7 @@ serve(async (req) => {
         course_id: course.id,
         fallback: true,
         fallback_reason: "ai_error",
+        result_summary: "AI Advisor gặp lỗi, credit sẽ được hoàn qua hệ thống.",
       });
       return jsonResponse(
         {
