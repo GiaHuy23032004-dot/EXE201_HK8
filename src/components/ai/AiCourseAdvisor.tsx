@@ -36,6 +36,7 @@ interface AiAdvisorResponse {
   advisor?: AdvisorResult;
   error?: boolean;
   code?: string;
+  stage?: string;
   message?: string;
   creditsRemaining?: number;
   upgradeUrl?: string;
@@ -188,7 +189,13 @@ export function AiCourseAdvisor({
         return;
       }
 
-      const advisor = normalizeAdvisor((data as AiAdvisorResponse | null)?.advisor);
+      const response = data as AiAdvisorResponse | null;
+      if (response?.error) {
+        console.error("ai-advisor error response:", response);
+        throw new Error(response.message || "Không thể dùng AI Advisor lúc này.");
+      }
+
+      const advisor = normalizeAdvisor(response?.advisor);
       if (!advisor) {
         throw new Error("AI Advisor chưa trả về kết quả hợp lệ.");
       }

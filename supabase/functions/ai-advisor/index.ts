@@ -60,7 +60,6 @@ type CourseRow = {
   students_count: number | null;
   start_date?: string | null;
   status: string | null;
-  is_hidden?: boolean | null;
 };
 
 type MentorProfile = {
@@ -114,6 +113,41 @@ function normalizeReserveResult(value: unknown) {
     reason: row.reason ?? row.error ?? "insufficient_credits",
     creditsRemaining: Number.isFinite(creditsRemaining) ? creditsRemaining : 0,
   };
+}
+
+function isRpcSchemaLookupError(error: unknown) {
+  const record = error as { code?: unknown; message?: unknown } | null;
+  const code = String(record?.code ?? "");
+  const message = String(record?.message ?? "").toLowerCase();
+  return code === "PGRST202" || message.includes("could not find the function") || message.includes("schema cache");
+}
+
+function safeRpcError(error: unknown) {
+  const record = error as {
+    message?: unknown;
+    name?: unknown;
+    code?: unknown;
+    details?: unknown;
+    hint?: unknown;
+  } | null;
+
+  return {
+    message: record?.message ? String(record.message).slice(0, 500) : null,
+    name: record?.name ? String(record.name).slice(0, 120) : null,
+    code: record?.code ? String(record.code).slice(0, 80) : null,
+    details: record?.details ? String(record.details).slice(0, 500) : null,
+    hint: record?.hint ? String(record.hint).slice(0, 500) : null,
+  };
+}
+
+function throwRpcError(error: unknown) {
+  const safe = safeRpcError(error);
+  const wrapped = new Error(safe.message || "Supabase RPC failed.");
+  wrapped.name = safe.name || "SupabaseRpcError";
+  (wrapped as Error & { code?: string | null; details?: string | null; hint?: string | null }).code = safe.code;
+  (wrapped as Error & { code?: string | null; details?: string | null; hint?: string | null }).details = safe.details;
+  (wrapped as Error & { code?: string | null; details?: string | null; hint?: string | null }).hint = safe.hint;
+  throw wrapped;
 }
 
 function clampScore(value: unknown) {
@@ -230,7 +264,7 @@ async function getAuthedSupabase(req: Request) {
   const jwt = authHeader.replace(/^Bearer\s+/i, "").trim();
   if (!jwt) {
     return {
-      error: jsonResponse({ error: true, code: "AUTH_REQUIRED", message: "Vui lòng đăng nhập để dùng AI Advisor." }, 401),
+      error: jsonResponse({ error: true, code: "NOT_AUTHENTICATED", message: "Vui lòng đăng nhập để dùng AI Advisor." }, 401),
       supabase: null,
       userId: null,
     };
@@ -253,7 +287,7 @@ async function getAuthedSupabase(req: Request) {
   const { data, error } = await supabase.auth.getUser(jwt);
   if (error || !data.user) {
     return {
-      error: jsonResponse({ error: true, code: "AUTH_REQUIRED", message: "Phiên đăng nhập không hợp lệ." }, 401),
+      error: jsonResponse({ error: true, code: "NOT_AUTHENTICATED", message: "Phiên đăng nhập không hợp lệ." }, 401),
       supabase: null,
       userId: null,
     };
@@ -298,14 +332,42 @@ async function reserveAiUsage(
   promptPreview: string,
   metadata: Record<string, unknown>,
 ) {
-  const { data, error } = await supabase.rpc("reserve_ai_usage", {
+  const primaryParams = {
     feature: "advisor",
     credits: ADVISOR_CREDIT_COST,
     prompt_preview: promptPreview.slice(0, 500),
     metadata,
-  });
+  };
+  const underscoreParams = {
+    _feature: "advisor",
+    _credits: ADVISOR_CREDIT_COST,
+    _prompt_preview: promptPreview.slice(0, 500),
+    _metadata: metadata,
+  };
+  const prefixedParams = {
+    p_feature: "advisor",
+    p_credits: ADVISOR_CREDIT_COST,
+    p_prompt_preview: promptPreview.slice(0, 500),
+    p_metadata: metadata,
+  };
 
-  if (error) throw error;
+  let { data, error } = await supabase.rpc("reserve_ai_usage", primaryParams);
+
+  if (error && isRpcSchemaLookupError(error)) {
+    console.error("reserve_ai_usage primary params failed; retrying underscore params", safeRpcError(error));
+    const retry = await supabase.rpc("reserve_ai_usage", underscoreParams);
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error && isRpcSchemaLookupError(error)) {
+    console.error("reserve_ai_usage underscore params failed; retrying p_ params", safeRpcError(error));
+    const retry = await supabase.rpc("reserve_ai_usage", prefixedParams);
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) throwRpcError(error);
 
   const result = normalizeReserveResult(data);
   if (!result.ok) {
@@ -335,15 +397,39 @@ async function finalizeAiUsage(
   errorMessage: string | null,
 ) {
   if (!usageLogId) return;
-  const { error } = await supabase.rpc("finalize_ai_usage", {
+  const primaryParams = {
     usage_log_id: usageLogId,
     status,
     error_message: errorMessage,
-  });
+  };
+  const underscoreParams = {
+    _usage_log_id: usageLogId,
+    _status: status,
+    _error_message: errorMessage,
+  };
+  const prefixedParams = {
+    p_usage_log_id: usageLogId,
+    p_status: status,
+    p_error_message: errorMessage,
+  };
+
+  let { error } = await supabase.rpc("finalize_ai_usage", primaryParams);
+  if (error && isRpcSchemaLookupError(error)) {
+    console.error("finalize_ai_usage primary params failed; retrying underscore params", safeRpcError(error));
+    error = (await supabase.rpc("finalize_ai_usage", underscoreParams)).error;
+  }
+
+  if (error && isRpcSchemaLookupError(error)) {
+    console.error("finalize_ai_usage underscore params failed; retrying p_ params", safeRpcError(error));
+    error = (await supabase.rpc("finalize_ai_usage", prefixedParams)).error;
+  }
+
   if (error) {
     console.error("finalize_ai_usage error:", {
       message: error.message,
       code: error.code,
+      details: error.details,
+      hint: error.hint,
     });
   }
 }
@@ -386,16 +472,17 @@ async function fetchAdvisorCourse(courseId: string) {
     .from("courses")
     .select(`
       id, mentor_id, title, description, category, format, price, location,
-      meeting_link, rating, review_count, students_count, start_date, status, is_hidden
+      meeting_link, rating, review_count, students_count, start_date, status
     `)
     .eq("id", courseId)
+    .eq("status", "approved")
     .maybeSingle();
 
   if (courseError) throw courseError;
   if (!course) return null;
 
   const courseRow = course as CourseRow;
-  if (courseRow.status !== "approved" || courseRow.is_hidden === true) return null;
+  if (courseRow.status !== "approved") return null;
 
   const [{ data: mentor }, { data: schedules }] = await Promise.all([
     serviceClient
@@ -539,24 +626,45 @@ function publicCourseResponse(course: CourseRow, mentor: MentorProfile | null, s
 }
 
 serve(async (req) => {
+  let stage:
+    | "init"
+    | "cors"
+    | "auth"
+    | "parse_body"
+    | "validate_course_id"
+    | "fetch_course"
+    | "fetch_learning_profile"
+    | "reserve_credit"
+    | "call_ai"
+    | "parse_ai_response"
+    | "finalize_success"
+    | "finalize_failed" = "init";
+
+  stage = "cors";
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   let usageLogId: string | null = null;
   let supabaseForFinalize: ReturnType<typeof createClient> | null = null;
 
   try {
+    stage = "parse_body";
     const body = await req.json();
     const courseId = String(body.course_id ?? "").trim();
     const question = String(body.question ?? "").trim().slice(0, 800);
     const learnerContext = sanitizeLearnerContext(body.learner_context);
 
+    stage = "validate_course_id";
     if (!courseId) {
-      return jsonResponse({ error: true, message: "Thiếu course_id." }, 400);
+      return jsonResponse({ error: true, code: "MISSING_COURSE_ID", stage, message: "Thiếu course_id." }, 400);
     }
 
+    stage = "auth";
     const { error: authError, supabase, userId } = await getAuthedSupabase(req);
     if (authError || !supabase || !userId) {
-      return authError ?? jsonResponse({ error: true, message: "Không thể xác thực phiên đăng nhập." }, 401);
+      return jsonResponse(
+        { error: true, code: "NOT_AUTHENTICATED", stage, message: "Vui lòng đăng nhập để dùng AI Advisor." },
+        401,
+      );
     }
     supabaseForFinalize = supabase;
 
@@ -567,11 +675,13 @@ serve(async (req) => {
       );
     }
 
+    stage = "fetch_learning_profile";
     const learningProfile = await fetchLearningProfile(supabase, userId);
+    stage = "fetch_course";
     const advisorCourse = await fetchAdvisorCourse(courseId);
     if (!advisorCourse) {
       return jsonResponse(
-        { error: true, code: "COURSE_NOT_AVAILABLE", message: "Khóa học này chưa sẵn sàng để AI tư vấn." },
+        { error: true, code: "COURSE_NOT_AVAILABLE", stage, message: "Khóa học này chưa sẵn sàng để AI tư vấn." },
         404,
       );
     }
@@ -579,6 +689,7 @@ serve(async (req) => {
     const { course, mentor, schedules } = advisorCourse;
     const promptPreview = question || course.title;
 
+    stage = "reserve_credit";
     const reservation = await reserveAiUsage(supabase, promptPreview, {
       function: "ai-advisor",
       feature: "advisor",
@@ -593,6 +704,7 @@ serve(async (req) => {
     const coursePayload = buildCoursePayload(course, mentor, schedules);
 
     try {
+      stage = "call_ai";
       const aiResult = await callAI({
         task: "advisor",
         modelTier: "fast",
@@ -604,11 +716,12 @@ serve(async (req) => {
         temperature: 0.35,
       });
 
-      await finalizeAiUsage(supabase, usageLogId, "success", null);
-
       try {
+        stage = "parse_ai_response";
         const parsed = parseAiJson(aiResult.text);
         const advisor = validateAdvisorResult(parsed, buildFallbackAdvisor(course).summary);
+        stage = "finalize_success";
+        await finalizeAiUsage(supabase, usageLogId, "success", null);
         await updateAiUsageMetadata(usageLogId, {
           provider: aiResult.provider,
           model: aiResult.model,
@@ -630,6 +743,8 @@ serve(async (req) => {
         });
       } catch (parseError) {
         const advisor = buildFallbackAdvisor(course, aiResult.text);
+        stage = "finalize_success";
+        await finalizeAiUsage(supabase, usageLogId, "success", null);
         await updateAiUsageMetadata(usageLogId, {
           provider: aiResult.provider,
           model: aiResult.model,
@@ -654,7 +769,16 @@ serve(async (req) => {
       }
     } catch (aiError) {
       const message = aiError instanceof Error ? aiError.message : "AI provider error";
-      console.error("ai-advisor provider error:", message);
+      const errorStage = stage;
+      console.error("ai-advisor error", {
+        stage: errorStage,
+        message,
+        name: aiError instanceof Error ? aiError.name : undefined,
+        code: (aiError as { code?: unknown } | null)?.code,
+        details: (aiError as { details?: unknown } | null)?.details,
+        hint: (aiError as { hint?: unknown } | null)?.hint,
+      });
+      stage = "finalize_failed";
       await finalizeAiUsage(supabase, usageLogId, "failed", message);
       await updateAiUsageMetadata(usageLogId, {
         task: "advisor",
@@ -666,7 +790,9 @@ serve(async (req) => {
       return jsonResponse(
         {
           error: true,
-          message: "Không thể dùng AI Advisor lúc này. Credit sẽ được hoàn nếu AI gặp lỗi.",
+          code: "AI_ADVISOR_FAILED",
+          stage: errorStage,
+          message: "Không thể dùng AI Advisor lúc này. Vui lòng thử lại sau.",
           credit_refunded: true,
         },
         500,
@@ -674,14 +800,35 @@ serve(async (req) => {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown AI Advisor error";
-    console.error("ai-advisor error:", message);
+    const errorStage = stage;
+    const debug =
+      errorStage === "reserve_credit"
+        ? {
+            rpcCode: (error as { code?: unknown } | null)?.code ?? null,
+            rpcMessage: message,
+            rpcDetails: (error as { details?: unknown } | null)?.details ?? null,
+            rpcHint: (error as { hint?: unknown } | null)?.hint ?? null,
+          }
+        : undefined;
+    console.error("ai-advisor error", {
+      stage: errorStage,
+      message,
+      name: error instanceof Error ? error.name : undefined,
+      code: (error as { code?: unknown } | null)?.code,
+      details: (error as { details?: unknown } | null)?.details,
+      hint: (error as { hint?: unknown } | null)?.hint,
+    });
     if (supabaseForFinalize && usageLogId) {
+      stage = "finalize_failed";
       await finalizeAiUsage(supabaseForFinalize, usageLogId, "failed", message);
     }
     return jsonResponse(
       {
         error: true,
+        code: "AI_ADVISOR_FAILED",
+        stage: errorStage,
         message: "Không thể dùng AI Advisor lúc này. Vui lòng thử lại sau.",
+        ...(debug ? { debug } : {}),
       },
       500,
     );

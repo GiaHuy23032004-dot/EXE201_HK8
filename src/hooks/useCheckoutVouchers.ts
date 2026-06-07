@@ -44,6 +44,29 @@ function firstRow<T>(value: T | T[] | null | undefined): T | null {
   return value ?? null;
 }
 
+function isRpcLookupError(error: any) {
+  const message = String(error?.message ?? "").toLowerCase();
+  return (
+    error?.code === "PGRST202" ||
+    message.includes("could not find the function") ||
+    message.includes("schema cache")
+  );
+}
+
+async function callRpcWithFallback<TData = unknown>(
+  functionName: string,
+  primaryParams: Record<string, unknown>,
+  fallbackParams?: Record<string, unknown>,
+) {
+  const primaryResult = await (supabase as any).rpc(functionName, primaryParams);
+  if (!primaryResult.error || !fallbackParams || !isRpcLookupError(primaryResult.error)) {
+    return primaryResult as { data: TData | null; error: any };
+  }
+
+  console.error(`${functionName} primary RPC params failed; retrying compatibility params:`, primaryResult.error);
+  return await (supabase as any).rpc(functionName, fallbackParams) as { data: TData | null; error: any };
+}
+
 function normalizePreview(value: unknown, fallbackAmount: number): VoucherPreview {
   const row = firstRow(value as Record<string, unknown> | Record<string, unknown>[]) ?? {};
   const ok = row.ok === true || row.success === true || row.valid === true;
@@ -71,7 +94,9 @@ export function useAvailableSubscriptionVouchers(bookingAmount: number, enabled 
     enabled: !!userId && !authLoading && enabled,
     retry: 1,
     queryFn: async () => {
-      const { data, error } = await (supabase as any).rpc("get_my_available_subscription_vouchers", {
+      const { data, error } = await callRpcWithFallback("get_my_available_subscription_vouchers", {
+        _booking_amount: bookingAmount,
+      }, {
         booking_amount: bookingAmount,
       });
 
@@ -89,11 +114,17 @@ export function useAvailableSubscriptionVouchers(bookingAmount: number, enabled 
 export function usePreviewSubscriptionVoucher() {
   return useMutation({
     mutationFn: async ({ voucherId, bookingAmount }: { voucherId: string; bookingAmount: number }) => {
-      const { data, error } = await (supabase as any).rpc("preview_subscription_voucher", {
-        voucher_id: voucherId,
+      const { data, error } = await callRpcWithFallback("preview_subscription_voucher", {
+        _voucher_id: voucherId,
+        _booking_amount: bookingAmount,
+      }, {
         booking_amount: bookingAmount,
+        voucher_id: voucherId,
       });
-      if (error) throw error;
+      if (error) {
+        console.error("preview_subscription_voucher RPC error:", error);
+        throw new Error("Không thể kiểm tra voucher lúc này. Vui lòng thử lại.");
+      }
       return normalizePreview(data, bookingAmount);
     },
   });
@@ -104,11 +135,17 @@ export function useApplySubscriptionVoucherToBooking() {
 
   return useMutation({
     mutationFn: async ({ voucherId, bookingId }: { voucherId: string; bookingId: string }) => {
-      const { data, error } = await (supabase as any).rpc("apply_subscription_voucher_to_booking", {
+      const { data, error } = await callRpcWithFallback("apply_subscription_voucher_to_booking", {
+        _voucher_id: voucherId,
+        _booking_id: bookingId,
+      }, {
         voucher_id: voucherId,
         booking_id: bookingId,
       });
-      if (error) throw error;
+      if (error) {
+        console.error("apply_subscription_voucher_to_booking RPC error:", error);
+        throw new Error("Không thể áp dụng voucher lúc này. Vui lòng thử lại.");
+      }
       return data;
     },
     onSuccess: (_data, variables) => {
@@ -127,10 +164,15 @@ export function useRemoveSubscriptionVoucherFromBooking() {
 
   return useMutation({
     mutationFn: async ({ bookingId }: { bookingId: string }) => {
-      const { data, error } = await (supabase as any).rpc("remove_subscription_voucher_from_booking", {
+      const { data, error } = await callRpcWithFallback("remove_subscription_voucher_from_booking", {
+        _booking_id: bookingId,
+      }, {
         booking_id: bookingId,
       });
-      if (error) throw error;
+      if (error) {
+        console.error("remove_subscription_voucher_from_booking RPC error:", error);
+        throw new Error("Không thể gỡ voucher lúc này. Vui lòng thử lại.");
+      }
       return data;
     },
     onSuccess: (_data, variables) => {

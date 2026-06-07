@@ -288,7 +288,7 @@ export default function BookingPage() {
       console.error("preview_subscription_voucher error:", err);
       setSelectedVoucher(null);
       setVoucherPreview(null);
-      setVoucherError(err?.message || "Không thể kiểm tra voucher.");
+      setVoucherError("Không thể kiểm tra voucher lúc này. Vui lòng thử lại.");
     }
   };
 
@@ -346,7 +346,7 @@ export default function BookingPage() {
           console.error("apply_subscription_voucher_to_booking error:", voucherApplyError);
           toast({
             title: "Không thể áp dụng voucher",
-            description: voucherApplyError?.message || "Booking đã được tạo nhưng voucher chưa được áp dụng. Vui lòng thử lại.",
+            description: "Booking đã được tạo nhưng voucher chưa được áp dụng. Vui lòng thử lại.",
             variant: "destructive",
           });
           return;
