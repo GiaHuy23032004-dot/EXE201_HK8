@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { CourseCard } from "@/components/marketplace/CourseCard";
 import { useLearnerSearchCourses } from "@/hooks/useLearnerCourses";
-import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List, Sparkles, Brain, Loader2 } from "lucide-react";
+import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List, Sparkles, Brain, Loader2, GitCompareArrows, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,7 @@ import { AiCreditUpgradeDialog } from "@/components/subscription/AiCreditUpgrade
 import { isAiCreditRequiredPayload, readFunctionErrorPayload } from "@/lib/aiCreditErrors";
 
 const SEARCH_AI_COST = AI_CREDIT_COSTS.search;
+const COMPARE_AI_COST = AI_CREDIT_COSTS.compare;
 
 type AiCourseMatchRecommendation = {
   course_id: string;
@@ -54,6 +55,38 @@ type AiCourseMatchResult = {
   fallback?: boolean;
   fallback_reason?: string;
   credit_refunded?: boolean;
+};
+
+type AiCompareCourse = {
+  id: string;
+  title: string;
+  category?: string | null;
+  format?: "online" | "offline";
+  price?: number;
+  mentor_name?: string;
+};
+
+type AiCompareResult = {
+  summary: string;
+  best_choice_course_id: string | null;
+  comparison_table: Array<{
+    criterion: string;
+    course_values: Array<{ course_id: string; value: string }>;
+  }>;
+  course_analysis: Array<{
+    course_id: string;
+    strengths: string[];
+    weaknesses: string[];
+    best_for: string;
+  }>;
+  recommendation: string;
+  questions_to_ask_mentor: string[];
+};
+
+type AiCompareResponse = {
+  comparison: AiCompareResult;
+  courses: AiCompareCourse[];
+  fallback?: boolean;
 };
 
 function formatVnd(value: number | null | undefined) {
@@ -184,6 +217,118 @@ function AiCourseMatchPanel({ result }: { result: AiCourseMatchResult }) {
   );
 }
 
+function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
+  const courseMap = new Map(result.courses.map((course) => [course.id, course]));
+  const bestCourse = result.comparison.best_choice_course_id
+    ? courseMap.get(result.comparison.best_choice_course_id)
+    : null;
+
+  return (
+    <div className="container pt-6">
+      <Card className="overflow-hidden rounded-2xl border-cyan-200/70 bg-gradient-to-br from-white via-cyan-50/60 to-blue-50/70 shadow-card">
+        <CardContent className="p-5 md:p-6">
+          <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+            <div>
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-cyan-100 px-3 py-1 text-xs font-semibold text-cyan-700">
+                <GitCompareArrows className="h-3.5 w-3.5" />
+                AI Compare
+              </div>
+              <h2 className="text-xl font-bold text-foreground">So sánh khóa học bằng AI</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                {result.comparison.summary}
+              </p>
+            </div>
+            {result.fallback && (
+              <Badge variant="outline" className="w-fit rounded-full border-amber-200 bg-amber-50 text-amber-700">
+                So sánh dự phòng
+              </Badge>
+            )}
+          </div>
+
+          {bestCourse && (
+            <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              <CheckCircle2 className="mr-2 inline h-4 w-4" />
+              AI khuyến nghị cân nhắc trước: <strong>{bestCourse.title}</strong>
+            </div>
+          )}
+
+          <div className="mb-5 overflow-x-auto rounded-2xl border bg-background">
+            <table className="w-full min-w-[720px] text-sm">
+              <thead className="bg-muted/50 text-left">
+                <tr>
+                  <th className="w-48 px-4 py-3 font-semibold text-foreground">Tiêu chí</th>
+                  {result.courses.map((course) => (
+                    <th key={course.id} className="px-4 py-3 font-semibold text-foreground">
+                      <Link to={`/course/${course.id}`} className="hover:text-primary">
+                        {course.title}
+                      </Link>
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {result.comparison.comparison_table.map((row) => (
+                  <tr key={row.criterion} className="border-t">
+                    <td className="px-4 py-3 font-medium text-foreground">{row.criterion}</td>
+                    {result.courses.map((course) => {
+                      const value = row.course_values.find((item) => item.course_id === course.id)?.value ?? "-";
+                      return (
+                        <td key={course.id} className="px-4 py-3 text-muted-foreground">
+                          {value}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            {result.comparison.course_analysis.map((analysis) => {
+              const course = courseMap.get(analysis.course_id);
+              if (!course) return null;
+              return (
+                <div key={analysis.course_id} className="rounded-2xl border bg-background p-4 shadow-sm">
+                  <h3 className="line-clamp-2 font-semibold text-foreground">{course.title}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {course.mentor_name || "Mentor"} · {course.price ? formatVnd(course.price) : ""}
+                  </p>
+                  <p className="mt-3 text-sm font-medium text-foreground">Phù hợp nhất cho</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{analysis.best_for}</p>
+                  <p className="mt-3 text-sm font-medium text-foreground">Điểm mạnh</p>
+                  <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
+                    {analysis.strengths.map((item) => <li key={item}>+ {item}</li>)}
+                  </ul>
+                  <p className="mt-3 text-sm font-medium text-foreground">Cần cân nhắc</p>
+                  <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
+                    {analysis.weaknesses.map((item) => <li key={item}>- {item}</li>)}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 rounded-2xl bg-primary/5 p-4 text-sm leading-relaxed text-foreground">
+            <strong>Khuyến nghị:</strong> {result.comparison.recommendation}
+          </div>
+
+          {result.comparison.questions_to_ask_mentor.length > 0 && (
+            <div className="mt-4 rounded-2xl border bg-background p-4">
+              <p className="mb-2 font-semibold text-foreground">Nên hỏi mentor trước khi đặt lịch</p>
+              <ul className="space-y-1 text-sm text-muted-foreground">
+                {result.comparison.questions_to_ask_mentor.map((question) => (
+                  <li key={question}>• {question}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function SearchPage() {
   const { session, isLoggedIn } = useAuth();
   const { toast } = useToast();
@@ -201,6 +346,9 @@ export default function SearchPage() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
   const [aiMatchResult, setAiMatchResult] = useState<AiCourseMatchResult | null>(null);
+  const [compareCourseIds, setCompareCourseIds] = useState<string[]>([]);
+  const [compareResult, setCompareResult] = useState<AiCompareResponse | null>(null);
+  const [compareLoading, setCompareLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [creditDialogOpen, setCreditDialogOpen] = useState(false);
@@ -368,6 +516,87 @@ export default function SearchPage() {
     studentsCount: c.students_count,
     mentorBadges: mentorTrustBadges.get(c.mentor?.user_id || c.mentor_id) ?? [],
   }));
+
+  const selectedCompareCourses = mappedCourses.filter((course) => compareCourseIds.includes(course.id));
+
+  const toggleCompareCourse = (courseId: string) => {
+    setCompareResult(null);
+    setCompareCourseIds((current) => {
+      if (current.includes(courseId)) return current.filter((id) => id !== courseId);
+      if (current.length >= 3) {
+        toast({
+          title: "Chỉ so sánh tối đa 3 khóa học",
+          description: "Hãy bỏ chọn một khóa trước khi thêm khóa mới.",
+        });
+        return current;
+      }
+      return [...current, courseId];
+    });
+  };
+
+  const handleAiCompare = async () => {
+    if (compareCourseIds.length < 2 || compareCourseIds.length > 3) {
+      toast({ title: "Vui lòng chọn từ 2 đến 3 khóa học để so sánh." });
+      return;
+    }
+
+    if (!session) {
+      toast({
+        title: "Vui lòng đăng nhập để dùng AI Compare",
+        description: "Tính năng này dùng 2 AI credits.",
+      });
+      return;
+    }
+
+    if (aiCreditsRemaining < COMPARE_AI_COST) {
+      setCreditDialogOpen(true);
+      return;
+    }
+
+    setCompareLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("ai-compare", {
+        body: {
+          course_ids: compareCourseIds,
+          learner_goal: query.trim() || undefined,
+          preferred_format: format === "all" ? "any" : format,
+          budget: priceRange[1] < 1000000 ? priceRange[1] : undefined,
+        },
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      if (error) {
+        const payload = await readFunctionErrorPayload(error);
+        if (isAiCreditRequiredPayload(payload)) {
+          setCreditDialogOpen(true);
+          return;
+        }
+        throw error;
+      }
+
+      if (isAiCreditRequiredPayload(data)) {
+        setCreditDialogOpen(true);
+        return;
+      }
+
+      if (!data?.comparison || !Array.isArray(data?.courses)) {
+        throw new Error("AI Compare chưa trả về kết quả hợp lệ.");
+      }
+
+      setCompareResult(data as AiCompareResponse);
+      toast({ title: "AI đã so sánh khóa học", description: "Credit đã được cập nhật trong gói của bạn." });
+    } catch (error: any) {
+      console.error("AI compare error:", error);
+      toast({
+        title: "Không thể dùng AI Compare",
+        description: error?.message || "Vui lòng thử lại sau. Nếu AI lỗi, credit sẽ được hoàn qua hệ thống.",
+        variant: "destructive",
+      });
+    } finally {
+      setCompareLoading(false);
+      await refetchSubscription();
+    }
+  };
 
   return (
     <MainLayout>
@@ -548,6 +777,73 @@ export default function SearchPage() {
 
       {!aiLoading && aiMatchResult && <AiCourseMatchPanel result={aiMatchResult} />}
 
+      {compareCourseIds.length > 0 && (
+        <div className="container pt-6">
+          <Card className="rounded-2xl border-cyan-200 bg-cyan-50/50 shadow-sm">
+            <CardContent className="flex flex-col gap-4 p-4 md:flex-row md:items-center md:justify-between">
+              <div className="min-w-0">
+                <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-cyan-800">
+                  <GitCompareArrows className="h-4 w-4" />
+                  Đã chọn {compareCourseIds.length}/3 khóa để so sánh
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {selectedCompareCourses.map((course) => (
+                    <Badge key={course.id} variant="outline" className="max-w-full gap-2 rounded-full bg-background">
+                      <span className="max-w-[220px] truncate">{course.title}</span>
+                      <button
+                        type="button"
+                        onClick={() => toggleCompareCourse(course.id)}
+                        className="text-muted-foreground hover:text-destructive"
+                        aria-label={`Bỏ chọn ${course.title}`}
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl bg-background"
+                  onClick={() => {
+                    setCompareCourseIds([]);
+                    setCompareResult(null);
+                  }}
+                >
+                  Bỏ chọn
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleAiCompare}
+                  disabled={compareLoading || compareCourseIds.length < 2 || subscriptionLoading}
+                  className="rounded-xl border-0 gradient-primary text-primary-foreground"
+                >
+                  {compareLoading ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <GitCompareArrows className="mr-2 h-4 w-4" />
+                  )}
+                  {compareLoading ? "AI đang so sánh..." : `So sánh bằng AI · ${COMPARE_AI_COST} credits`}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {compareLoading && (
+        <div className="container pt-6">
+          <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 text-sm text-cyan-800 shadow-sm">
+            <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+            AI đang so sánh các khóa học bạn chọn...
+          </div>
+        </div>
+      )}
+
+      {!compareLoading && compareResult && <AiCompareResultPanel result={compareResult} />}
+
       {/* Results */}
       <div className="container py-8">
         <div className="mb-6 flex items-center justify-between">
@@ -583,9 +879,28 @@ export default function SearchPage() {
           </div>
         ) : (
           <div className={viewMode === "grid" ? "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "grid gap-4"}>
-            {mappedCourses.map((c) => (
-              <CourseCard key={c.id} course={c} />
-            ))}
+            {mappedCourses.map((c) => {
+              const selected = compareCourseIds.includes(c.id);
+              return (
+                <div key={c.id} className="relative">
+                  <CourseCard course={c} />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant={selected ? "default" : "outline"}
+                    onClick={() => toggleCompareCourse(c.id)}
+                    className={`absolute left-3 top-3 z-10 h-8 rounded-full text-xs shadow-lg ${
+                      selected
+                        ? "border-0 bg-cyan-600 text-white hover:bg-cyan-700"
+                        : "bg-white/95 text-cyan-700 hover:bg-cyan-50"
+                    }`}
+                  >
+                    {selected ? <CheckCircle2 className="mr-1 h-3.5 w-3.5" /> : <GitCompareArrows className="mr-1 h-3.5 w-3.5" />}
+                    So sánh
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         )}
 

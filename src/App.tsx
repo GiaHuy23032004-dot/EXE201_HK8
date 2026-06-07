@@ -23,6 +23,7 @@ import CheckoutPage from "./pages/CheckoutPage";
 import LearnerDashboard from "./pages/LearnerDashboard";
 import LearnerReports from "./pages/LearnerReports";
 import LearnerSubscriptionPage from "./pages/LearnerSubscriptionPage";
+import LearnerRoadmapPage from "./pages/LearnerRoadmapPage";
 import MentorDashboard from "./pages/MentorDashboard";
 import MentorCourses from "./pages/MentorCourses";
 import MentorSchedule from "./pages/mentor/MentorSchedule";
@@ -116,6 +117,7 @@ const App = () => (
             <Route path="/learner/dashboard" element={<LearnerDashboard />} />
             <Route path="/learner/reports" element={<LearnerReports />} />
             <Route path="/learner/subscription" element={<LearnerSubscriptionPage />} />
+            <Route path="/learner/roadmap" element={<LearnerRoadmapPage />} />
             <Route path="/mentor/dashboard" element={<MentorGuard><MentorDashboard /></MentorGuard>} />
             <Route path="/mentor/courses"   element={<MentorGuard><MentorCourses /></MentorGuard>} />
             <Route path="/mentor/schedule"  element={<MentorGuard><MentorSchedule /></MentorGuard>} />

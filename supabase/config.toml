@@ -9,6 +9,12 @@ verify_jwt = false
 [functions.ai-advisor]
 verify_jwt = false
 
+[functions.ai-compare]
+verify_jwt = false
+
+[functions.ai-roadmap]
+verify_jwt = false
+
 [functions.admin-check]
 verify_jwt = false
 
