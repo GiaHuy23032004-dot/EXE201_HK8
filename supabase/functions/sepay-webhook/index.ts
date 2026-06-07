@@ -197,15 +197,21 @@ Deno.serve(async (req: Request) => {
 
     if (subscriptionRef) {
       const { data, error } = await supabase.rpc("complete_subscription_payment", {
-        reference_code: subscriptionRef,
-        paid_amount: amount,
-        payment_session_id: providerOrderId,
-        provider_payload: body,
+        _reference_code: subscriptionRef,
+        _paid_amount: amount,
+        _payment_session_id: providerOrderId,
+        _provider_payload: body,
       });
 
       if (error) {
-        console.error("complete_subscription_payment RPC error:", error.message);
-        await updateWebhookEvent(supabase, eventKey, "failed", "rpc_error");
+        console.error("complete_subscription_payment RPC error:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
+        const reason = `rpc_error:${error.code || error.message || "unknown"}`;
+        await updateWebhookEvent(supabase, eventKey, "failed", reason.slice(0, 240));
         return jsonResponse({
           success: false,
           message: "Subscription payment RPC failed",
