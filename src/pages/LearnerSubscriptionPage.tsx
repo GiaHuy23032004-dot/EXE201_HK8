@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { CalendarDays, Check, Crown, Gift, Info, Sparkles, Ticket } from "lucide-react";
+import { CalendarDays, Check, CreditCard, Crown, Gift, Info, Sparkles, Ticket } from "lucide-react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from "@/contexts/AuthContext";
 import { SUBSCRIPTION_PLAN_BY_CODE, formatSubscriptionPrice, type SubscriptionVoucher } from "@/constants/subscription";
 import { useSubscription } from "@/hooks/useSubscription";
+import { useSubscriptionPayments } from "@/hooks/useSubscriptionPayments";
 import { useSubscriptionVouchers } from "@/hooks/useSubscriptionVouchers";
 
 const vetPlusGradient =
@@ -33,6 +34,19 @@ function getVoucherState(voucher: SubscriptionVoucher) {
     return { label: "Đã dùng", className: "bg-success/10 text-success border-success/20" };
   }
   return { label: "Chưa dùng", className: "bg-primary/10 text-primary border-primary/20" };
+}
+
+function getPaymentState(status: string) {
+  switch (status) {
+    case "success":
+    case "paid":
+      return { label: "Thành công", className: "bg-success/10 text-success border-success/20" };
+    case "failed":
+    case "cancelled":
+      return { label: "Thất bại", className: "bg-destructive/10 text-destructive border-destructive/20" };
+    default:
+      return { label: "Đang chờ", className: "bg-warning/10 text-warning border-warning/20" };
+  }
 }
 
 function VoucherCard({ voucher }: { voucher: SubscriptionVoucher }) {
@@ -78,6 +92,10 @@ export default function LearnerSubscriptionPage() {
     expiredVouchers,
     isLoading: vouchersLoading,
   } = useSubscriptionVouchers();
+  const {
+    latestPayments,
+    isLoading: paymentsLoading,
+  } = useSubscriptionPayments();
   const plan = SUBSCRIPTION_PLAN_BY_CODE[subscription.plan_code];
   const creditPercent = Math.min(100, Math.round((aiCreditsRemaining / Math.max(1, subscription.ai_credits_per_month)) * 100));
   const orderedVouchers = [...unusedVouchers, ...usedVouchers, ...expiredVouchers];
@@ -267,11 +285,11 @@ export default function LearnerSubscriptionPage() {
 
             <Card className="rounded-2xl border-dashed shadow-card">
               <CardHeader>
-                <CardTitle className="text-lg">Quyền lợi sắp có</CardTitle>
+                <CardTitle className="text-lg">Ghi chú quyền lợi</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm text-muted-foreground">
-                <p>Thanh toán subscription thật sẽ được tích hợp ở phase tiếp theo.</p>
-                <p>Voucher VET Plus hiện đã được ghi nhận trong gói; việc áp dụng voucher vào booking checkout sẽ hoàn thiện ở phase tiếp theo.</p>
+                <p>Thanh toán VET Plus bằng SePay/VietQR đã được tách riêng khỏi booking payment.</p>
+                <p>Voucher VET Plus được ghi nhận trong gói và có thể áp dụng trong checkout booking khi đủ điều kiện.</p>
                 <p>AI credits được kiểm tra và cập nhật sau mỗi lần dùng tính năng AI.</p>
               </CardContent>
             </Card>
@@ -340,6 +358,70 @@ export default function LearnerSubscriptionPage() {
                 <h3 className="font-semibold text-foreground">Voucher sẽ sớm xuất hiện</h3>
                 <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
                   Voucher sẽ được tạo khi gói Plus được kích hoạt hoặc gia hạn.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mt-6 rounded-2xl shadow-card">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-xl">
+              <CreditCard className="h-5 w-5 text-primary" />
+              Lịch sử thanh toán VET Plus
+            </CardTitle>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Các phiên thanh toán subscription gần nhất của bạn.
+            </p>
+          </CardHeader>
+          <CardContent>
+            {paymentsLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-16 rounded-2xl" />
+                <Skeleton className="h-16 rounded-2xl" />
+              </div>
+            ) : latestPayments.length > 0 ? (
+              <div className="space-y-3">
+                {latestPayments.map((payment) => {
+                  const state = getPaymentState(payment.payment_status);
+
+                  return (
+                    <div
+                      key={payment.payment_id || payment.reference_code}
+                      className="flex flex-col gap-3 rounded-2xl border bg-card p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="break-all font-mono text-sm font-semibold text-foreground">
+                            {payment.reference_code || "VETSUB"}
+                          </p>
+                          <Badge variant="outline" className={`rounded-full ${state.className}`}>
+                            {state.label}
+                          </Badge>
+                        </div>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          Tạo lúc {formatDate(payment.created_at)}
+                          {payment.paid_at ? ` · Thanh toán lúc ${formatDate(payment.paid_at)}` : ""}
+                        </p>
+                      </div>
+                      <div className="text-left sm:text-right">
+                        <p className="font-bold text-primary">{formatSubscriptionPrice(payment.amount)}</p>
+                        {payment.provider && (
+                          <p className="text-xs uppercase text-muted-foreground">{payment.provider}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-2xl border border-dashed bg-muted/20 p-6 text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-muted text-muted-foreground">
+                  <CreditCard className="h-6 w-6" />
+                </div>
+                <h3 className="font-semibold text-foreground">Chưa có thanh toán subscription</h3>
+                <p className="mx-auto mt-2 max-w-xl text-sm text-muted-foreground">
+                  Khi bạn tạo phiên thanh toán VET Plus, lịch sử sẽ xuất hiện tại đây.
                 </p>
               </div>
             )}
