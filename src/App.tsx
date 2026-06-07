@@ -41,6 +41,7 @@ import AdminReports from "./pages/admin/AdminReports";
 import AdminPromotions from "./pages/admin/AdminPromotions";
 import AdminWithdrawals from "./pages/admin/AdminWithdrawals";
 import AdminLedger from "./pages/admin/AdminLedger";
+import AdminSubscriptions from "./pages/admin/AdminSubscriptions";
 import AdminSettings from "./pages/admin/AdminSettings";
 import MapConfigPage from "./pages/dev/MapConfigPage";
 import ProfilePage from "./pages/ProfilePage";
@@ -136,6 +137,7 @@ const App = () => (
             <Route path="/admin/promotions" element={<AdminRoute><AdminPromotions /></AdminRoute>} />
             <Route path="/admin/withdrawals" element={<AdminRoute><AdminWithdrawals /></AdminRoute>} />
             <Route path="/admin/ledger" element={<AdminRoute><AdminLedger /></AdminRoute>} />
+            <Route path="/admin/subscriptions" element={<AdminRoute><AdminSubscriptions /></AdminRoute>} />
             <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
