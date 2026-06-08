@@ -234,7 +234,7 @@ export default function LearnerSubscriptionPage() {
                         Bạn đang sử dụng VET Plus
                       </h2>
                       <p className="mt-2 text-sm text-muted-foreground">
-                        AI credits đang hoạt động. Voucher VET Plus đã được ghi nhận trong gói và sẽ áp dụng vào checkout ở phase tiếp theo.
+                        AI credits dùng chung cho EduBot, AI Search, Advisor, Compare và Roadmap. Voucher VET Plus đã được ghi nhận trong gói và có thể áp dụng trong checkout khi đủ điều kiện.
                       </p>
                     </div>
                   ) : (
@@ -290,7 +290,7 @@ export default function LearnerSubscriptionPage() {
               <CardContent className="space-y-3 text-sm text-muted-foreground">
                 <p>Thanh toán VET Plus bằng SePay/VietQR đã được tách riêng khỏi booking payment.</p>
                 <p>Voucher VET Plus được ghi nhận trong gói và có thể áp dụng trong checkout booking khi đủ điều kiện.</p>
-                <p>AI credits được kiểm tra và cập nhật sau mỗi lần dùng tính năng AI.</p>
+                <p>AI credits dùng chung cho EduBot, AI Search, Advisor, Compare và Roadmap; hệ thống kiểm tra và cập nhật sau mỗi lần dùng AI.</p>
               </CardContent>
             </Card>
           </div>

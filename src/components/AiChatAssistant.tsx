@@ -51,6 +51,14 @@ export function AiChatAssistant() {
       return;
     }
 
+    if (subscriptionLoading) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "VET đang tải số AI credits của bạn. Vui lòng thử lại sau vài giây." },
+      ]);
+      return;
+    }
+
     if (aiCreditsRemaining < CHAT_AI_COST) {
       setCreditDialogOpen(true);
       setMessages((prev) => [
@@ -179,7 +187,11 @@ export function AiChatAssistant() {
                 <div>
                   <p className="text-sm font-semibold">EduBot AI</p>
                   <p className="text-[10px] opacity-80">
-                    {isLoggedIn ? `Còn ${aiCreditsRemaining} credits · mỗi tin ${CHAT_AI_COST} credit` : "Đăng nhập để dùng AI"}
+                    {subscriptionLoading
+                      ? "Đang tải AI credits..."
+                      : isLoggedIn
+                        ? `Còn ${aiCreditsRemaining} credits · mỗi tin ${CHAT_AI_COST} credit`
+                        : "Đăng nhập để dùng AI"}
                   </p>
                 </div>
               </div>

@@ -94,10 +94,10 @@ async function reserveAiUsage(
   metadata: Record<string, unknown>,
 ) {
   const { data, error } = await supabase.rpc("reserve_ai_usage", {
-    feature: "chat",
-    credits: CHAT_CREDIT_COST,
-    prompt_preview: promptPreview.slice(0, 500),
-    metadata,
+    _feature: "chat",
+    _credits: CHAT_CREDIT_COST,
+    _prompt_preview: promptPreview.slice(0, 500),
+    _metadata: metadata,
   });
 
   if (error) throw error;
@@ -131,9 +131,9 @@ async function finalizeAiUsage(
 ) {
   if (!usageLogId) return;
   const { error } = await supabase.rpc("finalize_ai_usage", {
-    usage_log_id: usageLogId,
-    status,
-    error_message: errorMessage,
+    _usage_log_id: usageLogId,
+    _status: status,
+    _error_message: errorMessage,
   });
   if (error) {
     console.error("finalize_ai_usage error:", {

@@ -116,7 +116,7 @@ export function AiCourseAdvisor({
 }: AiCourseAdvisorProps) {
   const { session, isLoggedIn } = useAuth();
   const { toast } = useToast();
-  const { aiCreditsRemaining, refetch } = useSubscription();
+  const { aiCreditsRemaining, isLoading: subscriptionLoading, refetch } = useSubscription();
   const [question, setQuestion] = useState(quickQuestions[0]);
   const [result, setResult] = useState<AdvisorResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -149,6 +149,14 @@ export function AiCourseAdvisor({
         title: "Vui lòng đăng nhập để dùng AI Advisor",
         description: "Free có 3 AI credits dùng thử mỗi tháng.",
         variant: "destructive",
+      });
+      return;
+    }
+
+    if (subscriptionLoading) {
+      toast({
+        title: "Đang tải AI credits",
+        description: "Vui lòng thử lại sau vài giây.",
       });
       return;
     }
@@ -234,7 +242,11 @@ export function AiCourseAdvisor({
                 </p>
               )}
               <p className="mt-1 text-xs text-muted-foreground">
-                {isLoggedIn ? `Bạn còn ${aiCreditsRemaining} AI credits.` : "Đăng nhập để dùng AI Advisor."}
+                {subscriptionLoading
+                  ? "Đang tải AI credits..."
+                  : isLoggedIn
+                    ? `Bạn còn ${aiCreditsRemaining} AI credits. Credits dùng chung cho EduBot, AI Search, Advisor, Compare và Roadmap.`
+                    : "Đăng nhập để dùng AI Advisor."}
               </p>
             </div>
           </div>
@@ -272,7 +284,7 @@ export function AiCourseAdvisor({
             <Button
               type="button"
               onClick={handleSubmit}
-              disabled={isSubmitting || !question.trim()}
+              disabled={isSubmitting || subscriptionLoading || !question.trim()}
               className="rounded-xl border-0 gradient-primary text-primary-foreground"
             >
               {isSubmitting ? (

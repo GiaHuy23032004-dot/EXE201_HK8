@@ -333,16 +333,16 @@ async function reserveAiUsage(
   metadata: Record<string, unknown>,
 ) {
   const primaryParams = {
-    feature: "advisor",
-    credits: ADVISOR_CREDIT_COST,
-    prompt_preview: promptPreview.slice(0, 500),
-    metadata,
-  };
-  const underscoreParams = {
     _feature: "advisor",
     _credits: ADVISOR_CREDIT_COST,
     _prompt_preview: promptPreview.slice(0, 500),
     _metadata: metadata,
+  };
+  const legacyParams = {
+    feature: "advisor",
+    credits: ADVISOR_CREDIT_COST,
+    prompt_preview: promptPreview.slice(0, 500),
+    metadata,
   };
   const prefixedParams = {
     p_feature: "advisor",
@@ -354,14 +354,14 @@ async function reserveAiUsage(
   let { data, error } = await supabase.rpc("reserve_ai_usage", primaryParams);
 
   if (error && isRpcSchemaLookupError(error)) {
-    console.error("reserve_ai_usage primary params failed; retrying underscore params", safeRpcError(error));
-    const retry = await supabase.rpc("reserve_ai_usage", underscoreParams);
+    console.error("reserve_ai_usage underscore params failed; retrying legacy params", safeRpcError(error));
+    const retry = await supabase.rpc("reserve_ai_usage", legacyParams);
     data = retry.data;
     error = retry.error;
   }
 
   if (error && isRpcSchemaLookupError(error)) {
-    console.error("reserve_ai_usage underscore params failed; retrying p_ params", safeRpcError(error));
+    console.error("reserve_ai_usage legacy params failed; retrying p_ params", safeRpcError(error));
     const retry = await supabase.rpc("reserve_ai_usage", prefixedParams);
     data = retry.data;
     error = retry.error;
@@ -398,14 +398,14 @@ async function finalizeAiUsage(
 ) {
   if (!usageLogId) return;
   const primaryParams = {
-    usage_log_id: usageLogId,
-    status,
-    error_message: errorMessage,
-  };
-  const underscoreParams = {
     _usage_log_id: usageLogId,
     _status: status,
     _error_message: errorMessage,
+  };
+  const legacyParams = {
+    usage_log_id: usageLogId,
+    status,
+    error_message: errorMessage,
   };
   const prefixedParams = {
     p_usage_log_id: usageLogId,
@@ -415,12 +415,12 @@ async function finalizeAiUsage(
 
   let { error } = await supabase.rpc("finalize_ai_usage", primaryParams);
   if (error && isRpcSchemaLookupError(error)) {
-    console.error("finalize_ai_usage primary params failed; retrying underscore params", safeRpcError(error));
-    error = (await supabase.rpc("finalize_ai_usage", underscoreParams)).error;
+    console.error("finalize_ai_usage underscore params failed; retrying legacy params", safeRpcError(error));
+    error = (await supabase.rpc("finalize_ai_usage", legacyParams)).error;
   }
 
   if (error && isRpcSchemaLookupError(error)) {
-    console.error("finalize_ai_usage underscore params failed; retrying p_ params", safeRpcError(error));
+    console.error("finalize_ai_usage legacy params failed; retrying p_ params", safeRpcError(error));
     error = (await supabase.rpc("finalize_ai_usage", prefixedParams)).error;
   }
 
