@@ -33,6 +33,7 @@ import MentorWallet from "./pages/mentor/MentorWallet";
 import MentorProfile from "./pages/mentor/MentorProfile";
 import MentorSettings from "./pages/mentor/MentorSettings";
 import MentorVerification from "./pages/mentor/MentorVerification";
+import MentorPromotions from "./pages/mentor/MentorPromotions";
 import MentorProfilePage from "./pages/MentorProfilePage";
 import CreateCoursePage from "./pages/CreateCoursePage";
 import AdminDashboard from "./pages/AdminDashboard";
@@ -125,6 +126,7 @@ const App = () => (
             <Route path="/mentor/schedule"  element={<MentorGuard><MentorSchedule /></MentorGuard>} />
             <Route path="/mentor/wallet"    element={<MentorGuard><MentorWallet /></MentorGuard>} />
             <Route path="/mentor/revenue"   element={<MentorGuard><MentorWallet /></MentorGuard>} />
+            <Route path="/mentor/promotions" element={<MentorGuard><MentorPromotions /></MentorGuard>} />
             <Route path="/mentor/students"  element={<MentorGuard><MentorStudents /></MentorGuard>} />
             <Route path="/mentor/profile"   element={<MentorGuard><MentorProfile /></MentorGuard>} />
             <Route path="/mentor/settings"  element={<MentorGuard><MentorSettings /></MentorGuard>} />

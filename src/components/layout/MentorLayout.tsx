@@ -14,6 +14,7 @@ import {
   X,
   ChevronRight,
   Mic2,
+  Megaphone,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -22,13 +23,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import logoImg from "@/assets/logo.png";
 
 const navItems = [
-  { label: "Tổng quan",         path: "/mentor/dashboard",  icon: LayoutDashboard },
-  { label: "Khóa học của tôi",  path: "/mentor/courses",    icon: BookOpen },
-  { label: "Lịch dạy",          path: "/mentor/schedule",   icon: Calendar },
-  { label: "Doanh thu & Ví",    path: "/mentor/wallet",     icon: Wallet },
-  { label: "Quản lý học viên",  path: "/mentor/students",   icon: Users },
-  { label: "Hồ sơ & xác minh",  path: "/mentor/profile",    icon: UserCheck },
-  { label: "Cài đặt",           path: "/mentor/settings",   icon: Settings },
+  { label: "Tổng quan",         path: "/mentor/dashboard",   icon: LayoutDashboard },
+  { label: "Khóa học của tôi",  path: "/mentor/courses",     icon: BookOpen },
+  { label: "Lịch dạy",          path: "/mentor/schedule",    icon: Calendar },
+  { label: "Doanh thu & Ví",    path: "/mentor/wallet",      icon: Wallet },
+  { label: "Quảng cáo",         path: "/mentor/promotions",  icon: Megaphone },
+  { label: "Quản lý học viên",  path: "/mentor/students",    icon: Users },
+  { label: "Hồ sơ & xác minh",  path: "/mentor/profile",     icon: UserCheck },
+  { label: "Cài đặt",           path: "/mentor/settings",    icon: Settings },
 ];
 
 interface MentorLayoutProps {

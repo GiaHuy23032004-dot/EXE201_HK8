@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { ArrowDownToLine, CreditCard, History, Wallet } from "lucide-react";
+import { useMemo, useState } from "react";
+import { ArrowDownToLine, CreditCard, History, PlusCircle, Wallet } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { MentorLayout } from "@/components/layout/MentorLayout";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { WalletHistoryTable } from "@/components/mentor/wallet/WalletHistoryTabl
 import { WalletOverview } from "@/components/mentor/wallet/WalletOverview";
 import { WithdrawalHistoryTable } from "@/components/mentor/wallet/WithdrawalHistoryTable";
 import { WithdrawalRequestPanel } from "@/components/mentor/wallet/WithdrawalRequestPanel";
+import { TopupWalletDialog } from "@/components/mentor/wallet/TopupWalletDialog";
 import { useMentorPayoutMethods } from "@/hooks/useMentorPayoutMethods";
 import { useMentorWallet } from "@/hooks/useMentorWallet";
 import { useMentorWalletHistory } from "@/hooks/useMentorWalletHistory";
@@ -20,6 +21,7 @@ export default function MentorWalletPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tabFromUrl = searchParams.get("tab") ?? "overview";
   const activeTab = VALID_TABS.has(tabFromUrl) ? tabFromUrl : "overview";
+  const [topupOpen, setTopupOpen] = useState(false);
 
   const walletQuery = useMentorWallet();
   const payoutMethodsQuery = useMentorPayoutMethods();
@@ -67,6 +69,14 @@ export default function MentorWalletPage() {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setTopupOpen(true)}
+              className="rounded-xl"
+            >
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Nạp tiền
+            </Button>
             <Button
               variant="outline"
               onClick={() => setActiveTab("payout-methods")}
@@ -157,6 +167,8 @@ export default function MentorWalletPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <TopupWalletDialog open={topupOpen} onClose={() => setTopupOpen(false)} />
     </MentorLayout>
   );
 }
