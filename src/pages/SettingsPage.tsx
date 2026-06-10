@@ -9,6 +9,68 @@ import { Switch } from "@/components/ui/switch";
 import { Bell, Lock, Globe, Moon, Shield, Trash2, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { useLanguage } from "@/contexts/LanguageContext";
+
+function LanguageSection() {
+  const { lang, setLang } = useLanguage();
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-muted-foreground">
+        Chọn ngôn ngữ hiển thị của ứng dụng
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={() => setLang("vi")}
+          className={`flex items-center gap-3 rounded-2xl border-2 p-4 text-left transition-all ${
+            lang === "vi"
+              ? "border-primary bg-primary/5"
+              : "border-border bg-muted/30 hover:bg-muted"
+          }`}
+        >
+          <span className="text-2xl">🇻🇳</span>
+          <div>
+            <p className={`font-semibold text-sm ${lang === "vi" ? "text-primary" : "text-foreground"}`}>
+              Tiếng Việt
+            </p>
+            <p className="text-xs text-muted-foreground">Vietnamese</p>
+          </div>
+          {lang === "vi" && (
+            <span className="ml-auto text-primary text-sm font-bold">✓</span>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setLang("en")}
+          className={`flex items-center gap-3 rounded-2xl border-2 p-4 text-left transition-all ${
+            lang === "en"
+              ? "border-primary bg-primary/5"
+              : "border-border bg-muted/30 hover:bg-muted"
+          }`}
+        >
+          <span className="text-2xl">🇬🇧</span>
+          <div>
+            <p className={`font-semibold text-sm ${lang === "en" ? "text-primary" : "text-foreground"}`}>
+              English
+            </p>
+            <p className="text-xs text-muted-foreground">Tiếng Anh</p>
+          </div>
+          {lang === "en" && (
+            <span className="ml-auto text-primary text-sm font-bold">✓</span>
+          )}
+        </button>
+      </div>
+      <p className="text-xs text-muted-foreground">
+        Ngôn ngữ hiện tại:{" "}
+        <span className="font-medium text-foreground">
+          {lang === "vi" ? "🇻🇳 Tiếng Việt" : "🇬🇧 English"}
+        </span>
+      </p>
+    </div>
+  );
+}
 
 export default function SettingsPage() {
   const { isLoggedIn, logout } = useAuth();
@@ -129,7 +191,7 @@ export default function SettingsPage() {
             <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold text-foreground">
               <Globe className="h-5 w-5 text-primary" /> Ngôn ngữ
             </h2>
-            <p className="text-sm text-muted-foreground">Hiện tại: <span className="font-medium text-foreground">Tiếng Việt</span></p>
+            <LanguageSection />
           </div>
 
           {/* Privacy */}

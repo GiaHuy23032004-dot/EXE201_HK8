@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-route
 import type { ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
+import { LanguageProvider } from "@/contexts/LanguageContext";
 import { AiChatAssistant } from "@/components/AiChatAssistant";
 import { AdminGuard } from "@/components/AdminGuard";
 import { MentorGuard } from "@/components/MentorGuard";
@@ -101,6 +102,7 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <AuthProvider>
+        <LanguageProvider>
         <Toaster />
         <Sonner />
         <BrowserRouter>
@@ -156,6 +158,7 @@ const App = () => (
           </Routes>
           <AppExtras />
         </BrowserRouter>
+        </LanguageProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

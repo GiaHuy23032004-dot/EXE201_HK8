@@ -32,32 +32,30 @@ import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/s
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
 import logoImg from "@/assets/logo.png";
+import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { useLanguage } from "@/contexts/LanguageContext";
 
 type AdminLayoutProps = {
   children: ReactNode;
 };
 
 const adminNavItems = [
-  { label: "Dashboard", path: "/admin/dashboard", icon: LayoutDashboard, matches: ["/admin/dashboard"] },
-  { label: "Users", path: "/admin/users", icon: Users, matches: ["/admin/users"] },
-  {
-    label: "Mentor Verification",
-    path: "/admin/mentor-verifications",
-    icon: BadgeCheck,
-    matches: ["/admin/mentors", "/admin/mentor-verifications"],
-  },
-  { label: "Courses", path: "/admin/courses", icon: BookOpen, matches: ["/admin/courses"] },
-  { label: "Reports", path: "/admin/reports", icon: Flag, matches: ["/admin/reports"] },
-  { label: "Promotions", path: "/admin/promotions", icon: Megaphone, matches: ["/admin/promotions"] },
-  { label: "Withdrawals", path: "/admin/withdrawals", icon: Wallet, matches: ["/admin/withdrawals"] },
-  { label: "Ledger", path: "/admin/ledger", icon: BookText, matches: ["/admin/ledger"] },
-  { label: "Gói VET Plus", path: "/admin/subscriptions", icon: CreditCard, matches: ["/admin/subscriptions"] },
-  { label: "Settings", path: "/admin/settings", icon: Settings, matches: ["/admin/settings"] },
+  { labelKey: "admin.dashboard",          path: "/admin/dashboard",            icon: LayoutDashboard, matches: ["/admin/dashboard"] },
+  { labelKey: "admin.users",              path: "/admin/users",                icon: Users,           matches: ["/admin/users"] },
+  { labelKey: "admin.mentor_verification",path: "/admin/mentor-verifications", icon: BadgeCheck,      matches: ["/admin/mentors", "/admin/mentor-verifications"] },
+  { labelKey: "admin.courses",            path: "/admin/courses",              icon: BookOpen,        matches: ["/admin/courses"] },
+  { labelKey: "admin.reports",            path: "/admin/reports",              icon: Flag,            matches: ["/admin/reports"] },
+  { labelKey: "admin.promotions",         path: "/admin/promotions",           icon: Megaphone,       matches: ["/admin/promotions"] },
+  { labelKey: "admin.withdrawals",        path: "/admin/withdrawals",          icon: Wallet,          matches: ["/admin/withdrawals"] },
+  { labelKey: "admin.ledger",             path: "/admin/ledger",               icon: BookText,        matches: ["/admin/ledger"] },
+  { labelKey: "admin.subscriptions",      path: "/admin/subscriptions",        icon: CreditCard,      matches: ["/admin/subscriptions"] },
+  { labelKey: "admin.settings",           path: "/admin/settings",             icon: Settings,        matches: ["/admin/settings"] },
 ];
 
 function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const location = useLocation();
   const { user, session } = useAuth();
+  const { t } = useLanguage();
   const email = user?.email || session?.user?.email || "";
   const displayName = user?.name || email || "Admin";
   const initials = displayName
@@ -95,7 +93,7 @@ function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
               )}
             >
               <Icon className="h-4 w-4" />
-              <span className="truncate">{item.label}</span>
+              <span className="truncate">{t(item.labelKey)}</span>
             </Link>
           );
         })}
@@ -122,6 +120,7 @@ function AdminSidebar({ onNavigate }: { onNavigate?: () => void }) {
 export function AdminLayout({ children }: AdminLayoutProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, session, logout } = useAuth();
+  const { t } = useLanguage();
   const navigate = useNavigate();
 
   const email = user?.email || session?.user?.email || "";
@@ -171,6 +170,7 @@ export function AdminLayout({ children }: AdminLayoutProps) {
           </div>
 
           <div className="flex items-center gap-2">
+            <LanguageSwitcher />
             <Button variant="ghost" size="icon" className="text-muted-foreground">
               <Bell className="h-5 w-5" />
             </Button>
@@ -197,16 +197,16 @@ export function AdminLayout({ children }: AdminLayoutProps) {
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => navigate("/")}>
                   <ExternalLink className="mr-2 h-4 w-4" />
-                  View Marketplace
+                  {t("admin.view_marketplace")}
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => navigate("/admin/settings")}>
                   <Settings className="mr-2 h-4 w-4" />
-                  Settings
+                  {t("admin.settings")}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
                   <LogOut className="mr-2 h-4 w-4" />
-                  Logout
+                  {t("admin.logout")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
