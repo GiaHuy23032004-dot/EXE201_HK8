@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Bot, ExternalLink, Loader2, MapPin, MessageCircle, Send, Sparkles, Star, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, matchPath, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
@@ -284,6 +284,7 @@ function renderMessageContent(content: string) {
 
 export function AiChatAssistant() {
   const { session, isLoggedIn } = useAuth();
+  const location = useLocation();
   const {
     aiCreditsRemaining,
     isLoading: subscriptionLoading,
@@ -304,6 +305,9 @@ export function AiChatAssistant() {
   const dragStateRef = useRef<DragState | null>(null);
 
   const panelPosition = useMemo(() => clampPosition(widgetPosition, getPanelSize()), [widgetPosition]);
+  const courseRouteMatch = matchPath("/course/:id", location.pathname);
+  const currentCourseId = courseRouteMatch?.params.id ?? null;
+  const pageContext = currentCourseId ? "course_detail" : null;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -492,6 +496,8 @@ export function AiChatAssistant() {
         body: JSON.stringify({
           messages: newMessages,
           conversation_id: conversationId,
+          page_context: pageContext,
+          course_id: currentCourseId,
         }),
       });
 

@@ -94,6 +94,31 @@ type CourseRecommendationContext = {
   systemContext: string;
 };
 
+type CourseDetailSchedule = {
+  day_of_week: string | number | null;
+  start_time: string | null;
+  end_time: string | null;
+};
+
+type CourseDetailContext = {
+  id: string;
+  title: string;
+  description: string | null;
+  category: string | null;
+  format: CourseFormat | string | null;
+  price: number | null;
+  location: string | null;
+  rating: number | null;
+  review_count: number | null;
+  students_count: number | null;
+  mentor_id: string | null;
+  mentor_name: string | null;
+  mentor_headline: string | null;
+  mentor_bio: string | null;
+  schedules: CourseDetailSchedule[];
+  systemContext: string;
+};
+
 const COURSE_DETAIL_ROUTE_PREFIX = "/course";
 const CATEGORY_LABELS: Record<CourseCategorySlug, string> = {
   "mind-sports": "Cờ & Tư duy chiến thuật",
@@ -514,6 +539,224 @@ async function fetchApprovedCourses(
   });
 }
 
+function isCourseDetailQuestion(message: string) {
+  const normalized = normalizeText(message);
+  if (!normalized) return false;
+
+  const asksForOtherCourses = containsAny(normalized, [
+    "tim khoa khac",
+    "goi y khoa khac",
+    "khoa nao khac",
+    "lop nao khac",
+    "mentor khac",
+    "tim mentor",
+    "tim lop",
+    "tim khoa",
+    "so sanh",
+  ]);
+  if (asksForOtherCourses) return false;
+
+  return containsAny(normalized, [
+    "khoa nay",
+    "lop nay",
+    "course nay",
+    "khoa hoc nay",
+    "co gi",
+    "hoc gi",
+    "hoc duoc gi",
+    "se hoc duoc gi",
+    "toi se hoc duoc gi",
+    "noi dung khoa hoc",
+    "noi dung",
+    "gom nhung gi",
+    "phu hop voi ai",
+    "danh cho ai",
+    "dau ra",
+    "ket qua",
+    "mo ta",
+    "chi tiet",
+    "can chuan bi gi",
+  ]);
+}
+
+function normalizeCourseId(value: unknown) {
+  const courseId = typeof value === "string" ? value.trim() : "";
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(courseId)
+    ? courseId
+    : null;
+}
+
+function formatCourseFormat(format: CourseDetailContext["format"]) {
+  if (format === "online") return "Online";
+  if (format === "offline") return "Offline";
+  return "Chưa cập nhật";
+}
+
+function formatScheduleLabel(schedule: CourseDetailSchedule) {
+  const day = schedule.day_of_week ?? "Chưa rõ ngày";
+  const time =
+    schedule.start_time && schedule.end_time
+      ? `${schedule.start_time} - ${schedule.end_time}`
+      : "Chưa rõ giờ";
+  return `${day}: ${time}`;
+}
+
+function serializeCourseDetailForPrompt(course: Omit<CourseDetailContext, "systemContext">) {
+  const schedules = course.schedules.length
+    ? course.schedules.map((schedule) => `- ${formatScheduleLabel(schedule)}`).join("\n")
+    : "- Chưa có lịch học cố định trong dữ liệu.";
+
+  return `COURSE_DETAIL_CONTEXT
+Người dùng đang ở trang chi tiết khóa học hiện tại trên VET.
+
+Dữ liệu khóa học hiện tại từ Supabase:
+- id: ${course.id}
+- title: ${course.title}
+- description: ${course.description ?? "Chưa có mô tả"}
+- category: ${course.category ?? "Chưa cập nhật"}
+- format: ${formatCourseFormat(course.format)}
+- price: ${formatPrice(course.price)}
+- location: ${course.location ?? "Không áp dụng hoặc chưa cập nhật"}
+- rating: ${course.rating ?? "Chưa có"} (${course.review_count ?? 0} đánh giá)
+- students_count: ${course.students_count ?? 0}
+- mentor_id: ${course.mentor_id ?? "Không rõ"}
+- mentor_name: ${course.mentor_name ?? "Mentor VET"}
+- mentor_headline: ${course.mentor_headline ?? "Chưa cập nhật"}
+- mentor_bio: ${course.mentor_bio ?? "Chưa cập nhật"}
+- detail_link: ${courseLink(course.id)}
+
+Lịch học cố định:
+${schedules}
+
+Quy tắc bắt buộc:
+- Trả lời câu hỏi của người dùng dựa trên COURSE_DETAIL_CONTEXT.
+- Không bịa syllabus, đầu ra, chứng chỉ, cam kết việc làm, lịch học, giá, mentor hoặc thông tin không có trong dữ liệu.
+- Nếu learning outcomes/syllabus không có field riêng, hãy diễn giải từ description và ghi "Theo mô tả hiện có".
+- Nếu thông tin còn thiếu, nói rõ thông tin đó chưa được mentor cập nhật.
+- Chỉ gợi ý tìm khóa khác nếu người dùng thật sự hỏi tìm khóa khác.`;
+}
+
+async function fetchCourseDetailContext(
+  serviceClient: ReturnType<typeof createClient> | null,
+  courseId: string | null,
+) {
+  if (!serviceClient || !courseId) return null;
+
+  const runCourseQuery = (includeHiddenColumn: boolean) => {
+    let query = serviceClient
+      .from("courses")
+      .select(
+        includeHiddenColumn
+          ? "id,title,description,category,format,price,location,rating,review_count,students_count,mentor_id,status,is_hidden"
+          : "id,title,description,category,format,price,location,rating,review_count,students_count,mentor_id,status",
+      )
+      .eq("id", courseId)
+      .eq("status", "approved");
+
+    if (includeHiddenColumn) query = query.eq("is_hidden", false);
+    return query.limit(1).maybeSingle();
+  };
+
+  let { data, error } = await runCourseQuery(true);
+  const hiddenColumnErrorText = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
+  const hiddenColumnUnavailable =
+    error &&
+    (error.code === "PGRST204" || error.code === "42703" || hiddenColumnErrorText.includes("is_hidden"));
+
+  if (hiddenColumnUnavailable) {
+    const fallback = await runCourseQuery(false);
+    data = fallback.data;
+    error = fallback.error;
+  }
+
+  if (error) {
+    console.error("ai-chat course detail retrieval error:", {
+      message: error.message,
+      code: error.code,
+      details: error.details,
+    });
+    return null;
+  }
+
+  if (!data) return null;
+
+  const row = data as Record<string, unknown>;
+  const mentorId = typeof row.mentor_id === "string" ? row.mentor_id : null;
+  let mentor: { name: string | null; mentor_headline: string | null; bio: string | null } | null = null;
+
+  if (mentorId) {
+    const { data: mentorData, error: mentorError } = await serviceClient
+      .from("profiles")
+      .select("user_id,name,mentor_headline,bio")
+      .eq("user_id", mentorId)
+      .maybeSingle();
+
+    if (mentorError) {
+      console.error("ai-chat course detail mentor retrieval error:", {
+        message: mentorError.message,
+        code: mentorError.code,
+      });
+    } else if (mentorData) {
+      const mentorRow = mentorData as Record<string, unknown>;
+      mentor = {
+        name: typeof mentorRow.name === "string" ? mentorRow.name : null,
+        mentor_headline: typeof mentorRow.mentor_headline === "string" ? mentorRow.mentor_headline : null,
+        bio: typeof mentorRow.bio === "string" ? mentorRow.bio : null,
+      };
+    }
+  }
+
+  const { data: scheduleData, error: scheduleError } = await serviceClient
+    .from("course_schedules")
+    .select("day_of_week,start_time,end_time")
+    .eq("course_id", courseId)
+    .order("day_of_week", { ascending: true });
+
+  if (scheduleError) {
+    console.error("ai-chat course detail schedule retrieval error:", {
+      message: scheduleError.message,
+      code: scheduleError.code,
+    });
+  }
+
+  const schedules = Array.isArray(scheduleData)
+    ? scheduleData.map((schedule) => {
+        const scheduleRow = schedule as Record<string, unknown>;
+        return {
+          day_of_week:
+            typeof scheduleRow.day_of_week === "string" || typeof scheduleRow.day_of_week === "number"
+              ? scheduleRow.day_of_week
+              : null,
+          start_time: typeof scheduleRow.start_time === "string" ? scheduleRow.start_time : null,
+          end_time: typeof scheduleRow.end_time === "string" ? scheduleRow.end_time : null,
+        } satisfies CourseDetailSchedule;
+      })
+    : [];
+
+  const course = {
+    id: String(row.id),
+    title: String(row.title ?? ""),
+    description: typeof row.description === "string" ? row.description : null,
+    category: typeof row.category === "string" ? row.category : null,
+    format: typeof row.format === "string" ? row.format : null,
+    price: Number.isFinite(Number(row.price)) ? Number(row.price) : null,
+    location: typeof row.location === "string" ? row.location : null,
+    rating: Number.isFinite(Number(row.rating)) ? Number(row.rating) : null,
+    review_count: Number.isFinite(Number(row.review_count)) ? Number(row.review_count) : null,
+    students_count: Number.isFinite(Number(row.students_count)) ? Number(row.students_count) : null,
+    mentor_id: mentorId,
+    mentor_name: mentor?.name ?? "Mentor VET",
+    mentor_headline: mentor?.mentor_headline ?? null,
+    mentor_bio: mentor?.bio ?? null,
+    schedules,
+  };
+
+  return {
+    ...course,
+    systemContext: serializeCourseDetailForPrompt(course),
+  } satisfies CourseDetailContext;
+}
+
 function scoreCourse(course: CourseRecommendation, intent: DetectedCourseIntent, mode: "exact" | "similar") {
   const haystack = normalizeText([
     course.title,
@@ -906,6 +1149,12 @@ Khi người dùng hỏi gợi ý khóa học, mentor, lớp học, học online
 - Không chỉ bảo người dùng tự đi tìm kiếm/lọc thủ công nếu context đã có khóa học.
 - Tuyệt đối không bịa tên khóa học, mentor, giá, địa điểm, link hoặc tình trạng còn chỗ.
 
+Khi có COURSE_DETAIL_CONTEXT:
+- Người dùng đang ở trang chi tiết một khóa học cụ thể; hãy ưu tiên trả lời về khóa học đó thay vì search chung.
+- Trả lời bằng các mục: Tóm tắt khóa học, Bạn sẽ học được gì, Hình thức học/giá/lịch học, Khóa này phù hợp với ai, Điều nên hỏi mentor thêm.
+- Chỉ dùng dữ liệu có trong COURSE_DETAIL_CONTEXT. Nếu thiếu syllabus hoặc learning outcomes, hãy ghi "Theo mô tả hiện có" trước khi diễn giải từ description.
+- Không bịa cam kết đầu ra, chứng chỉ, việc làm, số buổi học hoặc lịch học.
+
 Phong cách: thân thiện, ngắn gọn, dùng tiếng Việt. Giữ câu trả lời dưới 150 từ.`;
 
 serve(async (req) => {
@@ -923,6 +1172,10 @@ serve(async (req) => {
         : null;
     const promptPreview = sanitizeChatContent(getPromptPreview(safeMessages), 1000);
     const courseIntent = detectCourseIntent(promptPreview);
+    const pageContext = body?.page_context === "course_detail" ? "course_detail" : null;
+    const currentCourseId = pageContext === "course_detail" ? normalizeCourseId(body?.course_id) : null;
+    const courseDetailIntent =
+      pageContext === "course_detail" && Boolean(currentCourseId) && isCourseDetailQuestion(promptPreview);
 
     const { error: authError, supabase, userId } = await getAuthedSupabase(req);
     if (authError || !supabase || !userId) {
@@ -936,6 +1189,10 @@ serve(async (req) => {
       messageCount: safeMessages.length,
       provider: "gemini",
       conversation_id: requestedConversationId,
+      page_context: pageContext,
+      course_id: currentCourseId,
+      task: courseDetailIntent ? "course_detail_chat" : "chat",
+      course_detail_intent: courseDetailIntent,
       course_recommendation_intent: courseIntent.shouldRetrieve,
       course_category: courseIntent.category,
       course_format: courseIntent.format,
@@ -958,23 +1215,46 @@ serve(async (req) => {
       metadata: {
         feature: "chat",
         usage_log_id: usageLogId,
+        page_context: pageContext,
+        course_id: currentCourseId,
+        course_detail_intent: courseDetailIntent,
         course_recommendation_intent: courseIntent.shouldRetrieve,
       },
     });
 
-    const courseContext = await buildCourseRecommendationContext(serviceClient ?? supabase, courseIntent);
+    const courseDetailContext = courseDetailIntent
+      ? await fetchCourseDetailContext(serviceClient ?? supabase, currentCourseId)
+      : null;
+    const courseContext = courseDetailIntent
+      ? null
+      : await buildCourseRecommendationContext(serviceClient ?? supabase, courseIntent);
     const aiMessages: Array<{ role: "system" | "user" | "assistant"; content: string }> = safeMessages.map((message) => ({
       role: message.role === "assistant" ? "assistant" : "user",
       content: String(message.content ?? ""),
     }));
-    if (courseContext?.systemContext) {
+    if (courseDetailContext?.systemContext) {
+      aiMessages.unshift({ role: "system", content: courseDetailContext.systemContext });
+    } else if (courseContext?.systemContext) {
       aiMessages.unshift({ role: "system", content: courseContext.systemContext });
     }
 
     let aiResult: CallAIResult | null = null;
     let assistantText: string;
+    const task = courseDetailIntent ? "course_detail_chat" : "chat";
 
-    if (courseContext) {
+    if (courseDetailIntent && !courseDetailContext) {
+      assistantText =
+        "Hiện mình chưa lấy được thông tin chi tiết khóa học này. Bạn có thể thử lại hoặc xem phần mô tả khóa học bên dưới.";
+    } else if (courseDetailContext) {
+      aiResult = await callAI({
+        task: "chat",
+        modelTier: "fast",
+        systemPrompt,
+        messages: aiMessages,
+        temperature: 0.45,
+      });
+      assistantText = aiResult.text;
+    } else if (courseContext) {
       assistantText = buildDeterministicCourseAnswer(courseContext);
     } else {
       aiResult = await callAI({
@@ -987,7 +1267,7 @@ serve(async (req) => {
       assistantText = aiResult.text;
     }
 
-    const recommendations = buildPublicCourseRecommendations(courseContext);
+    const recommendations = courseDetailIntent ? [] : buildPublicCourseRecommendations(courseContext);
 
     await finalizeAiUsage(supabase, usageLogId, "success", null);
 
@@ -1005,6 +1285,12 @@ serve(async (req) => {
         input_tokens: aiResult?.usage?.inputTokens ?? null,
         output_tokens: aiResult?.usage?.outputTokens ?? null,
         total_tokens: aiResult?.usage?.totalTokens ?? null,
+        page_context: pageContext,
+        course_id: currentCourseId,
+        task,
+        course_detail_intent: courseDetailIntent,
+        course_detail_found: courseDetailIntent ? Boolean(courseDetailContext) : null,
+        course_detail_title: courseDetailContext?.title ?? null,
         course_recommendation_intent: courseIntent.shouldRetrieve,
         exact_course_count: courseContext?.exactCourses.length ?? 0,
         similar_course_count: courseContext?.similarCourses.length ?? 0,
@@ -1013,10 +1299,15 @@ serve(async (req) => {
     });
     await touchChatConversation(serviceClient, conversationId, promptPreview);
 
-    await updateAiUsageMetadata(usageLogId, aiResult, "chat", {
+    await updateAiUsageMetadata(usageLogId, aiResult, task, {
       conversation_id: conversationId,
       user_message_id: userMessageId,
       assistant_message_id: assistantMessageId,
+      page_context: pageContext,
+      course_id: currentCourseId,
+      course_detail_intent: courseDetailIntent,
+      course_detail_found: courseDetailIntent ? Boolean(courseDetailContext) : null,
+      course_detail_title: courseDetailContext?.title ?? null,
       course_recommendation_intent: courseIntent.shouldRetrieve,
       course_category: courseIntent.category,
       course_format: courseIntent.format,
