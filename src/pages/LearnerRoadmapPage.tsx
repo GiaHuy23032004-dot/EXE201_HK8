@@ -35,6 +35,8 @@ type RoadmapResult = {
     week: number;
     focus: string;
     tasks: string[];
+    practice_assignment?: string;
+    milestone?: string;
     suggested_course_ids: string[];
   }>;
   recommended_courses: Array<{
@@ -314,7 +316,7 @@ export default function LearnerRoadmapPage() {
                     </div>
                     {result.fallback && (
                       <Badge variant="outline" className="rounded-full border-amber-200 bg-amber-50 text-amber-700">
-                        Lộ trình dự phòng
+                        Lộ trình tham khảo
                       </Badge>
                     )}
                   </CardContent>
@@ -333,6 +335,22 @@ export default function LearnerRoadmapPage() {
                         <ul className="space-y-1 text-sm text-muted-foreground">
                           {week.tasks.map((task) => <li key={task}>• {task}</li>)}
                         </ul>
+                        {(week.practice_assignment || week.milestone) && (
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                            {week.practice_assignment && (
+                              <div className="rounded-2xl border bg-primary/5 p-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-primary">Bài thực hành</p>
+                                <p className="mt-1 text-sm leading-relaxed text-foreground">{week.practice_assignment}</p>
+                              </div>
+                            )}
+                            {week.milestone && (
+                              <div className="rounded-2xl border bg-emerald-50/70 p-3">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">Milestone</p>
+                                <p className="mt-1 text-sm leading-relaxed text-foreground">{week.milestone}</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
                         {week.suggested_course_ids.length > 0 && (
                           <div className="mt-4 flex flex-wrap gap-2">
                             {week.suggested_course_ids.map((courseId) => {
@@ -353,7 +371,7 @@ export default function LearnerRoadmapPage() {
                   ))}
                 </div>
 
-                {result.roadmap.recommended_courses.length > 0 && (
+                {result.roadmap.recommended_courses.length > 0 ? (
                   <Card className="rounded-2xl shadow-card">
                     <CardHeader>
                       <CardTitle className="text-lg">Khóa học gợi ý</CardTitle>
@@ -384,6 +402,15 @@ export default function LearnerRoadmapPage() {
                           </Link>
                         );
                       })}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card className="rounded-2xl border-dashed shadow-sm">
+                    <CardContent className="p-5">
+                      <p className="font-semibold text-foreground">Chưa có khóa học phù hợp với ngân sách/bộ lọc hiện tại.</p>
+                      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                        Bạn vẫn có thể bắt đầu bằng lộ trình theo tuần ở trên, hoặc thử tăng ngân sách, đổi hình thức học, hay chọn lại danh mục để nhận gợi ý khóa học phù hợp hơn.
+                      </p>
                     </CardContent>
                   </Card>
                 )}

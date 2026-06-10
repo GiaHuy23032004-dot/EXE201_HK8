@@ -5,6 +5,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
   ArrowLeft,
+  ChevronDown,
   Crosshair,
   Loader2,
   LocateFixed,
@@ -16,7 +17,14 @@ import {
 import { MainLayout } from "@/components/layout/MainLayout";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { type Course, useCourses } from "@/hooks/use-courses";
 import {
@@ -29,15 +37,30 @@ import {
   buildReverseGeocodeUrl,
 } from "@/config/map";
 import { getDistanceKm } from "@/lib/distance";
-import { getCourseCategoryLabel } from "@/constants/courseCategories";
+import {
+  type CourseCategorySlug,
+  getCourseCategoryLabel,
+  getCourseCategoryShortLabel,
+  normalizeCourseCategory,
+} from "@/constants/courseCategories";
+import { detectCourseIntent, normalizeIntentText } from "@/utils/courseIntent";
 
 const FOCUS_ZOOM = 15;
 const RADIUS_FILTERS = [
   { label: "Tất cả", value: "all" },
-  { label: "Trong 3km", value: "3" },
-  { label: "Trong 5km", value: "5" },
-  { label: "Trong 10km", value: "10" },
+  { label: "3km", value: "3" },
+  { label: "5km", value: "5" },
+  { label: "10km", value: "10" },
 ] as const;
+
+const MAP_CATEGORY_FILTERS: Array<{ label: string; value: "all" | CourseCategorySlug }> = [
+  { label: "Tất cả", value: "all" },
+  { label: "Cờ", value: "mind-sports" },
+  { label: "Tiếng Anh", value: "career-english" },
+  { label: "Thể thao", value: "modern-sports" },
+  { label: "Pha chế", value: "barista-beverage" },
+  { label: "MC / Nội dung", value: "content-speaking" },
+];
 
 type RadiusFilter = (typeof RADIUS_FILTERS)[number]["value"];
 type LocationSource = "current" | "address";
@@ -106,8 +129,24 @@ function normalize(value?: string | null) {
 
 function courseMatchesSearch(course: Course, term: string) {
   if (!term) return true;
-  const haystack = [course.title, course.location, course.category, getCourseCategoryLabel(course.category), course.mentor?.name].map(normalize).join(" ");
+  const haystack = [course.title, course.description, course.location, course.category, getCourseCategoryLabel(course.category), course.mentor?.name].map(normalize).join(" ");
   return haystack.includes(normalize(term));
+}
+
+function courseMatchesIntent(course: Course, terms: string[]) {
+  if (!terms.length) return true;
+  const haystack = [
+    course.title,
+    course.description,
+    course.category,
+    getCourseCategoryLabel(course.category),
+    getCourseCategoryShortLabel(course.category),
+    course.mentor?.name,
+  ]
+    .map(normalizeIntentText)
+    .join(" ");
+
+  return terms.some((term) => term && haystack.includes(term));
 }
 
 function formatPrice(value: number) {
@@ -200,6 +239,8 @@ export default function MapPage() {
   const [searchParams] = useSearchParams();
   const initialLocation = searchParams.get("location") ?? "";
   const { data: allCourses = [], isLoading, isError, error } = useCourses({ format: "offline" });
+  const [intentInput, setIntentInput] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<"all" | CourseCategorySlug>("all");
   const [searchInput, setSearchInput] = useState(initialLocation);
   const [fallbackSearchTerm, setFallbackSearchTerm] = useState("");
   const [radius, setRadius] = useState<RadiusFilter>("all");
@@ -217,6 +258,12 @@ export default function MapPage() {
   const isFallbackTextSearch = Boolean(fallbackSearchTerm.trim());
   const activeOrigin = isFallbackTextSearch ? null : activeSearchLocation ?? userLocation;
   const activeLocationSource = activeOrigin?.source ?? null;
+  const detectedIntent = useMemo(() => detectCourseIntent(intentInput), [intentInput]);
+  const selectedCategorySlug = selectedCategory === "all" ? null : selectedCategory;
+  const intentTerms = useMemo(
+    () => detectedIntent.expandedTerms.map(normalizeIntentText).filter(Boolean),
+    [detectedIntent.expandedTerms],
+  );
 
   useEffect(() => {
     if (initialSearchHandledRef.current || !initialLocation.trim()) return;
@@ -224,6 +271,12 @@ export default function MapPage() {
     void geocodeText(initialLocation);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialLocation]);
+
+  useEffect(() => {
+    if (detectedIntent.category) {
+      setSelectedCategory(detectedIntent.category);
+    }
+  }, [detectedIntent.category]);
 
   useEffect(() => {
     const term = searchInput.trim();
@@ -274,8 +327,10 @@ export default function MapPage() {
 
     return coursesWithDistance
       .filter((course) => {
-        if (fallbackSearchTerm) return courseMatchesSearch(course, fallbackSearchTerm);
-        if (activeOrigin) return hasCoordinates(course);
+        if (selectedCategorySlug && normalizeCourseCategory(course.category) !== selectedCategorySlug) return false;
+        if (!courseMatchesIntent(course, intentTerms)) return false;
+        if (fallbackSearchTerm && !courseMatchesSearch(course, fallbackSearchTerm)) return false;
+        if (activeOrigin && radius !== "all") return hasCoordinates(course);
         return true;
       })
       .filter((course) => {
@@ -288,7 +343,7 @@ export default function MapPage() {
         const bDistance = b.distanceKm ?? Number.POSITIVE_INFINITY;
         return aDistance - bDistance;
       });
-  }, [activeOrigin, coursesWithDistance, fallbackSearchTerm, radius]);
+  }, [activeOrigin, coursesWithDistance, fallbackSearchTerm, intentTerms, radius, selectedCategorySlug]);
 
   const markerCourses = useMemo(() => filteredCourses.filter(hasCoordinates), [filteredCourses]);
   const selectedCourse = filteredCourses.find((course) => course.id === selectedCourseId) ?? null;
@@ -430,6 +485,18 @@ export default function MapPage() {
     setSelectedCourseId(null);
   };
 
+  const clearAllFilters = () => {
+    setIntentInput("");
+    setSelectedCategory("all");
+    setSearchInput("");
+    setFallbackSearchTerm("");
+    setAutocompleteOptions([]);
+    setActiveSearchLocation(null);
+    setUserLocation(null);
+    setRadius("all");
+    setSelectedCourseId(null);
+  };
+
   const activeStatusText =
     activeLocationSource === "current"
       ? activeOrigin?.label && activeOrigin.label !== "Vị trí hiện tại"
@@ -441,15 +508,47 @@ export default function MapPage() {
           ? `Đang tìm theo nội dung địa chỉ: ${fallbackSearchTerm}`
           : "Hiển thị các lớp offline trên bản đồ";
 
-  const distancePrefix = activeLocationSource === "address" ? "Cách khu vực tìm kiếm" : "Cách bạn";
   const showUserMarker = activeLocationSource === "current" && userLocation;
   const showAddressMarker = activeLocationSource === "address" && activeOrigin;
+  const selectedCategoryLabel =
+    MAP_CATEGORY_FILTERS.find((item) => item.value === selectedCategory)?.label ?? "Tất cả";
+  const locationBadgeLabel =
+    activeOrigin?.label.split(",")[0]?.trim() || fallbackSearchTerm.trim().split(",")[0]?.trim() || "";
+  const intentBadgeLabel = (detectedIntent.keyword || intentInput.trim()).trim();
+  const hasActiveFilters = Boolean(
+    intentInput.trim() ||
+      selectedCategory !== "all" ||
+      activeOrigin ||
+      fallbackSearchTerm.trim() ||
+      searchInput.trim() ||
+      radius !== "all",
+  );
+  const activeFilterBadges = [
+    intentBadgeLabel
+      ? intentBadgeLabel.length > 24
+        ? `${intentBadgeLabel.slice(0, 24)}...`
+        : intentBadgeLabel
+      : null,
+    selectedCategory !== "all" ? selectedCategoryLabel : null,
+    radius !== "all" ? `${radius}km` : null,
+    locationBadgeLabel
+      ? locationBadgeLabel.length > 22
+        ? `${locationBadgeLabel.slice(0, 22)}...`
+        : locationBadgeLabel
+      : null,
+  ].filter(Boolean) as string[];
+  const resultSummaryText =
+    filteredCourses.length === 0
+      ? "Không có lớp phù hợp"
+      : `${filteredCourses.length} lớp${selectedCategory !== "all" ? ` ${selectedCategoryLabel}` : ""}${
+          radius !== "all" ? ` trong ${radius}km` : ""
+        }`;
 
   return (
     <MainLayout hideFooter>
-      <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden bg-background lg:flex-row">
-        <aside className="flex h-[48vh] min-h-0 w-full flex-col border-b bg-card lg:h-full lg:w-[430px] lg:border-b-0 lg:border-r">
-          <div className="space-y-4 border-b p-4">
+      <div className="flex min-h-[calc(100vh-4rem)] flex-col overflow-hidden bg-background lg:h-[calc(100vh-4rem)] lg:flex-row">
+        <aside className="order-2 flex min-h-0 w-full flex-col border-t bg-card lg:order-1 lg:h-full lg:w-[360px] xl:w-[380px] lg:border-r lg:border-t-0">
+          <div className="shrink-0 border-b p-3.5">
             <div className="flex items-center gap-2">
               <Link to="/search">
                 <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
@@ -457,7 +556,7 @@ export default function MapPage() {
                 </Button>
               </Link>
               <div className="min-w-0">
-                <h1 className="font-semibold text-foreground">Lớp học gần bạn</h1>
+                <h1 className="text-xl font-bold text-foreground">Lớp học gần bạn</h1>
                 <p className="text-xs text-muted-foreground">
                   Khám phá khóa học offline quanh khu vực bạn quan tâm.
                 </p>
@@ -473,10 +572,78 @@ export default function MapPage() {
                 </div>
               </div>
             )}
+          </div>
 
-            <form onSubmit={submitSearch} className="space-y-2">
+          <div className="shrink-0 border-b bg-muted/20 p-2.5">
+            <div className="space-y-2 rounded-2xl border bg-card p-3 shadow-sm">
+              <div className="space-y-1">
+              <Label htmlFor="map-intent-search" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Bạn muốn học gì?
+              </Label>
+              <div className="flex h-10 items-center gap-2 rounded-xl border bg-background px-3">
+                <Search className="h-4 w-4 text-muted-foreground" />
+                <Input
+                  id="map-intent-search"
+                  value={intentInput}
+                  onChange={(event) => setIntentInput(event.target.value)}
+                  placeholder="VD: học làm MC, tiếng Anh giao tiếp..."
+                  className="h-auto border-0 bg-transparent p-0 text-sm shadow-none focus-visible:ring-0"
+                />
+                {intentInput && (
+                  <button
+                    type="button"
+                    onClick={() => setIntentInput("")}
+                    className="rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    aria-label="Xóa nhu cầu học"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+              {detectedIntent.category && (
+                <p className="text-[12px] text-muted-foreground">
+                  Đã nhận diện:{" "}
+                  <span className="font-medium text-primary">{getCourseCategoryLabel(detectedIntent.category)}</span>
+                  {detectedIntent.keyword ? ` · từ khóa "${detectedIntent.keyword}"` : ""}
+                </p>
+              )}
+            </div>
+
+              <div className="space-y-1">
+                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Danh mục</p>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 w-full justify-between rounded-xl bg-background px-3 text-sm font-medium"
+                    >
+                      <span className={selectedCategory === "all" ? "text-muted-foreground" : "text-foreground"}>
+                        {selectedCategory === "all" ? "Tất cả danh mục" : selectedCategoryLabel}
+                      </span>
+                      <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="w-64">
+                    {MAP_CATEGORY_FILTERS.map((item) => (
+                      <DropdownMenuItem
+                        key={item.value}
+                        onClick={() => setSelectedCategory(item.value)}
+                        className={selectedCategory === item.value ? "bg-primary/10 text-primary" : ""}
+                      >
+                        {item.label}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <form onSubmit={submitSearch} className="space-y-1">
+              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Khu vực
+              </Label>
               <div className="relative">
-                <div className="flex items-center gap-2 rounded-xl border bg-background px-3 py-2">
+                <div className="flex h-10 items-center gap-2 rounded-xl border bg-background px-3">
                   <Search className="h-4 w-4 text-muted-foreground" />
                   <Input
                     value={searchInput}
@@ -528,35 +695,37 @@ export default function MapPage() {
                 )}
               </div>
 
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="flex gap-2">
                 <Button
                   type="submit"
                   variant="outline"
                   disabled={isGeocoding || !searchInput.trim()}
-                  className="rounded-xl"
+                  className="h-9 flex-1 rounded-xl"
                 >
                   {isGeocoding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                   Tìm khu vực
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={!searchInput && !activeSearchLocation && !fallbackSearchTerm}
-                  onClick={clearSearch}
-                  className="rounded-xl"
-                >
-                  <X className="mr-2 h-4 w-4" />
-                  Xóa tìm kiếm
-                </Button>
+                {(searchInput || activeSearchLocation || fallbackSearchTerm) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={clearSearch}
+                    className="h-9 w-9 shrink-0 rounded-xl"
+                    aria-label="Xóa tìm kiếm"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             </form>
 
-            <div className="grid gap-3">
+              <div className="space-y-1.5">
               <Button
                 type="button"
                 onClick={requestCurrentLocation}
                 disabled={isGettingLocation}
-                className="rounded-xl border-0 gradient-primary text-primary-foreground"
+                className="h-10 w-full rounded-xl border border-primary/20 bg-primary/5 px-3 text-primary hover:bg-primary/10"
               >
                 {isGettingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
                 {isGettingLocation ? "Đang lấy vị trí..." : "Dùng vị trí của tôi"}
@@ -586,30 +755,24 @@ export default function MapPage() {
                       className="rounded-xl border-0 gradient-primary text-primary-foreground"
                       onClick={confirmCurrentLocation}
                     >
-                      Đồng ý
+                      Đồng ý sử dụng vị trí
                     </Button>
                   </div>
                 </div>
               )}
 
-              {activeStatusText && (
-                <div className="rounded-xl border bg-primary/5 p-3 text-xs text-muted-foreground">
-                  <span className="font-medium text-foreground">{activeStatusText}</span>
-                </div>
-              )}
-
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-2">
+              <div className="space-y-1.5">
+                <div className="grid grid-cols-4 rounded-xl border bg-background p-0.5">
                   {RADIUS_FILTERS.map((item) => (
                     <button
                       key={item.value}
                       type="button"
                       disabled={item.value !== "all" && !activeOrigin}
                       onClick={() => setRadius(item.value)}
-                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                      className={`h-8 rounded-lg px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
                         radius === item.value
-                          ? "border-primary bg-primary/10 text-primary"
-                          : "bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
                       }`}
                     >
                       {item.label}
@@ -617,15 +780,48 @@ export default function MapPage() {
                   ))}
                 </div>
                 {!activeOrigin && (
-                  <p className="text-xs text-muted-foreground">
+                  <p className="text-[12px] leading-snug text-muted-foreground">
                     Bật vị trí hoặc nhập khu vực để lọc theo khoảng cách.
                   </p>
                 )}
               </div>
+
+              {hasActiveFilters && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={clearAllFilters}
+                  className="h-9 rounded-xl"
+                >
+                  <X className="mr-2 h-4 w-4" />
+                  Xóa bộ lọc
+                </Button>
+              )}
+              </div>
             </div>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="shrink-0 border-b bg-background px-4 py-2.5">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold text-foreground">{resultSummaryText}</p>
+              <span className="shrink-0 text-xs text-muted-foreground">{markerCourses.length} marker</span>
+            </div>
+            {activeFilterBadges.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {activeFilterBadges.map((badge, index) => (
+                  <Badge key={`${badge}-${index}`} variant="outline" className="max-w-full rounded-full bg-muted/60 px-2 py-0.5 text-[11px]">
+                    <span className="truncate">{badge}</span>
+                  </Badge>
+                ))}
+              </div>
+            )}
+            {(activeLocationSource || fallbackSearchTerm) && (
+              <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{activeStatusText}</p>
+            )}
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
             {isLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -638,13 +834,13 @@ export default function MapPage() {
             ) : filteredCourses.length === 0 ? (
               <div className="flex flex-col items-center px-5 py-12 text-center">
                 <MapPin className="mb-3 h-10 w-10 text-muted-foreground" />
-                <p className="font-medium text-foreground">Chưa tìm thấy lớp học gần khu vực này.</p>
+                <p className="font-medium text-foreground">Không tìm thấy lớp học phù hợp.</p>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  Thử đổi từ khóa, nhập khu vực khác hoặc mở rộng bán kính tìm kiếm.
+                  Thử đổi nhu cầu học, danh mục, khu vực hoặc mở rộng bán kính tìm kiếm.
                 </p>
               </div>
             ) : (
-              <div className="divide-y">
+              <div className="space-y-2 p-3">
                 {filteredCourses.map((course) => {
                   const courseHasCoordinates =
                     typeof course.latitude === "number" && typeof course.longitude === "number";
@@ -657,40 +853,47 @@ export default function MapPage() {
                         setSelectedCourseId(course.id);
                         if (!courseHasCoordinates) navigate(`/course/${course.id}`);
                       }}
-                      className={`flex w-full gap-3 p-4 text-left transition-colors hover:bg-muted/50 ${
-                        selectedCourseId === course.id ? "bg-primary/5" : ""
+                      className={`flex w-full gap-3 rounded-2xl border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary/25 hover:bg-primary/5 ${
+                        selectedCourseId === course.id ? "border-primary/40 bg-primary/5 ring-1 ring-primary/15" : "border-border"
                       }`}
                     >
                       <img
                         src={course.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200&h=200&fit=crop"}
                         alt={course.title}
-                        className="h-20 w-20 shrink-0 rounded-xl object-cover"
+                        className="h-[68px] w-[68px] shrink-0 rounded-xl object-cover"
                       />
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <h2 className="line-clamp-2 text-sm font-semibold text-card-foreground">{course.title}</h2>
-                          <Badge variant="outline" className="shrink-0 rounded-full border-primary/20 bg-primary/5 text-[10px] text-primary">
+                          <h2 className="line-clamp-2 text-sm font-semibold leading-snug text-card-foreground">{course.title}</h2>
+                          <Badge variant="outline" className="shrink-0 rounded-full border-primary/20 bg-primary/5 px-1.5 py-0 text-[10px] text-primary">
                             Offline
                           </Badge>
                         </div>
                         <p className="mt-1 truncate text-xs text-muted-foreground">{course.mentor?.name || "Mentor"}</p>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <div className="mt-1.5 flex min-w-0 flex-wrap gap-1.5">
+                          <Badge variant="outline" className="rounded-full border-secondary/20 bg-secondary/5 px-1.5 py-0 text-[10px] text-secondary">
+                            {getCourseCategoryShortLabel(course.category)}
+                          </Badge>
+                          {!courseHasCoordinates && (
+                            <Badge variant="outline" className="rounded-full border-warning/30 bg-warning/10 px-1.5 py-0 text-[10px] text-warning">
+                              Chưa có tọa độ
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
                           <span className="flex items-center gap-1">
                             <Star className="h-3 w-3 fill-warning text-warning" />
                             {course.rating}
                           </span>
                           {typeof course.distanceKm === "number" && (
-                            <span className="flex items-center gap-1">
+                            <span className="flex min-w-0 items-center gap-1 truncate">
                               <Crosshair className="h-3 w-3" />
-                              {distancePrefix} {course.distanceKm.toFixed(1)} km
+                              {course.distanceKm.toFixed(1)} km
                             </span>
                           )}
                         </div>
                         <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{course.location || "Chưa có địa chỉ"}</p>
                         <p className="mt-1 text-sm font-bold text-primary">{formatPrice(course.price)}</p>
-                        {!courseHasCoordinates && (
-                          <p className="mt-1 text-xs text-warning">Chưa có tọa độ, mở chi tiết để xem thêm.</p>
-                        )}
                       </div>
                     </button>
                   );
@@ -700,7 +903,7 @@ export default function MapPage() {
           </div>
         </aside>
 
-        <section className="relative min-h-[52vh] flex-1 bg-muted lg:min-h-0">
+        <section className="order-1 relative min-h-[52vh] flex-1 bg-muted lg:order-2 lg:min-h-0">
           <MapContainer center={DEFAULT_MAP_CENTER} zoom={DEFAULT_MAP_ZOOM} scrollWheelZoom className="h-full w-full">
             {hasGeoapifyKey && (
               <TileLayer
@@ -745,6 +948,9 @@ export default function MapPage() {
                         <p className="font-semibold text-foreground">{course.title}</p>
                         <p className="text-xs text-muted-foreground">{course.mentor?.name || "Mentor"}</p>
                       </div>
+                      <Badge variant="outline" className="w-fit rounded-full border-secondary/20 bg-secondary/5 text-secondary">
+                        {getCourseCategoryShortLabel(course.category)}
+                      </Badge>
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <Star className="h-3 w-3 fill-warning text-warning" />
                         <span>{course.rating}</span>
@@ -779,9 +985,9 @@ export default function MapPage() {
           )}
 
           <div className="pointer-events-none absolute bottom-4 left-1/2 z-[500] -translate-x-1/2">
-            <Badge className="bg-card px-4 py-2 text-card-foreground shadow-elevated">
-              <MapPin className="mr-2 h-4 w-4 text-primary" />
-              {markerCourses.length} lớp có marker · {filteredCourses.length} lớp trong danh sách
+            <Badge className="bg-card px-3 py-1.5 text-xs text-card-foreground shadow-elevated">
+              <MapPin className="mr-1.5 h-3.5 w-3.5 text-primary" />
+              {markerCourses.length} marker • {filteredCourses.length} lớp
             </Badge>
           </div>
         </section>

@@ -90,7 +90,7 @@ function HomeRoute() {
 function AppExtras() {
   const location = useLocation();
 
-  if (location.pathname.startsWith("/admin")) {
+  if (location.pathname.startsWith("/admin") || location.pathname === "/map") {
     return null;
   }
 

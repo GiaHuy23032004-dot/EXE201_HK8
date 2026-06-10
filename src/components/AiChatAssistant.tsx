@@ -1,17 +1,84 @@
-import { useState, useRef, useEffect } from "react";
-import { MessageCircle, X, Send, Loader2, Sparkles, Bot } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { Bot, ExternalLink, Loader2, MapPin, MessageCircle, Send, Sparkles, Star, Trash2, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { motion, AnimatePresence } from "framer-motion";
+import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { useSubscription } from "@/hooks/useSubscription";
 import { AI_CREDIT_COSTS } from "@/constants/aiCredits";
 import { AiCreditUpgradeDialog } from "@/components/subscription/AiCreditUpgradeDialog";
 import { isAiCreditRequiredPayload } from "@/lib/aiCreditErrors";
+import { supabase } from "@/integrations/supabase/client";
 
-type Msg = { role: "user" | "assistant"; content: string };
+type CourseRecommendation = {
+  id: string;
+  title: string;
+  mentorName?: string | null;
+  category?: string | null;
+  format: "online" | "offline" | string | null;
+  price: number | null;
+  location?: string | null;
+  imageUrl?: string | null;
+  rating?: number | null;
+  reviewCount?: number | null;
+  detailUrl: string;
+  matchType: "exact" | "similar";
+};
+
+type Msg = {
+  id?: string;
+  role: "user" | "assistant";
+  content: string;
+  recommendations?: CourseRecommendation[];
+};
+
+type ChatConversationRow = {
+  id: string;
+  title: string | null;
+  last_message_at: string;
+};
+
+type ChatMessageRow = {
+  id: string;
+  role: string;
+  content: string;
+  metadata?: unknown;
+};
+
+type ChatRpcClient = {
+  rpc<T = unknown>(
+    fn: string,
+    args?: Record<string, unknown>,
+  ): Promise<{
+    data: T | null;
+    error: { message: string } | null;
+  }>;
+};
 
 const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-chat`;
 const CHAT_AI_COST = AI_CREDIT_COSTS.chat;
+const chatRpc = supabase as unknown as ChatRpcClient;
+const WIDGET_POSITION_KEY = "vet-ai-chat-widget-position";
+const WIDGET_MARGIN = 16;
+const LAUNCHER_SIZE = 56;
+const PANEL_WIDTH = 380;
+const PANEL_HEIGHT = 520;
+
+type WidgetPosition = {
+  x: number;
+  y: number;
+};
+
+type DragState = {
+  active: boolean;
+  moved: boolean;
+  mode: "launcher" | "panel";
+  startX: number;
+  startY: number;
+  startPosition: WidgetPosition;
+  size: { width: number; height: number };
+};
 
 const quickPrompts = [
   "Gợi ý khóa học cho người mới",
@@ -19,6 +86,201 @@ const quickPrompts = [
   "Lộ trình học AI công việc",
   "So sánh học online vs offline",
 ];
+
+function getPanelSize() {
+  if (typeof window === "undefined") return { width: PANEL_WIDTH, height: PANEL_HEIGHT };
+  return {
+    width: Math.min(PANEL_WIDTH, window.innerWidth - WIDGET_MARGIN * 2),
+    height: Math.min(PANEL_HEIGHT, window.innerHeight - WIDGET_MARGIN * 2),
+  };
+}
+
+function clampPosition(position: WidgetPosition, size = { width: LAUNCHER_SIZE, height: LAUNCHER_SIZE }) {
+  if (typeof window === "undefined") return position;
+
+  const maxX = Math.max(WIDGET_MARGIN, window.innerWidth - size.width - WIDGET_MARGIN);
+  const maxY = Math.max(WIDGET_MARGIN, window.innerHeight - size.height - WIDGET_MARGIN);
+
+  return {
+    x: Math.min(Math.max(WIDGET_MARGIN, position.x), maxX),
+    y: Math.min(Math.max(WIDGET_MARGIN, position.y), maxY),
+  };
+}
+
+function getInitialWidgetPosition() {
+  if (typeof window === "undefined") return { x: 24, y: 480 };
+
+  const fallback = {
+    x: 24,
+    y: Math.max(WIDGET_MARGIN, window.innerHeight - LAUNCHER_SIZE - 24),
+  };
+
+  try {
+    const raw = window.localStorage.getItem(WIDGET_POSITION_KEY);
+    if (!raw) return clampPosition(fallback);
+    const parsed = JSON.parse(raw) as Partial<WidgetPosition>;
+    if (typeof parsed.x !== "number" || typeof parsed.y !== "number") return clampPosition(fallback);
+    return clampPosition({ x: parsed.x, y: parsed.y });
+  } catch {
+    return clampPosition(fallback);
+  }
+}
+
+function toChatMessages(rows: ChatMessageRow[] | null | undefined): Msg[] {
+  if (!Array.isArray(rows)) return [];
+  return rows
+    .filter((row) => row.role === "user" || row.role === "assistant")
+    .map((row) => ({
+      id: row.id,
+      role: row.role as "user" | "assistant",
+      content: row.content,
+      recommendations: extractRecommendations(row.metadata),
+    }));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function normalizeRecommendation(value: unknown): CourseRecommendation | null {
+  if (!isRecord(value)) return null;
+  const id = typeof value.id === "string" ? value.id : "";
+  const title = typeof value.title === "string" ? value.title : "";
+  const detailUrl = typeof value.detailUrl === "string" ? value.detailUrl : `/course/${id}`;
+  const matchType = value.matchType === "similar" ? "similar" : "exact";
+
+  if (!id || !title) return null;
+
+  return {
+    id,
+    title,
+    mentorName: typeof value.mentorName === "string" ? value.mentorName : null,
+    category: typeof value.category === "string" ? value.category : null,
+    format: typeof value.format === "string" ? value.format : null,
+    price: Number.isFinite(Number(value.price)) ? Number(value.price) : null,
+    location: typeof value.location === "string" ? value.location : null,
+    imageUrl: typeof value.imageUrl === "string" ? value.imageUrl : null,
+    rating: Number.isFinite(Number(value.rating)) ? Number(value.rating) : null,
+    reviewCount: Number.isFinite(Number(value.reviewCount)) ? Number(value.reviewCount) : null,
+    detailUrl,
+    matchType,
+  };
+}
+
+function extractRecommendations(metadata: unknown): CourseRecommendation[] | undefined {
+  if (!isRecord(metadata) || !Array.isArray(metadata.recommendations)) return undefined;
+  const recommendations = metadata.recommendations
+    .map(normalizeRecommendation)
+    .filter((item): item is CourseRecommendation => Boolean(item));
+  return recommendations.length ? recommendations : undefined;
+}
+
+function formatCurrency(value: number | null) {
+  if (!Number.isFinite(Number(value))) return "Chưa cập nhật";
+  return `${Number(value).toLocaleString("vi-VN")}đ/buổi`;
+}
+
+function getFormatLabel(format: CourseRecommendation["format"]) {
+  if (format === "online") return "Online";
+  if (format === "offline") return "Offline";
+  return "Khóa học";
+}
+
+function CourseRecommendationCards({ courses }: { courses: CourseRecommendation[] }) {
+  if (!courses.length) return null;
+
+  return (
+    <div className="mt-2 space-y-2">
+      {courses.map((course) => (
+        <Link
+          key={`${course.matchType}-${course.id}`}
+          to={course.detailUrl}
+          className="group block overflow-hidden rounded-2xl border bg-background text-foreground shadow-sm transition hover:border-primary/50 hover:shadow-md"
+        >
+          <div className="flex gap-3 p-2.5">
+            <div className="h-16 w-16 shrink-0 overflow-hidden rounded-xl bg-muted">
+              {course.imageUrl ? (
+                <img src={course.imageUrl} alt={course.title} className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center bg-accent">
+                  <Sparkles className="h-5 w-5 text-primary" />
+                </div>
+              )}
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                <Badge variant={course.format === "offline" ? "secondary" : "outline"} className="px-2 py-0 text-[10px]">
+                  {getFormatLabel(course.format)}
+                </Badge>
+                {course.matchType === "similar" && (
+                  <Badge variant="outline" className="px-2 py-0 text-[10px]">
+                    Tương tự
+                  </Badge>
+                )}
+              </div>
+              <p className="line-clamp-2 text-xs font-semibold leading-snug group-hover:text-primary">
+                {course.title}
+              </p>
+              {course.mentorName && (
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">Mentor: {course.mentorName}</p>
+              )}
+              {course.format === "offline" && course.location && (
+                <p className="mt-1 flex min-w-0 items-center gap-1 truncate text-[11px] text-muted-foreground">
+                  <MapPin className="h-3 w-3 shrink-0" />
+                  <span className="truncate">{course.location}</span>
+                </p>
+              )}
+              <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-xs font-bold text-primary">{formatCurrency(course.price)}</span>
+                <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                  {course.rating ?? "Mới"} {course.reviewCount ? `(${course.reviewCount})` : ""}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-1 border-t px-3 py-2 text-xs font-semibold text-primary">
+            Xem chi tiết
+            <ExternalLink className="h-3 w-3" />
+          </div>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function renderMessageContent(content: string) {
+  const parts: Array<string | { label: string; href: string }> = [];
+  const linkRegex = /\[([^\]]+)\]\((\/[^)\s]+|https?:\/\/[^)\s]+)\)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = linkRegex.exec(content)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(content.slice(lastIndex, match.index));
+    }
+    parts.push({ label: match[1], href: match[2] });
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < content.length) {
+    parts.push(content.slice(lastIndex));
+  }
+
+  return parts.map((part, index) =>
+    typeof part === "string" ? (
+      <span key={index}>{part}</span>
+    ) : (
+      <a
+        key={`${part.href}-${index}`}
+        href={part.href}
+        className="font-semibold underline underline-offset-2 hover:opacity-80"
+      >
+        {part.label}
+      </a>
+    ),
+  );
+}
 
 export function AiChatAssistant() {
   const { session, isLoggedIn } = useAuth();
@@ -29,16 +291,127 @@ export function AiChatAssistant() {
   } = useSubscription();
   const [open, setOpen] = useState(false);
   const [messages, setMessages] = useState<Msg[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyActionLoading, setHistoryActionLoading] = useState(false);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [creditDialogOpen, setCreditDialogOpen] = useState(false);
+  const [widgetPosition, setWidgetPosition] = useState<WidgetPosition>(getInitialWidgetPosition);
+  const [isDraggingWidget, setIsDraggingWidget] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const dragStateRef = useRef<DragState | null>(null);
+
+  const panelPosition = useMemo(() => clampPosition(widgetPosition, getPanelSize()), [widgetPosition]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(WIDGET_POSITION_KEY, JSON.stringify(widgetPosition));
+  }, [widgetPosition]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handleResize = () => {
+      setWidgetPosition((current) => clampPosition(current, open ? getPanelSize() : undefined));
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [open]);
+
+  useEffect(() => {
+    setMessages([]);
+    setConversationId(null);
+    setHistoryLoaded(false);
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!open || !session?.user?.id || historyLoaded) return;
+
+    let cancelled = false;
+
+    async function loadHistory() {
+      setHistoryLoading(true);
+      try {
+        const { data: conversations, error: conversationsError } =
+          await chatRpc.rpc<ChatConversationRow[]>("get_my_chat_conversations");
+        if (conversationsError) throw conversationsError;
+
+        const latestConversation = Array.isArray(conversations)
+          ? (conversations[0] as ChatConversationRow | undefined)
+          : null;
+
+        if (!latestConversation?.id) {
+          if (!cancelled) {
+            setMessages([]);
+            setConversationId(null);
+          }
+          return;
+        }
+
+        const { data: loadedMessages, error: messagesError } = await chatRpc.rpc<ChatMessageRow[]>("get_my_chat_messages", {
+          _conversation_id: latestConversation.id,
+        });
+        if (messagesError) throw messagesError;
+
+        if (!cancelled) {
+          setConversationId(latestConversation.id);
+          setMessages(toChatMessages(loadedMessages as ChatMessageRow[]));
+        }
+      } catch (error) {
+        console.error("Không thể tải lịch sử EduBot:", error);
+        if (!cancelled) {
+          setMessages([]);
+          setConversationId(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setHistoryLoading(false);
+          setHistoryLoaded(true);
+        }
+      }
+    }
+
+    loadHistory();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, session?.user?.id, historyLoaded]);
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, historyLoading]);
+
+  const clearHistory = async () => {
+    if (!session || historyActionLoading) return;
+
+    setHistoryActionLoading(true);
+    try {
+      if (conversationId) {
+        const { error } = await chatRpc.rpc("clear_my_chat_conversation", {
+          _conversation_id: conversationId,
+        });
+        if (error) throw error;
+      }
+
+      setMessages([]);
+      setConversationId(null);
+      setHistoryLoaded(true);
+    } catch (error) {
+      console.error("Không thể xóa lịch sử EduBot:", error);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Mình chưa thể xóa lịch sử lúc này. Bạn thử lại sau nhé." },
+      ]);
+    } finally {
+      setHistoryActionLoading(false);
+    }
+  };
 
   const sendMessage = async (text: string) => {
     if (!text.trim() || isLoading) return;
@@ -80,9 +453,32 @@ export function AiChatAssistant() {
       setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant") {
-          return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content: assistantSoFar } : m));
+          return prev.map((message, index) =>
+            index === prev.length - 1 ? { ...message, content: assistantSoFar } : message,
+          );
         }
         return [...prev, { role: "assistant", content: assistantSoFar }];
+      });
+    };
+
+    const setAssistantId = (messageId: string) => {
+      setMessages((prev) => {
+        const lastIndex = prev.length - 1;
+        if (lastIndex < 0 || prev[lastIndex]?.role !== "assistant") return prev;
+        return prev.map((message, index) =>
+          index === lastIndex ? { ...message, id: messageId } : message,
+        );
+      });
+    };
+
+    const setAssistantRecommendations = (recommendations: CourseRecommendation[]) => {
+      if (!recommendations.length) return;
+      setMessages((prev) => {
+        const lastIndex = prev.length - 1;
+        if (lastIndex < 0 || prev[lastIndex]?.role !== "assistant") return prev;
+        return prev.map((message, index) =>
+          index === lastIndex ? { ...message, recommendations } : message,
+        );
       });
     };
 
@@ -93,7 +489,10 @@ export function AiChatAssistant() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`,
         },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({
+          messages: newMessages,
+          conversation_id: conversationId,
+        }),
       });
 
       if (!resp.ok || !resp.body) {
@@ -104,11 +503,11 @@ export function AiChatAssistant() {
         } else if (resp.status === 401) {
           upsertAssistant("Vui lòng đăng nhập lại để dùng EduBot AI.");
         } else if (resp.status === 429) {
-          upsertAssistant("⏳ Quá nhiều yêu cầu, vui lòng thử lại sau một chút nhé!");
+          upsertAssistant("Quá nhiều yêu cầu, vui lòng thử lại sau một chút nhé!");
         } else if (resp.status === 402) {
-          upsertAssistant("💳 Hệ thống AI tạm hết credit. Vui lòng thử lại sau!");
+          upsertAssistant("Hệ thống AI tạm hết credit. Vui lòng thử lại sau!");
         } else {
-          upsertAssistant("😅 Có lỗi xảy ra, vui lòng thử lại nhé! Nếu AI đã bị lỗi, credit sẽ được hoàn qua hệ thống.");
+          upsertAssistant("Có lỗi xảy ra, vui lòng thử lại nhé! Nếu AI đã bị lỗi, credit sẽ được hoàn qua hệ thống.");
         }
         return;
       }
@@ -116,8 +515,9 @@ export function AiChatAssistant() {
       const reader = resp.body.getReader();
       const decoder = new TextDecoder();
       let textBuffer = "";
+      let streamDone = false;
 
-      while (true) {
+      while (!streamDone) {
         const { done, value } = await reader.read();
         if (done) break;
         textBuffer += decoder.decode(value, { stream: true });
@@ -130,36 +530,113 @@ export function AiChatAssistant() {
           if (line.startsWith(":") || line.trim() === "") continue;
           if (!line.startsWith("data: ")) continue;
           const jsonStr = line.slice(6).trim();
-          if (jsonStr === "[DONE]") break;
+          if (jsonStr === "[DONE]") {
+            streamDone = true;
+            break;
+          }
           try {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) upsertAssistant(content);
+            const recommendations = extractRecommendations(parsed);
+            if (recommendations?.length) {
+              setAssistantRecommendations(recommendations);
+            }
+            if (typeof parsed.conversation_id === "string") {
+              setConversationId(parsed.conversation_id);
+              setHistoryLoaded(true);
+            }
+            if (typeof parsed.message_id === "string") {
+              setAssistantId(parsed.message_id);
+            }
           } catch {
-            textBuffer = line + "\n" + textBuffer;
+            textBuffer = `${line}\n${textBuffer}`;
             break;
           }
         }
       }
     } catch {
-      upsertAssistant("😅 Không thể kết nối. Vui lòng thử lại! Nếu AI đã bị lỗi, credit sẽ được hoàn qua hệ thống.");
+      upsertAssistant("Không thể kết nối. Vui lòng thử lại! Nếu AI đã bị lỗi, credit sẽ được hoàn qua hệ thống.");
     } finally {
       await refetchSubscription();
       setIsLoading(false);
     }
   };
 
+  const startWidgetDrag = (event: ReactPointerEvent<HTMLElement>, mode: DragState["mode"]) => {
+    if (event.button !== 0) return;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    dragStateRef.current = {
+      active: true,
+      moved: false,
+      mode,
+      startX: event.clientX,
+      startY: event.clientY,
+      startPosition: mode === "panel" ? panelPosition : widgetPosition,
+      size: mode === "panel" ? getPanelSize() : { width: LAUNCHER_SIZE, height: LAUNCHER_SIZE },
+    };
+    setIsDraggingWidget(true);
+  };
+
+  const moveWidget = (event: ReactPointerEvent<HTMLElement>) => {
+    const dragState = dragStateRef.current;
+    if (!dragState?.active) return;
+
+    const deltaX = event.clientX - dragState.startX;
+    const deltaY = event.clientY - dragState.startY;
+    if (Math.abs(deltaX) > 4 || Math.abs(deltaY) > 4) {
+      dragState.moved = true;
+    }
+
+    setWidgetPosition(
+      clampPosition(
+        {
+          x: dragState.startPosition.x + deltaX,
+          y: dragState.startPosition.y + deltaY,
+        },
+        dragState.size,
+      ),
+    );
+  };
+
+  const stopWidgetDrag = (event: ReactPointerEvent<HTMLElement>) => {
+    const dragState = dragStateRef.current;
+    if (!dragState?.active) return;
+
+    event.currentTarget.releasePointerCapture(event.pointerId);
+    dragStateRef.current = null;
+    setIsDraggingWidget(false);
+
+    if (dragState.mode === "launcher" && !dragState.moved) {
+      setOpen(true);
+    }
+  };
+
   return (
     <>
-      {/* Floating button */}
       <AnimatePresence>
         {!open && (
           <motion.button
+            type="button"
             initial={{ scale: 0 }}
             animate={{ scale: 1 }}
             exit={{ scale: 0 }}
-            onClick={() => setOpen(true)}
-            className="fixed bottom-6 left-6 z-50 flex h-14 w-14 items-center justify-center rounded-full gradient-primary text-primary-foreground shadow-elevated hover:shadow-glow transition-shadow"
+            onPointerDown={(event) => startWidgetDrag(event, "launcher")}
+            onPointerMove={moveWidget}
+            onPointerUp={stopWidgetDrag}
+            onPointerCancel={stopWidgetDrag}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                setOpen(true);
+              }
+            }}
+            style={{ left: widgetPosition.x, top: widgetPosition.y }}
+            title="Kéo để di chuyển EduBot"
+            className={`fixed z-50 flex h-14 w-14 touch-none select-none items-center justify-center rounded-full gradient-primary text-primary-foreground shadow-elevated transition-shadow hover:shadow-glow ${
+              isDraggingWidget ? "cursor-grabbing" : "cursor-grab"
+            }`}
           >
             <MessageCircle className="h-6 w-6" />
             <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] font-bold text-destructive-foreground">
@@ -169,24 +646,32 @@ export function AiChatAssistant() {
         )}
       </AnimatePresence>
 
-      {/* Chat panel */}
       <AnimatePresence>
         {open && (
           <motion.div
             initial={{ opacity: 0, y: 20, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            className="fixed bottom-6 left-6 z-50 flex h-[520px] w-[380px] max-w-[calc(100vw-48px)] flex-col overflow-hidden rounded-2xl border bg-card shadow-elevated"
+            style={{ left: panelPosition.x, top: panelPosition.y }}
+            className="fixed z-50 flex h-[520px] max-h-[calc(100vh-32px)] w-[380px] max-w-[calc(100vw-32px)] flex-col overflow-hidden rounded-2xl border bg-card shadow-elevated"
           >
-            {/* Header */}
-            <div className="flex items-center justify-between gradient-primary px-4 py-3 text-primary-foreground">
-              <div className="flex items-center gap-2">
-                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/20">
+            <div
+              onPointerDown={(event) => startWidgetDrag(event, "panel")}
+              onPointerMove={moveWidget}
+              onPointerUp={stopWidgetDrag}
+              onPointerCancel={stopWidgetDrag}
+              title="Kéo để di chuyển EduBot"
+              className={`flex touch-none select-none items-center justify-between gradient-primary px-4 py-3 text-primary-foreground ${
+                isDraggingWidget ? "cursor-grabbing" : "cursor-grab"
+              }`}
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/20">
                   <Bot className="h-4 w-4" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold">EduBot AI</p>
-                  <p className="text-[10px] opacity-80">
+                  <p className="truncate text-[10px] opacity-80">
                     {subscriptionLoading
                       ? "Đang tải AI credits..."
                       : isLoggedIn
@@ -195,47 +680,82 @@ export function AiChatAssistant() {
                   </p>
                 </div>
               </div>
-              <button onClick={() => setOpen(false)} className="rounded-lg p-1 hover:bg-white/20 transition-colors">
+              <button
+                onPointerDown={(event) => event.stopPropagation()}
+                onClick={() => setOpen(false)}
+                className="rounded-lg p-1 hover:bg-white/20 transition-colors"
+                aria-label="Đóng EduBot"
+              >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
-            {/* Messages */}
+            {isLoggedIn && messages.length > 0 && (
+              <div className="flex items-center justify-between border-b bg-muted/30 px-4 py-2">
+                <span className="text-[11px] text-muted-foreground">
+                  Lịch sử EduBot được lưu cho tài khoản của bạn.
+                </span>
+                <button
+                  type="button"
+                  onClick={clearHistory}
+                  disabled={historyActionLoading || isLoading}
+                  className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-background hover:text-destructive disabled:opacity-60"
+                >
+                  {historyActionLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Trash2 className="h-3 w-3" />}
+                  Xóa lịch sử
+                </button>
+              </div>
+            )}
+
             <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
-              {messages.length === 0 && (
+              {historyLoading && (
+                <div className="flex items-center justify-center py-8 text-xs text-muted-foreground">
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang tải lịch sử EduBot...
+                </div>
+              )}
+
+              {!historyLoading && messages.length === 0 && (
                 <div className="text-center py-6">
                   <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-accent">
                     <Sparkles className="h-6 w-6 text-primary" />
                   </div>
-                  <p className="text-sm font-semibold text-foreground mb-1">Chào bạn! 👋</p>
+                  <p className="text-sm font-semibold text-foreground mb-1">Chào bạn!</p>
                   <p className="text-xs text-muted-foreground mb-4">
                     Mình là EduBot, trợ lý AI giúp bạn tìm khóa học và mentor phù hợp. Tính năng này dùng 1 AI credit.
                   </p>
                   <div className="space-y-2">
-                    {quickPrompts.map((p) => (
+                    {quickPrompts.map((prompt) => (
                       <button
-                        key={p}
-                        onClick={() => sendMessage(p)}
+                        key={prompt}
+                        onClick={() => sendMessage(prompt)}
                         className="w-full rounded-xl border bg-background px-3 py-2 text-left text-xs text-foreground hover:border-primary hover:bg-accent transition-colors"
                       >
                         <Sparkles className="mr-1.5 inline h-3 w-3 text-primary" />
-                        {p}
+                        {prompt}
                       </button>
                     ))}
                   </div>
                 </div>
               )}
 
-              {messages.map((m, i) => (
-                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+              {messages.map((message, index) => (
+                <div key={message.id ?? index} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div
-                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                      m.role === "user"
-                        ? "gradient-primary text-primary-foreground rounded-br-md"
-                        : "bg-muted text-foreground rounded-bl-md"
-                    }`}
+                    className={`flex max-w-[85%] flex-col ${message.role === "user" ? "items-end" : "items-start"}`}
                   >
-                    {m.content}
+                    <div
+                      className={`w-fit max-w-full rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap break-words ${
+                        message.role === "user"
+                          ? "gradient-primary text-primary-foreground rounded-br-md"
+                          : "bg-muted text-foreground rounded-bl-md"
+                      }`}
+                    >
+                      {renderMessageContent(message.content)}
+                    </div>
+                    {message.role === "assistant" && message.recommendations?.length ? (
+                      <CourseRecommendationCards courses={message.recommendations} />
+                    ) : null}
                   </div>
                 </div>
               ))}
@@ -253,18 +773,17 @@ export function AiChatAssistant() {
               )}
             </div>
 
-            {/* Input */}
             <div className="border-t bg-background p-3">
               <form
-                onSubmit={(e) => {
-                  e.preventDefault();
+                onSubmit={(event) => {
+                  event.preventDefault();
                   sendMessage(input);
                 }}
                 className="flex items-center gap-2"
               >
                 <input
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(event) => setInput(event.target.value)}
                   placeholder="Hỏi EduBot..."
                   className="flex-1 rounded-xl border bg-card px-3 py-2.5 text-sm outline-none placeholder:text-muted-foreground focus:border-primary transition-colors"
                   disabled={isLoading}
@@ -272,7 +791,7 @@ export function AiChatAssistant() {
                 <Button
                   type="submit"
                   size="icon"
-                  disabled={isLoading || subscriptionLoading || !input.trim()}
+                  disabled={isLoading || subscriptionLoading || historyLoading || !input.trim()}
                   className="h-10 w-10 rounded-xl gradient-primary border-0 text-primary-foreground shrink-0"
                 >
                   {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
@@ -282,6 +801,7 @@ export function AiChatAssistant() {
           </motion.div>
         )}
       </AnimatePresence>
+
       <AiCreditUpgradeDialog open={creditDialogOpen} onOpenChange={setCreditDialogOpen} />
     </>
   );

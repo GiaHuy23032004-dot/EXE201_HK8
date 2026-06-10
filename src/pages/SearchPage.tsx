@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { AI_CREDIT_COSTS } from "@/constants/aiCredits";
 import { AiCreditUpgradeDialog } from "@/components/subscription/AiCreditUpgradeDialog";
 import { isAiCreditRequiredPayload, readFunctionErrorPayload } from "@/lib/aiCreditErrors";
+import { COURSE_COMPARE_GOALS, DEFAULT_COMPARE_GOAL } from "@/utils/courseCompareRubrics";
 
 const SEARCH_AI_COST = AI_CREDIT_COSTS.search;
 const COMPARE_AI_COST = AI_CREDIT_COSTS.compare;
@@ -61,13 +62,45 @@ type AiCompareCourse = {
   id: string;
   title: string;
   category?: string | null;
+  skill_topic?: string | null;
+  skill_domain?: string | null;
+  skill_kind?: string | null;
+  skill_tags?: string[];
+  learning_outcomes?: string[];
+  prerequisites?: string[];
   format?: "online" | "offline";
   price?: number;
   mentor_name?: string;
+  location?: string | null;
+  rating?: number;
+  review_count?: number;
+  students_count?: number;
+  mentor_trust_badges?: string[];
+  mentor_verification_status?: string | null;
+  schedule_summary?: string | null;
 };
 
 type AiCompareResult = {
   summary: string;
+  recommendedCourseId?: string | null;
+  confidence?: "low" | "medium" | "high";
+  factualComparison?: Array<{
+    criterion: string;
+    courseA: string;
+    courseB: string;
+  }>;
+  goalBasedAnalysis?: Array<{
+    goal: string;
+    betterChoice: "courseA" | "courseB" | "tie";
+    reason: string;
+  }>;
+  skillInsights?: string[];
+  courseAPros?: string[];
+  courseACons?: string[];
+  courseBPros?: string[];
+  courseBCons?: string[];
+  questionsToAskMentor?: string[];
+  missingInformation?: string[];
   best_choice_course_id: string | null;
   comparison_table: Array<{
     criterion: string;
@@ -219,9 +252,31 @@ function AiCourseMatchPanel({ result }: { result: AiCourseMatchResult }) {
 
 function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
   const courseMap = new Map(result.courses.map((course) => [course.id, course]));
-  const bestCourse = result.comparison.best_choice_course_id
-    ? courseMap.get(result.comparison.best_choice_course_id)
+  const recommendedCourseId = result.comparison.recommendedCourseId ?? result.comparison.best_choice_course_id;
+  const bestCourse = recommendedCourseId
+    ? courseMap.get(recommendedCourseId)
     : null;
+  const confidenceLabel = result.comparison.confidence === "high"
+    ? "Tự tin cao"
+    : result.comparison.confidence === "medium"
+      ? "Tự tin vừa"
+      : "Cần hỏi thêm";
+  const confidenceClass = result.comparison.confidence === "high"
+    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+    : result.comparison.confidence === "medium"
+      ? "border-blue-200 bg-blue-50 text-blue-700"
+      : "border-amber-200 bg-amber-50 text-amber-700";
+  const factualRows = result.comparison.factualComparison?.length
+    ? result.comparison.factualComparison
+    : result.comparison.comparison_table.map((row) => ({
+        criterion: row.criterion,
+        courseA: row.course_values.find((item) => item.course_id === result.courses[0]?.id)?.value ?? "-",
+        courseB: row.course_values.find((item) => item.course_id === result.courses[1]?.id)?.value ?? "-",
+      }));
+  const questions = result.comparison.questionsToAskMentor?.length
+    ? result.comparison.questionsToAskMentor
+    : result.comparison.questions_to_ask_mentor;
+  const skillInsights = result.comparison.skillInsights ?? [];
 
   return (
     <div className="container pt-6">
@@ -238,17 +293,56 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
                 {result.comparison.summary}
               </p>
             </div>
-            {result.fallback && (
-              <Badge variant="outline" className="w-fit rounded-full border-amber-200 bg-amber-50 text-amber-700">
-                So sánh dự phòng
+            <div className="flex flex-wrap gap-2">
+              <Badge variant="outline" className={`w-fit rounded-full ${confidenceClass}`}>
+                {confidenceLabel}
               </Badge>
-            )}
+              {result.fallback && (
+                <Badge variant="outline" className="w-fit rounded-full border-amber-200 bg-amber-50 text-amber-700">
+                  So sánh dự phòng
+                </Badge>
+              )}
+            </div>
           </div>
 
           {bestCourse && (
             <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
               <CheckCircle2 className="mr-2 inline h-4 w-4" />
-              AI khuyến nghị cân nhắc trước: <strong>{bestCourse.title}</strong>
+              Nếu mục tiêu của bạn là <strong>{result.comparison.goalBasedAnalysis?.[0]?.goal || "mục tiêu đã chọn"}</strong>, AI khuyến nghị cân nhắc trước:{" "}
+              <Link to={`/course/${bestCourse.id}`} className="font-bold underline underline-offset-2">
+                {bestCourse.title}
+              </Link>
+            </div>
+          )}
+
+          {result.comparison.goalBasedAnalysis?.length ? (
+            <div className="mb-5 grid gap-3 md:grid-cols-2">
+              {result.comparison.goalBasedAnalysis.map((item) => {
+                const betterLabel =
+                  item.betterChoice === "courseA"
+                    ? result.courses[0]?.title
+                    : item.betterChoice === "courseB"
+                      ? result.courses[1]?.title
+                      : "Tùy mục tiêu";
+                return (
+                  <div key={`${item.goal}-${item.reason}`} className="rounded-2xl border bg-background p-4 shadow-sm">
+                    <p className="text-sm font-semibold text-foreground">Nếu ưu tiên: {item.goal}</p>
+                    <p className="mt-1 text-xs font-medium text-primary">Lựa chọn nghiêng về: {betterLabel}</p>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.reason}</p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+
+          {skillInsights.length > 0 && (
+            <div className="mb-5 rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4">
+              <p className="mb-2 font-semibold text-cyan-900">Nhận định AI về kỹ năng/chủ đề</p>
+              <ul className="space-y-1 text-sm leading-relaxed text-cyan-800">
+                {skillInsights.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
             </div>
           )}
 
@@ -262,21 +356,25 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
                       <Link to={`/course/${course.id}`} className="hover:text-primary">
                         {course.title}
                       </Link>
+                      {(course.skill_topic || course.skill_domain) && (
+                        <p className="mt-1 text-xs font-normal text-muted-foreground">
+                          {[course.skill_topic, course.skill_domain].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {result.comparison.comparison_table.map((row) => (
+                {factualRows.map((row) => (
                   <tr key={row.criterion} className="border-t">
                     <td className="px-4 py-3 font-medium text-foreground">{row.criterion}</td>
-                    {result.courses.map((course) => {
-                      const value = row.course_values.find((item) => item.course_id === course.id)?.value ?? "-";
-                      return (
-                        <td key={course.id} className="px-4 py-3 text-muted-foreground">
-                          {value}
-                        </td>
-                      );
+                    <td className="px-4 py-3 text-muted-foreground">{row.courseA}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{row.courseB}</td>
+                    {result.courses.slice(2).map((course) => {
+                      const legacyRow = result.comparison.comparison_table.find((item) => item.criterion === row.criterion);
+                      const value = legacyRow?.course_values.find((item) => item.course_id === course.id)?.value ?? "-";
+                      return <td key={course.id} className="px-4 py-3 text-muted-foreground">{value}</td>;
                     })}
                   </tr>
                 ))}
@@ -284,25 +382,28 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
             </table>
           </div>
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            {result.comparison.course_analysis.map((analysis) => {
-              const course = courseMap.get(analysis.course_id);
+          <div className="grid gap-4 lg:grid-cols-2">
+            {result.courses.slice(0, 2).map((course, index) => {
+              const pros = index === 0
+                ? result.comparison.courseAPros ?? result.comparison.course_analysis.find((item) => item.course_id === course.id)?.strengths ?? []
+                : result.comparison.courseBPros ?? result.comparison.course_analysis.find((item) => item.course_id === course.id)?.strengths ?? [];
+              const cons = index === 0
+                ? result.comparison.courseACons ?? result.comparison.course_analysis.find((item) => item.course_id === course.id)?.weaknesses ?? []
+                : result.comparison.courseBCons ?? result.comparison.course_analysis.find((item) => item.course_id === course.id)?.weaknesses ?? [];
               if (!course) return null;
               return (
-                <div key={analysis.course_id} className="rounded-2xl border bg-background p-4 shadow-sm">
+                <div key={course.id} className="rounded-2xl border bg-background p-4 shadow-sm">
                   <h3 className="line-clamp-2 font-semibold text-foreground">{course.title}</h3>
                   <p className="mt-1 text-xs text-muted-foreground">
                     {course.mentor_name || "Mentor"} · {course.price ? formatVnd(course.price) : ""}
                   </p>
-                  <p className="mt-3 text-sm font-medium text-foreground">Phù hợp nhất cho</p>
-                  <p className="mt-1 text-sm text-muted-foreground">{analysis.best_for}</p>
                   <p className="mt-3 text-sm font-medium text-foreground">Điểm mạnh</p>
                   <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
-                    {analysis.strengths.map((item) => <li key={item}>+ {item}</li>)}
+                    {pros.map((item) => <li key={item}>+ {item}</li>)}
                   </ul>
                   <p className="mt-3 text-sm font-medium text-foreground">Cần cân nhắc</p>
                   <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
-                    {analysis.weaknesses.map((item) => <li key={item}>- {item}</li>)}
+                    {cons.map((item) => <li key={item}>- {item}</li>)}
                   </ul>
                 </div>
               );
@@ -313,11 +414,22 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
             <strong>Khuyến nghị:</strong> {result.comparison.recommendation}
           </div>
 
-          {result.comparison.questions_to_ask_mentor.length > 0 && (
+          {result.comparison.missingInformation?.length ? (
+            <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <p className="mb-2 font-semibold text-amber-900">Thông tin còn thiếu để so sánh chính xác hơn</p>
+              <ul className="space-y-1 text-sm text-amber-800">
+                {result.comparison.missingInformation.map((item) => (
+                  <li key={item}>• {item}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          {questions.length > 0 && (
             <div className="mt-4 rounded-2xl border bg-background p-4">
               <p className="mb-2 font-semibold text-foreground">Nên hỏi mentor trước khi đặt lịch</p>
               <ul className="space-y-1 text-sm text-muted-foreground">
-                {result.comparison.questions_to_ask_mentor.map((question) => (
+                {questions.map((question) => (
                   <li key={question}>• {question}</li>
                 ))}
               </ul>
@@ -348,6 +460,7 @@ export default function SearchPage() {
   const [aiMatchResult, setAiMatchResult] = useState<AiCourseMatchResult | null>(null);
   const [compareCourseIds, setCompareCourseIds] = useState<string[]>([]);
   const [compareResult, setCompareResult] = useState<AiCompareResponse | null>(null);
+  const [compareGoal, setCompareGoal] = useState(DEFAULT_COMPARE_GOAL);
   const [compareLoading, setCompareLoading] = useState(false);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAiPanel, setShowAiPanel] = useState(false);
@@ -558,6 +671,7 @@ export default function SearchPage() {
       const { data, error } = await supabase.functions.invoke("ai-compare", {
         body: {
           course_ids: compareCourseIds,
+          comparison_goal: compareGoal,
           learner_goal: query.trim() || undefined,
           preferred_format: format === "all" ? "any" : format,
           budget: priceRange[1] < 1000000 ? priceRange[1] : undefined,
@@ -800,6 +914,31 @@ export default function SearchPage() {
                       </button>
                     </Badge>
                   ))}
+                </div>
+                <div className="mt-3">
+                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-cyan-900/70">
+                    Mục tiêu so sánh
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {COURSE_COMPARE_GOALS.map((goal) => (
+                      <button
+                        key={goal.value}
+                        type="button"
+                        onClick={() => {
+                          setCompareGoal(goal.value);
+                          setCompareResult(null);
+                        }}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-medium transition ${
+                          compareGoal === goal.value
+                            ? "border-primary bg-primary text-primary-foreground shadow-sm"
+                            : "border-cyan-200 bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                        }`}
+                        title={goal.description}
+                      >
+                        {goal.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">

@@ -117,7 +117,8 @@ export function AiCourseAdvisor({
   const { session, isLoggedIn } = useAuth();
   const { toast } = useToast();
   const { aiCreditsRemaining, isLoading: subscriptionLoading, refetch } = useSubscription();
-  const [question, setQuestion] = useState(quickQuestions[0]);
+  const [customQuestion, setCustomQuestion] = useState("");
+  const [selectedPrompt, setSelectedPrompt] = useState<string | null>(null);
   const [result, setResult] = useState<AdvisorResult | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -139,6 +140,13 @@ export function AiCourseAdvisor({
   };
 
   const handleSubmit = async () => {
+    const finalQuestion = customQuestion.trim();
+
+    if (!finalQuestion) {
+      toast({ title: "Vui lòng nhập câu hỏi.", variant: "destructive" });
+      return;
+    }
+
     if (!courseId) {
       toast({ title: "Không tìm thấy khóa học để tư vấn.", variant: "destructive" });
       return;
@@ -168,10 +176,18 @@ export function AiCourseAdvisor({
 
     setIsSubmitting(true);
     try {
+      if (import.meta.env.DEV) {
+        console.log("ai-advisor request", {
+          course_id: courseId,
+          question: finalQuestion,
+        });
+      }
+
       const { data, error } = await supabase.functions.invoke("ai-advisor", {
         body: {
           course_id: courseId,
-          question: question.trim(),
+          question: finalQuestion,
+          learner_context: {},
         },
         headers: {
           Authorization: `Bearer ${session.access_token}`,
@@ -257,11 +273,14 @@ export function AiCourseAdvisor({
               <Button
                 key={item}
                 type="button"
-                variant={question === item ? "default" : "outline"}
+                variant={selectedPrompt === item ? "default" : "outline"}
                 size="sm"
-                onClick={() => setQuestion(item)}
+                onClick={() => {
+                  setSelectedPrompt(item);
+                  setCustomQuestion(item);
+                }}
                 className={`h-auto rounded-full px-3 py-1.5 text-xs ${
-                  question === item ? "border-0 gradient-primary text-primary-foreground" : "bg-white/80"
+                  selectedPrompt === item ? "border-0 gradient-primary text-primary-foreground" : "bg-white/80"
                 }`}
               >
                 {item}
@@ -270,11 +289,14 @@ export function AiCourseAdvisor({
           </div>
 
           <Textarea
-            value={question}
-            onChange={(event) => setQuestion(event.target.value)}
+            value={customQuestion}
+            onChange={(event) => {
+              setCustomQuestion(event.target.value);
+              setSelectedPrompt(null);
+            }}
             placeholder="Ví dụ: Tôi là người mới, khóa này có phù hợp không?"
             className="min-h-[92px] rounded-2xl bg-white/90"
-            maxLength={800}
+            maxLength={500}
           />
 
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -284,7 +306,12 @@ export function AiCourseAdvisor({
             <Button
               type="button"
               onClick={handleSubmit}
-              disabled={isSubmitting || subscriptionLoading || !question.trim()}
+              disabled={
+                isSubmitting ||
+                subscriptionLoading ||
+                !customQuestion.trim() ||
+                (isLoggedIn && aiCreditsRemaining < ADVISOR_COST)
+              }
               className="rounded-xl border-0 gradient-primary text-primary-foreground"
             >
               {isSubmitting ? (
