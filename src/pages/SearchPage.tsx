@@ -62,6 +62,8 @@ type AiCompareCourse = {
   id: string;
   title: string;
   category?: string | null;
+  category_slug?: string | null;
+  category_name?: string | null;
   skill_topic?: string | null;
   skill_domain?: string | null;
   skill_kind?: string | null;
@@ -81,9 +83,18 @@ type AiCompareCourse = {
 };
 
 type AiCompareResult = {
+  compare_mode?: "same_category" | "cross_category";
+  goal_interpretation?: string;
+  overall_summary?: string;
   summary: string;
   recommendedCourseId?: string | null;
   confidence?: "low" | "medium" | "high";
+  best_choice_condition?: string | null;
+  decision_branches?: Array<{
+    condition: string;
+    recommended_course_id: string;
+    reason: string;
+  }>;
   factualComparison?: Array<{
     criterion: string;
     courseA: string;
@@ -101,6 +112,7 @@ type AiCompareResult = {
   courseBCons?: string[];
   questionsToAskMentor?: string[];
   missingInformation?: string[];
+  missing_information?: string[];
   best_choice_course_id: string | null;
   comparison_table: Array<{
     criterion: string;
@@ -108,11 +120,15 @@ type AiCompareResult = {
   }>;
   course_analysis: Array<{
     course_id: string;
+    category_understanding?: string;
     strengths: string[];
     weaknesses: string[];
     best_for: string;
+    not_best_for?: string;
+    practical_outcome?: string;
   }>;
   recommendation: string;
+  final_advice?: string;
   questions_to_ask_mentor: string[];
 };
 
@@ -277,6 +293,14 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
     ? result.comparison.questionsToAskMentor
     : result.comparison.questions_to_ask_mentor;
   const skillInsights = result.comparison.skillInsights ?? [];
+  const compareMode = result.comparison.compare_mode ?? "same_category";
+  const isCrossCategory = compareMode === "cross_category";
+  const decisionBranches = result.comparison.decision_branches ?? [];
+  const missingInfo = result.comparison.missingInformation?.length
+    ? result.comparison.missingInformation
+    : result.comparison.missing_information ?? [];
+  const summary = result.comparison.overall_summary ?? result.comparison.summary;
+  const finalAdvice = result.comparison.final_advice ?? result.comparison.recommendation;
 
   return (
     <div className="container pt-6">
@@ -290,32 +314,67 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
               </div>
               <h2 className="text-xl font-bold text-foreground">So sánh khóa học bằng AI</h2>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-                {result.comparison.summary}
+                {summary}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
+              {isCrossCategory && (
+                <Badge variant="outline" className="w-fit rounded-full border-orange-200 bg-orange-50 text-orange-700">
+                  Khác lĩnh vực
+                </Badge>
+              )}
               <Badge variant="outline" className={`w-fit rounded-full ${confidenceClass}`}>
                 {confidenceLabel}
               </Badge>
-              {result.fallback && (
-                <Badge variant="outline" className="w-fit rounded-full border-amber-200 bg-amber-50 text-amber-700">
-                  So sánh dự phòng
-                </Badge>
-              )}
             </div>
           </div>
+
+          {isCrossCategory && (
+            <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm leading-relaxed text-orange-900">
+              Hai khóa học thuộc hai hướng học khác nhau, nên lựa chọn phụ thuộc vào mục tiêu của bạn.
+              {result.comparison.goal_interpretation ? (
+                <span className="ml-1">{result.comparison.goal_interpretation}</span>
+              ) : null}
+            </div>
+          )}
 
           {bestCourse && (
             <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
               <CheckCircle2 className="mr-2 inline h-4 w-4" />
-              Nếu mục tiêu của bạn là <strong>{result.comparison.goalBasedAnalysis?.[0]?.goal || "mục tiêu đã chọn"}</strong>, AI khuyến nghị cân nhắc trước:{" "}
+              Nếu mục tiêu của bạn là <strong>{result.comparison.best_choice_condition || result.comparison.goalBasedAnalysis?.[0]?.goal || "mục tiêu đã chọn"}</strong>, AI khuyến nghị cân nhắc trước:{" "}
               <Link to={`/course/${bestCourse.id}`} className="font-bold underline underline-offset-2">
                 {bestCourse.title}
               </Link>
             </div>
           )}
 
-          {result.comparison.goalBasedAnalysis?.length ? (
+          {!bestCourse && isCrossCategory && (
+            <div className="mb-5 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm leading-relaxed text-cyan-900">
+              AI chưa thể chọn một khóa tốt nhất vì mục tiêu của bạn chưa rõ. Hãy chọn theo nhánh quyết định phù hợp nhất bên dưới.
+            </div>
+          )}
+
+          {decisionBranches.length > 0 ? (
+            <div className="mb-5 grid gap-3 md:grid-cols-2">
+              {decisionBranches.map((branch) => {
+                const course = courseMap.get(branch.recommended_course_id);
+                return (
+                  <div key={`${branch.condition}-${branch.recommended_course_id}`} className="rounded-2xl border bg-background p-4 shadow-sm">
+                    <p className="text-sm font-semibold text-foreground">{branch.condition}</p>
+                    {course && (
+                      <p className="mt-1 text-xs font-medium text-primary">
+                        Nên cân nhắc:{" "}
+                        <Link to={`/course/${course.id}`} className="underline underline-offset-2">
+                          {course.title}
+                        </Link>
+                      </p>
+                    )}
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{branch.reason}</p>
+                  </div>
+                );
+              })}
+            </div>
+          ) : result.comparison.goalBasedAnalysis?.length ? (
             <div className="mb-5 grid gap-3 md:grid-cols-2">
               {result.comparison.goalBasedAnalysis.map((item) => {
                 const betterLabel =
@@ -358,7 +417,7 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
                       </Link>
                       {(course.skill_topic || course.skill_domain) && (
                         <p className="mt-1 text-xs font-normal text-muted-foreground">
-                          {[course.skill_topic, course.skill_domain].filter(Boolean).join(" · ")}
+                          {[course.category_name, course.skill_topic].filter(Boolean).join(" · ")}
                         </p>
                       )}
                     </th>
@@ -384,12 +443,13 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
 
           <div className="grid gap-4 lg:grid-cols-2">
             {result.courses.slice(0, 2).map((course, index) => {
+              const analysis = result.comparison.course_analysis.find((item) => item.course_id === course.id);
               const pros = index === 0
-                ? result.comparison.courseAPros ?? result.comparison.course_analysis.find((item) => item.course_id === course.id)?.strengths ?? []
-                : result.comparison.courseBPros ?? result.comparison.course_analysis.find((item) => item.course_id === course.id)?.strengths ?? [];
+                ? result.comparison.courseAPros ?? analysis?.strengths ?? []
+                : result.comparison.courseBPros ?? analysis?.strengths ?? [];
               const cons = index === 0
-                ? result.comparison.courseACons ?? result.comparison.course_analysis.find((item) => item.course_id === course.id)?.weaknesses ?? []
-                : result.comparison.courseBCons ?? result.comparison.course_analysis.find((item) => item.course_id === course.id)?.weaknesses ?? [];
+                ? result.comparison.courseACons ?? analysis?.weaknesses ?? []
+                : result.comparison.courseBCons ?? analysis?.weaknesses ?? [];
               if (!course) return null;
               return (
                 <div key={course.id} className="rounded-2xl border bg-background p-4 shadow-sm">
@@ -397,6 +457,14 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
                   <p className="mt-1 text-xs text-muted-foreground">
                     {course.mentor_name || "Mentor"} · {course.price ? formatVnd(course.price) : ""}
                   </p>
+                  {analysis?.category_understanding && (
+                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{analysis.category_understanding}</p>
+                  )}
+                  {analysis?.practical_outcome && (
+                    <p className="mt-3 rounded-xl bg-cyan-50 px-3 py-2 text-sm text-cyan-900">
+                      {analysis.practical_outcome}
+                    </p>
+                  )}
                   <p className="mt-3 text-sm font-medium text-foreground">Điểm mạnh</p>
                   <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
                     {pros.map((item) => <li key={item}>+ {item}</li>)}
@@ -405,20 +473,26 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
                   <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
                     {cons.map((item) => <li key={item}>- {item}</li>)}
                   </ul>
+                  {analysis?.not_best_for && (
+                    <p className="mt-3 text-sm text-muted-foreground">
+                      <span className="font-medium text-foreground">Không phù hợp nhất nếu: </span>
+                      {analysis.not_best_for}
+                    </p>
+                  )}
                 </div>
               );
             })}
           </div>
 
           <div className="mt-5 rounded-2xl bg-primary/5 p-4 text-sm leading-relaxed text-foreground">
-            <strong>Khuyến nghị:</strong> {result.comparison.recommendation}
+            <strong>Khuyến nghị:</strong> {finalAdvice}
           </div>
 
-          {result.comparison.missingInformation?.length ? (
+          {missingInfo.length ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
               <p className="mb-2 font-semibold text-amber-900">Thông tin còn thiếu để so sánh chính xác hơn</p>
               <ul className="space-y-1 text-sm text-amber-800">
-                {result.comparison.missingInformation.map((item) => (
+                {missingInfo.map((item) => (
                   <li key={item}>• {item}</li>
                 ))}
               </ul>

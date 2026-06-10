@@ -30,6 +30,8 @@ type CompareCourse = {
   title: string;
   description: string | null;
   category: string | null;
+  category_slug?: string | null;
+  category_name?: string;
   skill_tags?: string[] | null;
   learning_outcomes?: string[] | null;
   prerequisites?: string[] | null;
@@ -71,6 +73,8 @@ type SkillDomain =
   | "wellness"
   | "other";
 
+type CompareMode = "same_category" | "cross_category";
+
 type LearningProfile = {
   primary_goal?: string | null;
   current_level?: string | null;
@@ -85,9 +89,18 @@ type LearningProfile = {
 };
 
 type CompareResult = {
+  compare_mode: CompareMode;
+  goal_interpretation: string;
+  overall_summary: string;
   summary: string;
   recommendedCourseId: string | null;
   confidence: "low" | "medium" | "high";
+  best_choice_condition: string | null;
+  decision_branches: Array<{
+    condition: string;
+    recommended_course_id: string;
+    reason: string;
+  }>;
   factualComparison: Array<{
     criterion: string;
     courseA: string;
@@ -112,11 +125,16 @@ type CompareResult = {
   }>;
   course_analysis: Array<{
     course_id: string;
+    category_understanding?: string;
     strengths: string[];
     weaknesses: string[];
     best_for: string;
+    not_best_for?: string;
+    practical_outcome?: string;
   }>;
   recommendation: string;
+  missing_information: string[];
+  final_advice: string;
   questions_to_ask_mentor: string[];
 };
 
@@ -207,6 +225,47 @@ const GOAL_LABELS: Record<string, string> = {
   unsure: "Tôi chưa biết, hãy tư vấn giúp tôi",
 };
 
+const CATEGORY_LABELS: Record<string, string> = {
+  "mind-sports": "Cờ & Tư duy chiến thuật",
+  "career-english": "Tiếng Anh công việc & học tập",
+  "modern-sports": "Thể thao hiện đại",
+  "barista-beverage": "Barista & Đồ uống",
+  "content-speaking": "Nội dung, MC & Thuyết trình",
+  "ai-productivity": "AI & Công cụ làm việc",
+  coding: "AI & Công cụ làm việc",
+  programming: "AI & Công cụ làm việc",
+  technology: "AI & Công cụ làm việc",
+  ai: "AI & Công cụ làm việc",
+  music: "Nội dung, MC & Thuyết trình",
+  art: "Nội dung, MC & Thuyết trình",
+  design: "Nội dung, MC & Thuyết trình",
+  creative: "Nội dung, MC & Thuyết trình",
+  language: "Tiếng Anh công việc & học tập",
+  english: "Tiếng Anh công việc & học tập",
+  "foreign-language": "Tiếng Anh công việc & học tập",
+  fitness: "Thể thao hiện đại",
+  sport: "Thể thao hiện đại",
+  sports: "Thể thao hiện đại",
+  yoga: "Thể thao hiện đại",
+  cooking: "Barista & Đồ uống",
+  barista: "Barista & Đồ uống",
+  bartender: "Barista & Đồ uống",
+  beverage: "Barista & Đồ uống",
+  food: "Barista & Đồ uống",
+  chess: "Cờ & Tư duy chiến thuật",
+  "board-game": "Cờ & Tư duy chiến thuật",
+};
+
+function categoryKey(value: unknown) {
+  return normalizeText(value).replace(/\s+/g, "-");
+}
+
+function mapCategoryLabel(category: string | null | undefined) {
+  const key = categoryKey(category);
+  if (!key) return "Chưa phân loại";
+  return CATEGORY_LABELS[key] ?? category ?? "Chưa phân loại";
+}
+
 const DOMAIN_RUBRICS: Record<SkillDomain, string[]> = {
   programming: ["beginner friendliness", "prerequisites", "career path", "project applicability", "difficulty", "tools/technologies"],
   sports: ["beginner friendliness", "intensity", "safety", "equipment/location", "practice frequency", "cost to continue"],
@@ -236,8 +295,20 @@ function getRubric(courses: CompareCourse[]) {
 }
 
 function isCrossCategory(courses: CompareCourse[]) {
+  return getCompareMode(courses) === "cross_category";
+}
+
+function getCompareMode(courses: CompareCourse[]): CompareMode {
   const domains = [...new Set(courses.map((course) => course.skill_domain ?? "other"))];
-  return domains.length > 1;
+  if (domains.length === 1) return "same_category";
+
+  const relatedDomains = domains.every((domain) => ["programming", "other"].includes(domain))
+    || domains.every((domain) => ["sports", "wellness"].includes(domain))
+    || domains.every((domain) => ["language", "public_speaking"].includes(domain));
+  if (relatedDomains) return "same_category";
+
+  const categoryLabels = [...new Set(courses.map((course) => course.category_name ?? mapCategoryLabel(course.category)).filter(Boolean))];
+  return categoryLabels.length === 1 && domains.includes("other") ? "same_category" : "cross_category";
 }
 
 function goalLabel(goal: string | null | undefined) {
@@ -320,22 +391,26 @@ function extractSkillTopic(course: Pick<CompareCourse, "title" | "description" |
 }
 
 function classifySkillDomain(course: Pick<CompareCourse, "title" | "description" | "category" | "skill_tags">): SkillDomain {
-  const text = normalizeText(`${course.title} ${course.description ?? ""} ${course.category ?? ""} ${(course.skill_tags ?? []).join(" ")}`);
+  const topicText = normalizeText(`${course.title} ${course.description ?? ""} ${(course.skill_tags ?? []).join(" ")}`);
   const category = normalizeText(course.category);
-  if (/(python|java|javascript|typescript|react|node|backend|frontend|fullstack|html|css|sql|code|coding|programming|lap trinh|ai|automation|technology|cong nghe)/.test(text)
-    || ["ai-productivity", "coding", "programming", "technology"].includes(category)) return "programming";
-  if (/(tennis|pickleball|badminton|cau long|boi|swimming|football|gym|fitness|the thao|sport)/.test(text)
-    || ["modern-sports", "sports", "sport", "fitness"].includes(category)) return "sports";
-  if (/(ielts|toeic|english|tieng anh|language|ngoai ngu|speaking|listening|reading|writing)/.test(text)
-    || ["career-english", "language", "english", "foreign-language"].includes(category)) return "language";
-  if (/(mc|public speaking|thuyet trinh|dan chuong trinh|noi truoc dam dong|presentation|content speaking)/.test(text)
-    || ["content-speaking", "content_creation"].includes(category)) return "public_speaking";
-  if (/(photoshop|figma|illustrator|design|art|ve|drawing|creative|content|video|editor|canva)/.test(text)
-    || ["creative", "design", "art"].includes(category)) return "creative";
-  if (/(barista|pha che|bartender|coffee|cafe|cocktail|beverage|food|cooking|nau an)/.test(text)
-    || ["barista-beverage", "barista", "bartender", "cooking", "food"].includes(category)) return "food_beverage";
-  if (/(guitar|piano|music|am nhac|vocal|singing|ukulele|drum)/.test(text) || category === "music") return "music";
-  if (/(yoga|meditation|wellness|suc khoe|thiền|thien)/.test(text)) return "wellness";
+
+  if (/(guitar|piano|music|am nhac|vocal|singing|ukulele|drum)/.test(topicText)) return "music";
+  if (/(tennis|pickleball|badminton|cau long|boi|swimming|football|gym|fitness|the thao|sport)/.test(topicText)) return "sports";
+  if (/(barista|pha che|bartender|coffee|cafe|cocktail|beverage|food|cooking|nau an)/.test(topicText)) return "food_beverage";
+  if (/(mc|public speaking|thuyet trinh|dan chuong trinh|noi truoc dam dong|presentation)/.test(topicText)) return "public_speaking";
+  if (/(ielts|toeic|english|tieng anh|language|ngoai ngu|speaking|listening|reading|writing)/.test(topicText)) return "language";
+  if (/(photoshop|figma|illustrator|design|art|ve|drawing|creative|content|video|editor|canva)/.test(topicText)) return "creative";
+  if (/(yoga|meditation|wellness|suc khoe|thiền|thien)/.test(topicText)) return "wellness";
+  if (/(python|java|javascript|typescript|react|node|backend|frontend|fullstack|html|css|sql|code|coding|programming|lap trinh|ai|automation|technology|cong nghe)/.test(topicText)) return "programming";
+
+  if (["music"].includes(category)) return "music";
+  if (["content-speaking", "content_creation"].includes(category)) return "public_speaking";
+  if (["mind-sports"].includes(category)) return "other";
+  if (["ai-productivity", "coding", "programming", "technology"].includes(category)) return "programming";
+  if (["modern-sports", "sports", "sport", "fitness"].includes(category)) return "sports";
+  if (["career-english", "language", "english", "foreign-language"].includes(category)) return "language";
+  if (["creative", "design", "art"].includes(category)) return "creative";
+  if (["barista-beverage", "barista", "bartender", "cooking", "food"].includes(category)) return "food_beverage";
   return "other";
 }
 
@@ -459,6 +534,8 @@ function publicCourse(course: CompareCourse) {
     title: course.title,
     description: String(course.description ?? "").slice(0, 260),
     category: course.category,
+    category_slug: course.category_slug ?? course.category,
+    category_name: course.category_name ?? mapCategoryLabel(course.category),
     skill_topic: course.skill_topic,
     skill_domain: course.skill_domain,
     skill_kind: course.skill_kind,
@@ -646,6 +723,8 @@ async function fetchCourses(courseIds: string[]) {
       title: String(row.title ?? ""),
       description: typeof row.description === "string" ? row.description : null,
       category: typeof row.category === "string" ? row.category : null,
+      category_slug: typeof row.category === "string" ? row.category : null,
+      category_name: mapCategoryLabel(typeof row.category === "string" ? row.category : null),
       skill_tags: normalizeArray(row.skill_tags),
       learning_outcomes: normalizeArray(row.learning_outcomes),
       prerequisites: normalizeArray(row.prerequisites),
@@ -733,6 +812,10 @@ function missingInfoForCourse(course: CompareCourse) {
 function buildFactualRows(courses: CompareCourse[]) {
   return [
     {
+      criterion: "Danh mục VET",
+      course_values: courses.map((course) => ({ course_id: course.id, value: course.category_name ?? mapCategoryLabel(course.category) })),
+    },
+    {
       criterion: "Học phí",
       course_values: courses.map((course) => ({ course_id: course.id, value: formatPrice(course.price) })),
     },
@@ -763,15 +846,123 @@ function buildFactualRows(courses: CompareCourse[]) {
   ];
 }
 
+function domainLabel(domain: SkillDomain | undefined) {
+  const labels: Record<SkillDomain, string> = {
+    programming: "công nghệ/kỹ năng số",
+    sports: "thể thao",
+    language: "ngôn ngữ",
+    public_speaking: "giao tiếp/thuyết trình",
+    creative: "sáng tạo",
+    food_beverage: "đồ uống/ẩm thực",
+    music: "âm nhạc",
+    wellness: "sức khỏe/wellness",
+    other: "kỹ năng khác",
+  };
+  return labels[domain ?? "other"];
+}
+
+function practicalOutcome(course: CompareCourse) {
+  const topic = course.skill_topic ?? course.title;
+  switch (course.skill_domain) {
+    case "programming":
+      return `Nắm nền tảng và cách áp dụng ${topic} vào bài tập, công cụ hoặc dự án thực tế.`;
+    case "sports":
+      return `Cải thiện kỹ thuật cơ bản, nhịp luyện tập và sự tự tin khi chơi ${topic}.`;
+    case "language":
+      return `Cải thiện khả năng dùng ${topic} trong bối cảnh học tập, công việc hoặc giao tiếp thực tế.`;
+    case "public_speaking":
+      return `Tăng khả năng trình bày, xử lý tình huống và tự tin trước người nghe.`;
+    case "food_beverage":
+      return `Thực hành quy trình, dụng cụ/nguyên liệu và thao tác nghề liên quan đến ${topic}.`;
+    case "music":
+      return `Xây nền kỹ thuật, cảm âm và khả năng luyện tập/biểu diễn ${topic}.`;
+    case "creative":
+      return `Tạo sản phẩm cá nhân hoặc portfolio nhỏ bằng kỹ năng/công cụ ${topic}.`;
+    case "wellness":
+      return `Xây thói quen luyện tập an toàn và phù hợp sức khỏe cá nhân.`;
+    default:
+      return `Có thêm nền tảng thực hành về ${topic}, nhưng nên hỏi mentor về đầu ra cụ thể.`;
+  }
+}
+
+function learnerGoalIsVague(goal: string) {
+  return !goal || goal === "unsure" || /chưa biết|tu van|tư vấn|unsure/i.test(goal);
+}
+
+function pickCourse(courses: CompareCourse[], predicate: (course: CompareCourse) => boolean) {
+  return courses.find(predicate) ?? null;
+}
+
+function buildDecisionBranches(courses: CompareCourse[], goal: string, compareMode: CompareMode) {
+  const cheapest = [...courses].sort((a, b) => Number(a.price ?? Infinity) - Number(b.price ?? Infinity))[0] ?? null;
+  const offline = pickCourse(courses, (course) => course.format === "offline");
+  const career = pickCourse(courses, (course) => ["programming", "language", "food_beverage"].includes(course.skill_domain ?? "other"));
+  const personal = pickCourse(courses, (course) => ["music", "creative", "public_speaking", "sports", "wellness"].includes(course.skill_domain ?? "other"));
+  const trusted = [...courses].sort((a, b) => courseTrustScore(b) - courseTrustScore(a))[0] ?? null;
+
+  const branches: CompareResult["decision_branches"] = [];
+  const push = (condition: string, course: CompareCourse | null, reason: string) => {
+    if (!course || branches.some((branch) => branch.condition === condition && branch.recommended_course_id === course.id)) return;
+    branches.push({ condition, recommended_course_id: course.id, reason });
+  };
+
+  if (compareMode === "cross_category") {
+    push("Nếu bạn muốn phát triển nghề nghiệp/công nghệ/công việc", career, `${career?.title} gần hơn với mục tiêu ứng dụng nghề nghiệp hoặc kỹ năng đi làm dựa trên lĩnh vực ${domainLabel(career?.skill_domain)}.`);
+    push("Nếu bạn muốn kỹ năng cá nhân/sở thích/sáng tạo", personal, `${personal?.title} phù hợp hơn nếu bạn ưu tiên trải nghiệm cá nhân, sáng tạo, biểu diễn hoặc sức khỏe.`);
+    push("Nếu bạn ưu tiên offline/thực hành trực tiếp", offline, `${offline?.title} có hình thức offline${offline?.location ? ` tại ${offline.location}` : ""}, dễ phù hợp nhu cầu thực hành trực tiếp hơn.`);
+    push("Nếu bạn ưu tiên chi phí thấp hơn", cheapest, `${cheapest?.title} có học phí thấp hơn trong các khóa đang so sánh (${formatPrice(cheapest?.price ?? null)}).`);
+    return branches.slice(0, 4);
+  }
+
+  const best = [...courses].sort((a, b) => scoreForGoal(b, goal) - scoreForGoal(a, goal))[0] ?? null;
+  push(`Nếu ưu tiên ${goalLabel(goal)}`, best, `${best?.title} đang có điểm phù hợp cao hơn theo mục tiêu đã chọn, dựa trên dữ liệu giá, format, lịch, đánh giá và mentor.`);
+  push("Nếu ưu tiên mentor uy tín hơn", trusted, `${trusted?.title} có tín hiệu mentor/review nổi bật hơn trong dữ liệu hiện có.`);
+  push("Nếu ưu tiên chi phí thấp hơn", cheapest, `${cheapest?.title} có chi phí thấp hơn trong nhóm so sánh.`);
+  return branches.slice(0, 3);
+}
+
+function bestForText(course: CompareCourse) {
+  switch (course.skill_domain) {
+    case "programming":
+      return "Learner muốn xây kỹ năng công nghệ, làm dự án hoặc phục vụ công việc số.";
+    case "sports":
+      return "Learner muốn vận động, luyện kỹ thuật và duy trì nhịp tập đều.";
+    case "language":
+      return "Learner muốn cải thiện giao tiếp, học tập, thi cử hoặc dùng tiếng Anh trong công việc.";
+    case "public_speaking":
+      return "Learner muốn tự tin nói trước người khác, làm MC, thuyết trình hoặc tạo nội dung.";
+    case "food_beverage":
+      return "Learner muốn học kỹ năng đồ uống/pha chế có tính thực hành và nghề nghiệp.";
+    case "music":
+      return "Learner muốn học âm nhạc, luyện kỹ thuật cá nhân hoặc biểu diễn như sở thích dài hạn.";
+    case "creative":
+      return "Learner muốn tạo sản phẩm cá nhân, portfolio hoặc kỹ năng sáng tạo.";
+    case "wellness":
+      return "Learner muốn xây thói quen tốt cho sức khỏe và tinh thần.";
+    default:
+      return "Learner muốn khám phá kỹ năng mới nhưng cần hỏi mentor thêm về đầu ra.";
+  }
+}
+
+function notBestForText(course: CompareCourse) {
+  if (course.format === "offline") return "Không tối ưu nếu bạn cần học hoàn toàn online hoặc lịch cực linh hoạt.";
+  if (course.format === "online") return "Không tối ưu nếu bạn cần thực hành trực tiếp tại địa điểm với mentor.";
+  if (!summarizeSchedule(course)) return "Cần hỏi mentor thêm nếu bạn muốn chắc chắn về lịch học cố định.";
+  return "Không tối ưu nếu mục tiêu của bạn nằm ở lĩnh vực khác hoàn toàn.";
+}
+
 function fallbackCompare(courses: CompareCourse[], context: Record<string, unknown>, reason?: string): CompareResult {
   const goal = String(context.comparison_goal ?? "unsure");
+  const compareMode = getCompareMode(courses);
+  const isCrossCategory = compareMode === "cross_category";
+  const vagueGoal = learnerGoalIsVague(goal);
   const sorted = [...courses].sort((a, b) => scoreForGoal(b, goal) - scoreForGoal(a, goal));
-  const crossCategory = isCrossCategory(courses);
-  const best = crossCategory && goal === "unsure" ? null : sorted[0] ?? null;
+  const best = isCrossCategory && vagueGoal ? null : sorted[0] ?? null;
   const factualRows = buildFactualRows(courses);
   const missingInformation = [...new Set(courses.flatMap(missingInfoForCourse))].slice(0, 8);
   const courseA = courses[0];
   const courseB = courses[1];
+  const decisionBranches = buildDecisionBranches(courses, goal, compareMode);
   const questionList = [
     "Khóa này phù hợp với trình độ hiện tại của tôi không?",
     "Sau khóa học tôi sẽ làm được sản phẩm/kỹ năng cụ thể nào?",
@@ -781,57 +972,56 @@ function fallbackCompare(courses: CompareCourse[], context: Record<string, unkno
 
   const course_analysis = courses.map((course) => ({
     course_id: course.id,
+    category_understanding: `Danh mục VET: ${course.category_name ?? mapCategoryLabel(course.category)}. Chủ đề chính: ${course.skill_topic ?? "chưa rõ"}. Lĩnh vực tư vấn: ${domainLabel(course.skill_domain)}.`,
     strengths: [
-      course.format === "online" ? "Linh hoạt học online." : `Có học trực tiếp${course.location ? ` tại ${course.location}` : ""}.`,
+      `${course.format === "online" ? "Linh hoạt học online" : `Có học trực tiếp${course.location ? ` tại ${course.location}` : ""}`}.`,
       courseTrustScore(course) > 0 ? "Mentor có tín hiệu uy tín/xác minh công khai." : "Có thể hỏi thêm mentor để xác nhận kinh nghiệm và cách dạy.",
       Number(course.rating ?? 0) > 0 ? `Có điểm đánh giá ${course.rating}/5 từ dữ liệu hiện có.` : "Dữ liệu đánh giá còn ít, nên hỏi mentor thêm.",
     ],
     weaknesses: missingInfoForCourse(course).map((item) => item.replace(`${course.title}: `, "")).slice(0, 3),
-    best_for: goal === "lower_cost"
-      ? "Learner ưu tiên tối ưu chi phí."
-      : goal === "beginner_zero"
-        ? "Learner muốn bắt đầu từ nền tảng cơ bản."
-        : goal === "trusted_mentor"
-          ? "Learner ưu tiên tín hiệu uy tín của mentor."
-          : goal === "career"
-            ? "Learner học để áp dụng cho công việc hoặc định hướng nghề nghiệp."
-            : goal === "communication_confidence"
-              ? "Learner muốn tăng giao tiếp, tự tin hoặc khả năng trình bày."
-              : goal === "hobby_health"
-                ? "Learner học để giải trí, sức khỏe hoặc duy trì thói quen."
-                : "Learner muốn cân bằng mục tiêu, chi phí và độ chắc chắn của dữ liệu.",
+    best_for: bestForText(course),
+    not_best_for: notBestForText(course),
+    practical_outcome: practicalOutcome(course),
   }));
 
-  const recommendation = best
-    ? `Dựa trên dữ liệu hiện có và mục tiêu "${goalLabel(goal)}", "${best.title}" có vẻ phù hợp hơn để cân nhắc trước. Bạn vẫn nên hỏi mentor về đầu ra, trình độ yêu cầu và lịch học trước khi đặt.`
-    : "Dữ liệu hiện có chưa đủ để chọn một khóa nổi bật. Nên hỏi mentor thêm trước khi quyết định.";
+  const goalInterpretation = vagueGoal
+    ? "Learner chưa nêu mục tiêu đủ rõ, nên AI không chọn một khóa tốt nhất tuyệt đối khi các khóa khác lĩnh vực."
+    : `Learner đang ưu tiên: ${goalLabel(goal)}.`;
+  const overallSummary = isCrossCategory
+    ? "Hai khóa học thuộc hai hướng học khác nhau, nên lựa chọn phụ thuộc vào mục tiêu học chính của bạn."
+    : "Các khóa khá gần lĩnh vực, có thể so sánh sâu hơn theo giá, format, lịch học, đánh giá, mentor và độ phù hợp mục tiêu.";
+  const finalAdvice = best
+    ? `Nếu mục tiêu của bạn là "${goalLabel(goal)}", hãy cân nhắc ${best.title} trước, nhưng vẫn nên hỏi mentor về đầu ra, trình độ đầu vào và cách phản hồi trong buổi học.`
+    : "AI chưa thể chọn một khóa tốt nhất vì mục tiêu của bạn chưa rõ. Hãy xem các nhánh quyết định bên dưới để chọn theo hướng học bạn muốn theo đuổi.";
 
   return {
-    summary: crossCategory
-      ? `Đây là các khóa phục vụ mục tiêu khác nhau. VET so sánh theo mục tiêu "${goalLabel(goal)}", chi phí, lịch học, mentor và mức độ chắc chắn của dữ liệu.`
-      : `VET so sánh theo rubric của lĩnh vực kỹ năng, mục tiêu "${goalLabel(goal)}", học phí, lịch học, đánh giá và mentor.${reason ? " AI không trả JSON hợp lệ nên đây là bảng so sánh dự phòng dựa trên dữ liệu thật." : ""}`,
+    compare_mode: compareMode,
+    goal_interpretation: goalInterpretation,
+    overall_summary: overallSummary,
+    summary: overallSummary,
     recommendedCourseId: best?.id ?? null,
     confidence: missingInformation.length >= 5 ? "low" : "medium",
+    best_choice_condition: best ? `Phù hợp hơn nếu mục tiêu là ${goalLabel(goal)}` : null,
+    decision_branches: decisionBranches,
     factualComparison: factualRows.map((row) => ({
       criterion: row.criterion,
       courseA: row.course_values.find((item) => item.course_id === courseA?.id)?.value ?? "-",
       courseB: row.course_values.find((item) => item.course_id === courseB?.id)?.value ?? "-",
     })),
-    goalBasedAnalysis: [
-      {
-        goal: goalLabel(goal),
-        betterChoice: best && courseA && best.id === courseA.id ? "courseA" : best && courseB && best.id === courseB.id ? "courseB" : "tie",
-        reason: recommendation,
-      },
-      ...(crossCategory ? [{
-        goal: "Khác mục tiêu",
-        betterChoice: "tie" as const,
-        reason: "Hai khóa thuộc nhóm kỹ năng khác nhau, nên chọn theo mục tiêu chính thay vì ép một khóa thắng tuyệt đối.",
-      }] : []),
-    ],
+    goalBasedAnalysis: decisionBranches.length
+      ? decisionBranches.map((branch) => ({
+          goal: branch.condition,
+          betterChoice: branch.recommended_course_id === courseA?.id ? "courseA" : branch.recommended_course_id === courseB?.id ? "courseB" : "tie",
+          reason: branch.reason,
+        }))
+      : [{
+          goal: goalLabel(goal),
+          betterChoice: best && courseA && best.id === courseA.id ? "courseA" : best && courseB && best.id === courseB.id ? "courseB" : "tie",
+          reason: finalAdvice,
+        }],
     skillInsights: [
-      ...courses.slice(0, 2).map((course) => `${course.title}: chủ đề chính là ${course.skill_topic ?? "kỹ năng chưa rõ"}, thuộc nhóm ${course.skill_domain ?? "other"}.`),
-      ...(crossCategory ? ["Hai khóa phục vụ nhóm mục tiêu khác nhau, vì vậy khuyến nghị nên bám theo mục tiêu learner đã chọn."] : []),
+      ...courses.map((course) => `${course.title}: ${course.category_name ?? mapCategoryLabel(course.category)}; chủ đề ${course.skill_topic ?? "chưa rõ"}; lĩnh vực tư vấn ${domainLabel(course.skill_domain)}.`),
+      ...(isCrossCategory ? ["Các khóa khác hướng học, vì vậy không nên ép một winner nếu learner chưa xác định mục tiêu."] : []),
     ],
     courseAPros: course_analysis[0]?.strengths ?? [],
     courseACons: course_analysis[0]?.weaknesses ?? [],
@@ -842,7 +1032,9 @@ function fallbackCompare(courses: CompareCourse[], context: Record<string, unkno
     best_choice_course_id: best?.id ?? null,
     comparison_table: factualRows,
     course_analysis,
-    recommendation,
+    recommendation: finalAdvice,
+    missing_information: missingInformation,
+    final_advice: finalAdvice,
     questions_to_ask_mentor: questionList,
   };
 }
@@ -854,9 +1046,18 @@ function validateCompare(raw: unknown, courses: CompareCourse[], context: Record
   const courseA = courses[0];
   const courseB = courses[1];
   const recommended = String(payload.recommendedCourseId ?? payload.best_choice_course_id ?? "");
+  const compareMode = payload.compare_mode === "cross_category" || payload.compare_mode === "same_category"
+    ? payload.compare_mode as CompareMode
+    : getCompareMode(courses);
+  const vagueGoal = learnerGoalIsVague(String(context.comparison_goal ?? "unsure"));
+  const acceptedRecommended = validIds.has(recommended) && !(compareMode === "cross_category" && vagueGoal)
+    ? recommended
+    : null;
   const factualRows = Array.isArray(payload.factualComparison) ? payload.factualComparison : [];
   const goalRows = Array.isArray(payload.goalBasedAnalysis) ? payload.goalBasedAnalysis : [];
   const legacyRows = Array.isArray(payload.comparison_table) ? payload.comparison_table : [];
+  const branchRows = Array.isArray(payload.decision_branches) ? payload.decision_branches : [];
+  const analysisRows = Array.isArray(payload.course_analysis) ? payload.course_analysis : [];
   const fallback = fallbackCompare(courses, context, "ai_output_shape_fallback");
 
   const factualComparison = factualRows.slice(0, 10).flatMap((row) => {
@@ -893,6 +1094,14 @@ function validateCompare(raw: unknown, courses: CompareCourse[], context: Record
       }).filter((row) => row.course_values.length);
 
   const normalizedFactual = factualComparison.length ? factualComparison : fallback.factualComparison;
+  const decisionBranches = branchRows.slice(0, 6).flatMap((row) => {
+    const record = row as Record<string, unknown>;
+    const id = String(record.recommended_course_id ?? "");
+    const condition = String(record.condition ?? "").trim().slice(0, 160);
+    const reason = String(record.reason ?? "").trim().slice(0, 420);
+    if (!validIds.has(id) || !condition || !reason) return [];
+    return [{ condition, recommended_course_id: id, reason }];
+  });
   const goalBasedAnalysis = goalRows.slice(0, 5).flatMap((row) => {
     const record = row as Record<string, unknown>;
     const betterChoice = ["courseA", "courseB", "tie"].includes(String(record.betterChoice))
@@ -913,28 +1122,64 @@ function validateCompare(raw: unknown, courses: CompareCourse[], context: Record
   const courseBCons = list(payload.courseBCons, 5);
   const skillInsights = list(payload.skillInsights, 6);
   const questionsToAskMentor = list(payload.questionsToAskMentor ?? payload.questions_to_ask_mentor, 6);
-  const missingInformation = list(payload.missingInformation, 8);
+  const missingInformation = list(payload.missingInformation ?? payload.missing_information, 8);
   const confidence = ["low", "medium", "high"].includes(String(payload.confidence))
     ? String(payload.confidence) as CompareResult["confidence"]
     : fallback.confidence;
 
-  if (!normalizedFactual.length || !goalBasedAnalysis.length) throw new Error("AI comparison is incomplete.");
+  const normalizedBranches = decisionBranches.length ? decisionBranches : fallback.decision_branches;
+  const normalizedGoalAnalysis = goalBasedAnalysis.length
+    ? goalBasedAnalysis
+    : normalizedBranches.map((branch) => ({
+        goal: branch.condition,
+        betterChoice: branch.recommended_course_id === courseA?.id ? "courseA" : branch.recommended_course_id === courseB?.id ? "courseB" : "tie" as const,
+        reason: branch.reason,
+      }));
+
+  if (!normalizedFactual.length) throw new Error("AI comparison is incomplete.");
 
   const course_analysis = courses.map((course, index) => ({
     course_id: course.id,
+    category_understanding: fallback.course_analysis[index]?.category_understanding,
     strengths: index === 0 ? (courseAPros.length ? courseAPros : fallback.courseAPros) : (courseBPros.length ? courseBPros : fallback.courseBPros),
     weaknesses: index === 0 ? (courseACons.length ? courseACons : fallback.courseACons) : (courseBCons.length ? courseBCons : fallback.courseBCons),
-    best_for: goalBasedAnalysis.find((row) => row.betterChoice === (index === 0 ? "courseA" : "courseB"))?.reason.slice(0, 240)
+    best_for: normalizedGoalAnalysis.find((row) => row.betterChoice === (index === 0 ? "courseA" : "courseB"))?.reason.slice(0, 240)
       ?? fallback.course_analysis[index]?.best_for
       ?? "Phù hợp tùy mục tiêu học cụ thể.",
+    not_best_for: fallback.course_analysis[index]?.not_best_for,
+    practical_outcome: fallback.course_analysis[index]?.practical_outcome,
   }));
 
+  for (const row of analysisRows) {
+    const record = row as Record<string, unknown>;
+    const id = String(record.course_id ?? "");
+    const index = courses.findIndex((course) => course.id === id);
+    if (index < 0) continue;
+    course_analysis[index] = {
+      course_id: id,
+      category_understanding: String(record.category_understanding ?? course_analysis[index].category_understanding ?? "").slice(0, 260),
+      strengths: list(record.strengths, 5).length ? list(record.strengths, 5) : course_analysis[index].strengths,
+      weaknesses: list(record.weaknesses, 5).length ? list(record.weaknesses, 5) : course_analysis[index].weaknesses,
+      best_for: String(record.best_for ?? course_analysis[index].best_for ?? "").slice(0, 260),
+      not_best_for: String(record.not_best_for ?? course_analysis[index].not_best_for ?? "").slice(0, 260),
+      practical_outcome: String(record.practical_outcome ?? course_analysis[index].practical_outcome ?? "").slice(0, 260),
+    };
+  }
+
+  const overallSummary = String(payload.overall_summary ?? payload.summary ?? fallback.overall_summary).slice(0, 700);
+  const finalAdvice = String(payload.final_advice ?? payload.recommendation ?? fallback.final_advice).slice(0, 700);
+
   return {
-    summary: String(payload.summary ?? "AI đã so sánh các khóa học bạn chọn.").slice(0, 600),
-    recommendedCourseId: validIds.has(recommended) ? recommended : null,
+    compare_mode: compareMode,
+    goal_interpretation: String(payload.goal_interpretation ?? fallback.goal_interpretation).slice(0, 500),
+    overall_summary: overallSummary,
+    summary: overallSummary,
+    recommendedCourseId: acceptedRecommended,
     confidence,
+    best_choice_condition: acceptedRecommended ? String(payload.best_choice_condition ?? fallback.best_choice_condition ?? "").slice(0, 240) || null : null,
+    decision_branches: normalizedBranches,
     factualComparison: normalizedFactual,
-    goalBasedAnalysis: goalBasedAnalysis.length ? goalBasedAnalysis : fallback.goalBasedAnalysis,
+    goalBasedAnalysis: normalizedGoalAnalysis,
     skillInsights: skillInsights.length ? skillInsights : fallback.skillInsights,
     courseAPros: courseAPros.length ? courseAPros : fallback.courseAPros,
     courseACons: courseACons.length ? courseACons : fallback.courseACons,
@@ -942,10 +1187,12 @@ function validateCompare(raw: unknown, courses: CompareCourse[], context: Record
     courseBCons: courseBCons.length ? courseBCons : fallback.courseBCons,
     questionsToAskMentor: questionsToAskMentor.length ? questionsToAskMentor : fallback.questionsToAskMentor,
     missingInformation: missingInformation.length ? missingInformation : fallback.missingInformation,
-    best_choice_course_id: validIds.has(recommended) ? recommended : null,
+    best_choice_course_id: acceptedRecommended,
     comparison_table: comparison_table.length ? comparison_table : fallback.comparison_table,
     course_analysis,
-    recommendation: String(payload.recommendation ?? "Hãy chọn khóa phù hợp nhất với mục tiêu, lịch học và ngân sách của bạn.").slice(0, 600),
+    recommendation: finalAdvice,
+    missing_information: missingInformation.length ? missingInformation : fallback.missing_information,
+    final_advice: finalAdvice,
     questions_to_ask_mentor: questionsToAskMentor.length ? questionsToAskMentor : fallback.questions_to_ask_mentor,
   };
 }
@@ -973,19 +1220,28 @@ Rules:
 - Only compare course IDs listed above.
 - Separate factual comparison from AI interpretation.
 - Only use provided course data. Do not invent price, schedule, mentor, reviews, slots, outcomes, refunds, certificates, or payment policies.
+- Treat category_slug/category_name as VET database facts. Do not infer or rename a course category from title when category_slug/category_name is present.
 - You may explain general differences between skill topics/domains, but course-specific facts must only come from the VET database payload.
 - When comparing tools/languages, classify accurately. Example: Java/Python are programming languages; React is a frontend library/tool, not a programming language.
 - If a field is missing, say it is not available.
 - If domains/topics are unrelated, say they serve different learning goals and compare by the user's goal instead of forcing a universal winner.
-- If domains/topics are unrelated and the learner goal is unsure, set recommendedCourseId to null and explain how to choose by goal.
+- If compare_mode is cross_category and the learner goal is unsure, set best_choice_course_id and recommendedCourseId to null, then provide decision_branches.
+- In cross_category mode, recommend by condition: career/work, personal hobby/creative, offline practice, lower cost, trusted mentor.
 - Avoid overclaiming. Use "dựa trên dữ liệu hiện có", "có vẻ phù hợp hơn nếu...", and "nên hỏi mentor thêm".
 - If no course is clearly best, recommendedCourseId may be null.
 - Respond in Vietnamese.
 - Respond only as valid JSON:
 {
-  "summary": string,
+  "compare_mode": "same_category" | "cross_category",
+  "goal_interpretation": string,
+  "overall_summary": string,
   "recommendedCourseId": string | null,
+  "summary": string,
   "confidence": "low" | "medium" | "high",
+  "best_choice_condition": string | null,
+  "decision_branches": [
+    { "condition": string, "recommended_course_id": string, "reason": string }
+  ],
   "factualComparison": [
     { "criterion": string, "courseA": string, "courseB": string }
   ],
@@ -1005,8 +1261,18 @@ Rules:
     { "criterion": string, "course_values": [{ "course_id": string, "value": string }] }
   ],
   "course_analysis": [
-    { "course_id": string, "strengths": string[], "weaknesses": string[], "best_for": string }
+    {
+      "course_id": string,
+      "category_understanding": string,
+      "best_for": string,
+      "not_best_for": string,
+      "strengths": string[],
+      "weaknesses": string[],
+      "practical_outcome": string
+    }
   ],
+  "missing_information": string[],
+  "final_advice": string,
   "questions_to_ask_mentor": string[]
 }`;
 }
@@ -1045,10 +1311,12 @@ serve(async (req) => {
       learner_level: String(body.learner_level ?? "").trim().slice(0, 80) || null,
       preferred_format: ["online", "offline", "any"].includes(String(body.preferred_format)) ? body.preferred_format : "any",
       budget: Number.isFinite(Number(body.budget)) ? Number(body.budget) : null,
+      compare_mode: getCompareMode(courses),
       cross_category: isCrossCategory(courses),
       rubric: getRubric(courses),
       skill_topics: courses.map((course) => course.skill_topic ?? null),
       skill_domains: courses.map((course) => course.skill_domain ?? "other"),
+      category_names: courses.map((course) => course.category_name ?? mapCategoryLabel(course.category)),
       skill_kinds: courses.map((course) => course.skill_kind ?? "skill_topic"),
     };
 
@@ -1058,6 +1326,7 @@ serve(async (req) => {
       course_ids: courseIds,
       provider: "gemini",
       comparison_goal: context.comparison_goal,
+      compare_mode: context.compare_mode,
       cross_category: context.cross_category,
       skill_topics: context.skill_topics,
       skill_domains: context.skill_domains,
@@ -1092,6 +1361,7 @@ serve(async (req) => {
           fallback: false,
           course_ids: courseIds,
           comparison_goal: context.comparison_goal,
+          compare_mode: context.compare_mode,
           cross_category: context.cross_category,
           result_summary: comparison.summary,
         });
@@ -1107,12 +1377,14 @@ serve(async (req) => {
           total_tokens: aiResult.usage?.totalTokens ?? null,
           fallback: true,
           fallback_reason: parseError instanceof Error ? parseError.message : "invalid_ai_output",
+          ai_parse_failed: true,
           course_ids: courseIds,
           comparison_goal: context.comparison_goal,
+          compare_mode: context.compare_mode,
           cross_category: context.cross_category,
           result_summary: comparison.summary,
         });
-        return jsonResponse({ comparison, courses: courses.map(publicCourse), provider: aiResult.provider, model: aiResult.model, credit_cost: COMPARE_CREDIT_COST, fallback: true });
+        return jsonResponse({ comparison, courses: courses.map(publicCourse), provider: aiResult.provider, model: aiResult.model, credit_cost: COMPARE_CREDIT_COST });
       }
     } catch (aiError) {
       const message = aiError instanceof Error ? aiError.message : "AI provider error";
@@ -1123,6 +1395,7 @@ serve(async (req) => {
         fallback: true,
         fallback_reason: "ai_error",
         course_ids: courseIds,
+        compare_mode: context.compare_mode,
         result_summary: "AI Compare gặp lỗi, credit sẽ được hoàn qua hệ thống.",
       });
       return jsonResponse({ error: true, message: "Không thể dùng AI Compare lúc này. Credit sẽ được hoàn nếu AI gặp lỗi.", credit_refunded: true }, 500);
