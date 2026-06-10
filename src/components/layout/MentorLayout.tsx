@@ -21,18 +21,16 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import logoImg from "@/assets/logo.png";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import { useLanguage } from "@/contexts/LanguageContext";
 
 const navItems = [
-  { labelKey: "mentor.overview",    path: "/mentor/dashboard",   icon: LayoutDashboard },
-  { labelKey: "mentor.courses",     path: "/mentor/courses",     icon: BookOpen },
-  { labelKey: "mentor.schedule",    path: "/mentor/schedule",    icon: Calendar },
-  { labelKey: "mentor.wallet",      path: "/mentor/wallet",      icon: Wallet },
-  { labelKey: "mentor.promotions",  path: "/mentor/promotions",  icon: Megaphone },
-  { labelKey: "mentor.students",    path: "/mentor/students",    icon: Users },
-  { labelKey: "mentor.profile",     path: "/mentor/profile",     icon: UserCheck },
-  { labelKey: "mentor.settings",    path: "/mentor/settings",    icon: Settings },
+  { label: "Tổng quan",         path: "/mentor/dashboard",   icon: LayoutDashboard },
+  { label: "Khóa học của tôi",  path: "/mentor/courses",     icon: BookOpen },
+  { label: "Lịch dạy",          path: "/mentor/schedule",    icon: Calendar },
+  { label: "Doanh thu & Ví",    path: "/mentor/wallet",      icon: Wallet },
+  { label: "Quảng cáo",         path: "/mentor/promotions",  icon: Megaphone },
+  { label: "Quản lý học viên",  path: "/mentor/students",    icon: Users },
+  { label: "Hồ sơ & xác minh",  path: "/mentor/profile",     icon: UserCheck },
+  { label: "Cài đặt",           path: "/mentor/settings",    icon: Settings },
 ];
 
 interface MentorLayoutProps {
@@ -43,7 +41,6 @@ export function MentorLayout({ children }: MentorLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
-  const { t } = useLanguage();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const initials = user?.name
@@ -76,14 +73,14 @@ export function MentorLayout({ children }: MentorLayoutProps) {
         <Link to="/mentor/create-course" onClick={() => setSidebarOpen(false)}>
           <Button className="w-full gradient-primary border-0 text-primary-foreground rounded-xl shadow-lg shadow-primary/20 text-sm">
             <Plus className="mr-2 h-4 w-4" />
-            {t("mentor.create_course")}
+            Tạo khóa học mới
           </Button>
         </Link>
       </div>
 
       {/* Nav */}
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-        {navItems.map(({ labelKey, path, icon: Icon }) => {
+        {navItems.map(({ label, path, icon: Icon }) => {
           const active = location.pathname === path || (path === "/mentor/wallet" && location.pathname === "/mentor/revenue");
           return (
             <Link
@@ -104,7 +101,7 @@ export function MentorLayout({ children }: MentorLayoutProps) {
                 )}
                 style={{ width: "1.125rem", height: "1.125rem" }}
               />
-              <span className="flex-1">{t(labelKey)}</span>
+              <span className="flex-1">{label}</span>
               {active && <ChevronRight className="h-3.5 w-3.5 text-primary/60" />}
             </Link>
           );
@@ -128,7 +125,7 @@ export function MentorLayout({ children }: MentorLayoutProps) {
         <div className="flex gap-2">
           <Link to="/" className="flex-1">
             <Button variant="outline" size="sm" className="w-full rounded-lg text-xs">
-              {t("mentor.home")}
+              Về trang chủ
             </Button>
           </Link>
           <Button
@@ -182,8 +179,7 @@ export function MentorLayout({ children }: MentorLayoutProps) {
             <Menu className="h-5 w-5" />
           </Button>
           <img src={logoImg} alt="VET" className="h-7 w-auto" />
-          <div className="ml-auto flex items-center gap-1">
-            <LanguageSwitcher />
+          <div className="ml-auto">
             <Avatar className="h-8 w-8">
               <AvatarImage src={user?.avatar} />
               <AvatarFallback className="bg-primary text-primary-foreground text-xs">

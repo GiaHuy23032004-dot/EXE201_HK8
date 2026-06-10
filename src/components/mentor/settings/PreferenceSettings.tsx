@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import type { UpdateUserSettingsPayload, UserSettings } from "@/hooks/useUserSettings";
 import { useUpdateUserSettings } from "@/hooks/useUserSettings";
-import { useLanguage, type Language } from "@/contexts/LanguageContext";
 
 interface PreferenceSettingsProps {
   settings: UserSettings;
@@ -15,7 +15,6 @@ interface PreferenceSettingsProps {
 
 export function PreferenceSettings({ settings }: PreferenceSettingsProps) {
   const { toast } = useToast();
-  const { setLang } = useLanguage();
   const updateSettings = useUpdateUserSettings(settings.user_id);
   const [form, setForm] = useState<UpdateUserSettingsPayload>({});
 
@@ -29,10 +28,6 @@ export function PreferenceSettings({ settings }: PreferenceSettingsProps) {
   const handleSave = async () => {
     try {
       await updateSettings.mutateAsync(form);
-      // Đồng bộ ngôn ngữ với LanguageContext ngay lập tức
-      if (form.language === "vi" || form.language === "en") {
-        setLang(form.language as Language);
-      }
       toast({ title: "Đã lưu tùy chọn hệ thống." });
     } catch (error) {
       toast({
@@ -52,30 +47,18 @@ export function PreferenceSettings({ settings }: PreferenceSettingsProps) {
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label>Ngôn ngữ</Label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["vi", "en"] as Language[]).map((langOption) => (
-                <button
-                  key={langOption}
-                  type="button"
-                  onClick={() => setForm((current) => ({ ...current, language: langOption }))}
-                  className={`flex items-center gap-2 rounded-xl border-2 p-3 text-left transition-all ${
-                    form.language === langOption
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-muted/30 hover:bg-muted"
-                  }`}
-                >
-                  <span className="text-xl">{langOption === "vi" ? "🇻🇳" : "🇬🇧"}</span>
-                  <div>
-                    <p className={`text-xs font-semibold ${form.language === langOption ? "text-primary" : "text-foreground"}`}>
-                      {langOption === "vi" ? "Tiếng Việt" : "English"}
-                    </p>
-                  </div>
-                  {form.language === langOption && (
-                    <span className="ml-auto text-xs text-primary font-bold">✓</span>
-                  )}
-                </button>
-              ))}
-            </div>
+            <Select
+              value={form.language as string}
+              onValueChange={(value) => setForm((current) => ({ ...current, language: value as "vi" | "en" }))}
+            >
+              <SelectTrigger className="rounded-xl">
+                <SelectValue placeholder="Chọn ngôn ngữ" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="vi">Tiếng Việt</SelectItem>
+                <SelectItem value="en">English</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="space-y-2">

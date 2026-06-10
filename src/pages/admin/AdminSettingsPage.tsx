@@ -4,7 +4,6 @@ import {
   CheckCircle2,
   CreditCard,
   FileWarning,
-  Globe,
   Globe2,
   Loader2,
   Save,
@@ -29,7 +28,6 @@ import {
   type SettingsKey,
   type SystemSetting,
 } from "@/hooks/useAdminSettings";
-import { useLanguage, type Language } from "@/contexts/LanguageContext";
 
 type AccessSecuritySettings = {
   prevent_last_admin_removal: boolean;
@@ -521,9 +519,6 @@ export default function AdminSettingsPage() {
 
   const payment = getPaymentValue(settingMap.get("payment_placeholder"));
 
-  // ── Language preferences (personal, not system) ──────────────────────────
-  const { lang, setLang } = useLanguage();
-
   if (settingsQuery.isLoading) {
     return (
       <div className="space-y-6">
@@ -574,48 +569,6 @@ export default function AdminSettingsPage() {
           </AlertDescription>
         </Alert>
       )}
-
-      {/* Personal Language Preferences */}
-      <Card className="rounded-2xl shadow-card">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Globe className="h-5 w-5" />
-            </div>
-            Ngôn ngữ hiển thị
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">Chọn ngôn ngữ cho giao diện Admin Panel của bạn.</p>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-3 max-w-sm">
-            {(["vi", "en"] as Language[]).map((langOption) => (
-              <button
-                key={langOption}
-                type="button"
-                onClick={() => setLang(langOption)}
-                className={`flex items-center gap-3 rounded-2xl border-2 p-4 text-left transition-all ${
-                  lang === langOption
-                    ? "border-primary bg-primary/5"
-                    : "border-border bg-muted/30 hover:bg-muted"
-                }`}
-              >
-                <span className="text-2xl">{langOption === "vi" ? "🇻🇳" : "🇬🇧"}</span>
-                <div>
-                  <p className={`text-sm font-semibold ${lang === langOption ? "text-primary" : "text-foreground"}`}>
-                    {langOption === "vi" ? "Tiếng Việt" : "English"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {langOption === "vi" ? "Vietnamese" : "Tiếng Anh"}
-                  </p>
-                </div>
-                {lang === langOption && (
-                  <span className="ml-auto text-primary font-bold">✓</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
 
       <SectionCard
         title="Access & Security"

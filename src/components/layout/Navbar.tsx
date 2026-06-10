@@ -17,8 +17,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import logoImg from "@/assets/logo.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { useAdminRole } from "@/hooks/use-admin-role";
-import { LanguageSwitcher } from "@/components/LanguageSwitcher";
-import { useLanguage } from "@/contexts/LanguageContext";
 
 export function Navbar() {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -26,7 +24,6 @@ export function Navbar() {
   const navigate = useNavigate();
   const { user, isLoggedIn, logout } = useAuth();
   const { isAdmin } = useAdminRole();
-  const { t } = useLanguage();
 
   const handleLogout = async () => {
     await logout();
@@ -48,10 +45,10 @@ export function Navbar() {
   const settingsPath = user?.role === "mentor" ? "/mentor/settings" : "/settings";
 
   const baseLinks = [
-    { label: t("nav.home"),   path: homePath },
-    { label: t("nav.search"), path: "/search" },
-    { label: t("nav.map"),    path: "/map" },
-    { label: t("nav.pricing"),path: "/pricing" },
+    { label: "Trang chủ", path: homePath },
+    { label: "Tìm kiếm", path: "/search" },
+    { label: "Bản đồ", path: "/map" },
+    { label: "VET Plus", path: "/pricing" },
   ];
 
   const mentorNotifs = [
@@ -103,7 +100,6 @@ export function Navbar() {
         </div>
 
         <div className="flex items-center gap-2">
-          <LanguageSwitcher />
           {isLoggedIn ? (
             <>
               <Popover>
@@ -117,8 +113,8 @@ export function Navbar() {
                 </PopoverTrigger>
                 <PopoverContent align="end" className="w-80 p-0">
                   <div className="flex items-center justify-between border-b px-4 py-3">
-                    <p className="text-sm font-semibold">{t("nav.notifications")}</p>
-                    <button className="text-xs text-primary hover:underline">{t("nav.markread")}</button>
+                    <p className="text-sm font-semibold">Thông báo</p>
+                    <button className="text-xs text-primary hover:underline">Đánh dấu đã đọc</button>
                   </div>
                   <ScrollArea className="max-h-80">
                     <div className="divide-y">
@@ -140,7 +136,7 @@ export function Navbar() {
                     </div>
                   </ScrollArea>
                   <div className="border-t px-4 py-2 text-center">
-                    <button className="text-xs text-primary hover:underline">{t("nav.viewall")}</button>
+                    <button className="text-xs text-primary hover:underline">Xem tất cả</button>
                   </div>
                 </PopoverContent>
               </Popover>
@@ -171,34 +167,34 @@ export function Navbar() {
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate(profilePath)}>
                     <User className="mr-2 h-4 w-4" />
-                    {t("nav.profile")}
+                    Hồ sơ cá nhân
                   </DropdownMenuItem>
                   {!isAdmin && (
                     <DropdownMenuItem onClick={() => navigate(dashboardPath)}>
                       <DashboardIcon className="mr-2 h-4 w-4" />
-                      {user?.role === "mentor" ? t("nav.mentor_dashboard") : t("nav.learner_dashboard")}
+                      {dashboardLabel}
                     </DropdownMenuItem>
                   )}
                   {!isAdmin && user?.role !== "mentor" && (
                     <DropdownMenuItem onClick={() => navigate("/learner/subscription")}>
                       <Crown className="mr-2 h-4 w-4" />
-                      {t("nav.myplan")}
+                      Gói của tôi
                     </DropdownMenuItem>
                   )}
                   {isAdmin && (
                     <DropdownMenuItem onClick={() => navigate("/admin/dashboard")} className="text-destructive focus:text-destructive">
                       <Shield className="mr-2 h-4 w-4" />
-                      {t("admin.panel")}
+                      Admin Panel
                     </DropdownMenuItem>
                   )}
                   <DropdownMenuItem onClick={() => navigate(settingsPath)}>
                     <Settings className="mr-2 h-4 w-4" />
-                    {t("nav.settings")}
+                    Cài đặt
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
                     <LogOut className="mr-2 h-4 w-4" />
-                    {t("nav.logout")}
+                    Đăng xuất
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -208,7 +204,7 @@ export function Navbar() {
               <Link to="/auth">
                 <Button variant="default" size="sm" className="gradient-primary border-0 text-primary-foreground">
                   <User className="mr-2 h-4 w-4" />
-                  {t("nav.login")}
+                  Đăng nhập
                 </Button>
               </Link>
             </>
