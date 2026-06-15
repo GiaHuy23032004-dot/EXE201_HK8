@@ -13,15 +13,17 @@ export function CategoryChip({ icon: Icon, label, slug }: CategoryChipProps) {
   const gradient = getCourseCategoryGradient(slug);
 
   return (
-    <motion.div whileHover={{ y: -4 }} whileTap={{ scale: 0.95 }}>
+    <motion.div whileHover={{ y: -3 }} whileTap={{ scale: 0.95 }} transition={{ duration: 0.15 }}>
       <Link
         to={`/search?category=${slug}`}
-        className="group flex flex-col items-center gap-2.5 rounded-2xl border bg-white p-4 shadow-card transition-all hover:shadow-card-hover"
+        className="group flex flex-col items-center gap-2 rounded-xl border border-border/50 bg-white p-3 shadow-sm transition-all duration-200 hover:shadow-md hover:border-primary/20"
       >
-        <div className={`flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} shadow-lg shadow-primary/10 transition-transform group-hover:scale-110`}>
-          <Icon className="h-6 w-6 text-white" />
+        <div
+          className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} shadow-md shadow-black/10 transition-transform duration-200 group-hover:scale-110`}
+        >
+          <Icon className="h-5 w-5 text-white" />
         </div>
-        <span className="text-xs font-medium text-card-foreground">{label}</span>
+        <span className="text-center text-[11px] font-medium leading-tight text-foreground">{label}</span>
       </Link>
     </motion.div>
   );
