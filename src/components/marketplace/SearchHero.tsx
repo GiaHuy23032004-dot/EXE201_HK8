@@ -51,13 +51,15 @@ export function SearchHero() {
   };
 
   return (
-    <section className="relative overflow-hidden py-14 md:py-20">
+    <section className="relative py-14 md:py-20">
       {/* Gradient background */}
-      <div className="absolute inset-0 bg-gradient-to-br from-sky-50 via-white to-cyan-50" />
-      {/* Blobs */}
-      <div className="absolute -left-20 -top-20 h-72 w-72 rounded-full bg-cyan-200/40 blur-3xl" />
-      <div className="absolute -right-20 -bottom-10 h-64 w-64 rounded-full bg-sky-300/30 blur-3xl" />
-      <div className="absolute left-1/2 top-0 h-40 w-80 -translate-x-1/2 rounded-full bg-teal-200/20 blur-2xl" />
+      <div className="absolute inset-0 bg-gradient-to-br from-sky-50 via-white to-cyan-50 overflow-hidden" />
+      {/* Blobs — clipped separately so they don't affect dropdown */}
+      <div className="pointer-events-none absolute inset-0 overflow-hidden">
+        <div className="absolute -left-20 -top-20 h-72 w-72 rounded-full bg-cyan-200/40 blur-3xl" />
+        <div className="absolute -right-20 -bottom-10 h-64 w-64 rounded-full bg-sky-300/30 blur-3xl" />
+        <div className="absolute left-1/2 top-0 h-40 w-80 -translate-x-1/2 rounded-full bg-teal-200/20 blur-2xl" />
+      </div>
 
       <div className="container relative">
         <motion.div
@@ -131,7 +133,7 @@ export function SearchHero() {
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
-                  className="absolute left-0 right-0 top-full z-50 mt-2 rounded-2xl border bg-white p-3 shadow-xl"
+                  className="absolute left-0 right-0 top-full z-[200] mt-2 rounded-2xl border bg-white p-3 shadow-xl"
                 >
                   {aiText && (
                     <div className="mb-3 rounded-xl bg-sky-50 p-3 text-left text-xs text-sky-800">
