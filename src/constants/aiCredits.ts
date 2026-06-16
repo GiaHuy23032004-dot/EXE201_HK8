@@ -10,10 +10,10 @@ export const AI_CREDIT_COSTS: Record<AiFeature, number> = {
 };
 
 export const AI_FEATURE_LABELS: Record<AiFeature, string> = {
-  course_match: "AI gợi ý khóa học",
+  course_match: "Gợi ý khóa học",
   advisor: "AI tư vấn trước khi đặt lịch",
   search: "AI gợi ý tìm kiếm",
   chat: "EduBot AI",
-  compare: "AI so sánh khóa học",
+  compare: "So sánh khóa học",
   roadmap: "AI tạo lộ trình học",
 };

@@ -35,7 +35,7 @@ Thao tac:
 
 1. Login learner Free.
 2. Mo search/marketplace.
-3. Goi AI Course Match voi nhu cau ngan.
+3. Dung Goi y khoa hoc voi nhu cau ngan.
 4. Mo `/learner/subscription` de chi credits giam.
 
 Noi:
@@ -92,18 +92,18 @@ Noi:
 
 "Learning Profile giup AI co context ngan ve muc tieu hoc, so thich category, ngan sach va format. Query truc tiep cua learner van duoc uu tien hon profile."
 
-## 5:10 - 5:50 | Demo AI Course Match
+## 5:10 - 5:50 | Demo Goi y khoa hoc
 
 Thao tac:
 
 1. Mo `/search`.
 2. Nhap nhu cau.
-3. Bam AI Course Match.
+3. Bam Goi y khoa hoc.
 4. Chi khoa hoc goi y va credit cost.
 
 Noi:
 
-"AI Course Match chi recommend course that tu database, khong duoc bia course id. Ket qua duoc validate truoc khi tra ve UI."
+"Goi y khoa hoc khong dung AI va khong tru credits. VET cham diem dua tren du lieu that nhu tu khoa, danh muc, hinh thuc hoc, hoc phi, danh gia va mentor."
 
 ## 5:50 - 6:25 | Demo AI Advisor
 
@@ -117,18 +117,18 @@ Noi:
 
 "AI Advisor ho tro learner truoc booking, nhung khong cam ket ket qua hoc tap, payment hay refund."
 
-## 6:25 - 7:00 | Demo AI Compare
+## 6:25 - 7:00 | Demo So sanh khoa hoc
 
 Thao tac:
 
 1. Quay lai search.
 2. Chon 2-3 khoa hoc.
-3. Bam AI Compare.
+3. Bam So sanh khoa hoc.
 4. Chi bang so sanh.
 
 Noi:
 
-"AI Compare ton 2 credits vi output dai hon. He thong van validate course IDs va chi so sanh khoa hoc approved/visible."
+"Tinh nang so sanh khoa hoc khong dung AI va khong tru credits. VET chi dung du lieu that dang co nhu hoc phi, hinh thuc, lich hoc, danh gia, mentor va badge uy tin de giup learner quyet dinh truoc khi dat lich."
 
 ## 7:00 - 7:35 | Demo AI Roadmap
 
@@ -148,7 +148,7 @@ Thao tac:
 
 1. Mo lai `/learner/learning-profile`.
 2. Keo xuong AI History.
-3. Filter Course Match, Advisor, Compare, Roadmap.
+3. Filter Advisor, Roadmap va EduBot.
 
 Noi:
 
@@ -186,4 +186,3 @@ Noi:
 "VET Plus da co du cac thanh phan cho demo production trial: pricing, payment, webhook, subscription activation, AI credit gating, voucher, AI History, Learning Profile va admin dashboard.
 
 Huong tiep theo khi public beta la bat billing AI, dat spend cap 10-20 USD/thang ban dau, theo doi token usage va tiep tuc harden webhook/payment monitoring."
-

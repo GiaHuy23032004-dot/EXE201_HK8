@@ -76,8 +76,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlanDefinition[] = [
     summary: "Học thông minh hơn với AI, voucher booking và gợi ý cá nhân hóa.",
     features: [
       "60 AI credits mỗi tháng",
-      "AI gợi ý khóa học cá nhân hóa",
-      "AI so sánh khóa học",
+      "Gợi ý khóa học cá nhân hóa",
+      "So sánh 2–3 khóa học trước khi đặt lịch",
       "AI tạo lộ trình học",
       "AI tư vấn trước khi đặt lịch",
       "2 voucher 30.000đ mỗi tháng",

@@ -55,7 +55,7 @@ export function useLearnerSearchCourses(filters?: CourseSearchFilters) {
     queryFn: async () => {
       let q = supabase
         .from("courses")
-        .select(`*, mentor:profiles!courses_mentor_id_fkey(name, avatar_url, user_id)`)
+        .select(`*, mentor:profiles!courses_mentor_id_fkey(name, avatar_url, user_id), course_schedules(id, day_of_week, start_time, end_time)`)
         .eq("status", "approved")
         .eq("is_hidden", false)
         .order("is_promoted", { ascending: false })

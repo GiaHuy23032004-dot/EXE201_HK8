@@ -9,9 +9,7 @@ import { useAiHistory, type AiHistoryFilter } from "@/hooks/useAiHistory";
 
 const filters: Array<{ value: AiHistoryFilter; label: string }> = [
   { value: "all", label: "Tất cả" },
-  { value: "course_match", label: "Course Match" },
   { value: "advisor", label: "Advisor" },
-  { value: "compare", label: "Compare" },
   { value: "roadmap", label: "Roadmap" },
   { value: "chat_search", label: "Chat/Search" },
 ];
@@ -105,7 +103,7 @@ export function AIHistoryPanel() {
             <Sparkles className="mb-3 h-10 w-10 text-muted-foreground" />
             <p className="font-semibold text-foreground">Chưa có lịch sử AI</p>
             <p className="mt-1 max-w-md text-sm text-muted-foreground">
-              Các lần dùng AI Course Match, Advisor, Compare, Roadmap hoặc EduBot sẽ xuất hiện ở đây.
+              Các lần dùng AI Advisor, Roadmap hoặc EduBot sẽ xuất hiện ở đây.
             </p>
           </div>
         ) : (

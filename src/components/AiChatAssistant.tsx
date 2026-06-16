@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Bot, ExternalLink, Loader2, MapPin, MessageCircle, Send, Sparkles, Star, Trash2, X } from "lucide-react";
+import { AlertCircle, Bot, ExternalLink, Loader2, MapPin, MessageCircle, Send, Sparkles, Star, Trash2, X } from "lucide-react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link, matchPath, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { AI_CREDIT_COSTS } from "@/constants/aiCredits";
 import { AiCreditUpgradeDialog } from "@/components/subscription/AiCreditUpgradeDialog";
 import { isAiCreditRequiredPayload } from "@/lib/aiCreditErrors";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 type CourseRecommendation = {
   id: string;
@@ -26,11 +27,24 @@ type CourseRecommendation = {
   matchType: "exact" | "similar";
 };
 
+type NoMatchInfo = {
+  no_match: true;
+  message: string;
+  suggestions: string[];
+  suggested_filters?: {
+    category?: string | null;
+    format?: string | null;
+    location?: string | null;
+  };
+  can_create_request: boolean;
+};
+
 type Msg = {
   id?: string;
   role: "user" | "assistant";
   content: string;
   recommendations?: CourseRecommendation[];
+  noMatch?: NoMatchInfo;
 };
 
 type ChatConversationRow = {
@@ -81,10 +95,12 @@ type DragState = {
 };
 
 const quickPrompts = [
-  "Gợi ý khóa học cho người mới",
-  "Tìm mentor tiếng Anh công việc gần đây",
-  "Lộ trình học AI công việc",
-  "So sánh học online vs offline",
+  "Cách tìm khóa học phù hợp?",
+  "Tôi đã thanh toán nhưng chưa thấy cập nhật",
+  "Làm sao dùng voucher VET Plus?",
+  "Tôi muốn đổi mật khẩu",
+  "Làm sao đặt lịch học?",
+  "Tôi muốn gửi nhu cầu nếu chưa có khóa phù hợp",
 ];
 
 function getPanelSize() {
@@ -135,6 +151,7 @@ function toChatMessages(rows: ChatMessageRow[] | null | undefined): Msg[] {
       role: row.role as "user" | "assistant",
       content: row.content,
       recommendations: extractRecommendations(row.metadata),
+      noMatch: extractNoMatch(row.metadata),
     }));
 }
 
@@ -173,6 +190,33 @@ function extractRecommendations(metadata: unknown): CourseRecommendation[] | und
     .map(normalizeRecommendation)
     .filter((item): item is CourseRecommendation => Boolean(item));
   return recommendations.length ? recommendations : undefined;
+}
+
+function normalizeNoMatch(value: unknown): NoMatchInfo | undefined {
+  if (!isRecord(value) || value.no_match !== true) return undefined;
+  const suggestions = Array.isArray(value.suggestions)
+    ? value.suggestions.map((item) => String(item)).filter(Boolean).slice(0, 4)
+    : [];
+  const suggestedFilters = isRecord(value.suggested_filters) ? value.suggested_filters : {};
+  return {
+    no_match: true,
+    message:
+      typeof value.message === "string" && value.message.trim()
+        ? value.message
+        : "Hiện tại VET chưa có khóa học khớp chính xác với nhu cầu này.",
+    suggestions,
+    suggested_filters: {
+      category: typeof suggestedFilters.category === "string" ? suggestedFilters.category : null,
+      format: typeof suggestedFilters.format === "string" ? suggestedFilters.format : null,
+      location: typeof suggestedFilters.location === "string" ? suggestedFilters.location : null,
+    },
+    can_create_request: value.can_create_request === true,
+  };
+}
+
+function extractNoMatch(metadata: unknown): NoMatchInfo | undefined {
+  if (!isRecord(metadata)) return undefined;
+  return normalizeNoMatch(metadata.no_match ?? metadata);
 }
 
 function formatCurrency(value: number | null) {
@@ -249,6 +293,46 @@ function CourseRecommendationCards({ courses }: { courses: CourseRecommendation[
   );
 }
 
+function NoMatchPanel({
+  info,
+  onCreateRequest,
+}: {
+  info: NoMatchInfo;
+  onCreateRequest: () => void;
+}) {
+  return (
+    <div className="mt-2 w-full rounded-2xl border border-amber-200 bg-amber-50 p-3 text-left text-amber-950 shadow-sm">
+      <div className="flex gap-2">
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-bold">Hiện chưa có khóa học phù hợp.</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-amber-900/80">
+            {info.message} Mình sẽ không đề xuất khóa học chưa có trong hệ thống để tránh thông tin sai.
+          </p>
+          {info.suggestions.length > 0 && (
+            <ul className="mt-2 space-y-1 text-[11px] leading-relaxed text-amber-900/80">
+              {info.suggestions.map((suggestion) => (
+                <li key={suggestion}>• {suggestion}</li>
+              ))}
+            </ul>
+          )}
+          {info.can_create_request && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={onCreateRequest}
+              className="mt-3 h-8 rounded-xl border-amber-300 bg-white/80 px-3 text-xs font-semibold text-amber-900 hover:bg-white"
+            >
+              Gửi nhu cầu học này
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function renderMessageContent(content: string) {
   const parts: Array<string | { label: string; href: string }> = [];
   const linkRegex = /\[([^\]]+)\]\((\/[^)\s]+|https?:\/\/[^)\s]+)\)/g;
@@ -282,9 +366,76 @@ function renderMessageContent(content: string) {
   );
 }
 
+function getChatRouteContext(pathname: string) {
+  const courseMatch = matchPath("/course/:id", pathname);
+  const bookingMatch = matchPath("/booking/:id", pathname);
+
+  if (courseMatch?.params.id) {
+    return {
+      pageContext: "course_detail",
+      courseId: courseMatch.params.id,
+      bookingId: null,
+    };
+  }
+
+  if (bookingMatch?.params.id) {
+    return {
+      pageContext: "booking",
+      courseId: null,
+      bookingId: bookingMatch.params.id,
+    };
+  }
+
+  if (pathname === "/") return { pageContext: "home", courseId: null, bookingId: null };
+  if (pathname.startsWith("/search")) return { pageContext: "search", courseId: null, bookingId: null };
+  if (pathname === "/pricing" || pathname === "/vet-plus" || pathname === "/learner/subscription") {
+    return { pageContext: "pricing", courseId: null, bookingId: null };
+  }
+  if (pathname.startsWith("/learner/learning-profile")) {
+    return { pageContext: "learning_profile", courseId: null, bookingId: null };
+  }
+  if (pathname.startsWith("/learner/dashboard")) {
+    return { pageContext: "learner_dashboard", courseId: null, bookingId: null };
+  }
+  if (pathname.startsWith("/mentor")) {
+    return { pageContext: "mentor_dashboard", courseId: null, bookingId: null };
+  }
+  if (pathname.startsWith("/admin")) {
+    return { pageContext: "admin", courseId: null, bookingId: null };
+  }
+  return { pageContext: null, courseId: null, bookingId: null };
+}
+
+function normalizeAssistantText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d");
+}
+
+function isPasswordHelpQuestion(content: string) {
+  const normalized = normalizeAssistantText(content);
+  return ["mat khau", "password", "otp", "ma bao mat", "quen mat khau", "doi mat khau"].some((term) =>
+    normalized.includes(term),
+  );
+}
+
+function PasswordSafetyNotice() {
+  return (
+    <div className="mt-2 rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2 text-left text-[11px] leading-relaxed text-amber-900">
+      <div className="flex gap-2">
+        <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-600" />
+        <span>Không chia sẻ mật khẩu, OTP hoặc mã bảo mật trong chat.</span>
+      </div>
+    </div>
+  );
+}
+
 export function AiChatAssistant() {
   const { session, isLoggedIn } = useAuth();
   const location = useLocation();
+  const { toast } = useToast();
   const {
     aiCreditsRemaining,
     isLoading: subscriptionLoading,
@@ -305,9 +456,10 @@ export function AiChatAssistant() {
   const dragStateRef = useRef<DragState | null>(null);
 
   const panelPosition = useMemo(() => clampPosition(widgetPosition, getPanelSize()), [widgetPosition]);
-  const courseRouteMatch = matchPath("/course/:id", location.pathname);
-  const currentCourseId = courseRouteMatch?.params.id ?? null;
-  const pageContext = currentCourseId ? "course_detail" : null;
+  const routeContext = useMemo(() => getChatRouteContext(location.pathname), [location.pathname]);
+  const currentCourseId = routeContext.courseId;
+  const currentBookingId = routeContext.bookingId;
+  const pageContext = routeContext.pageContext;
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -486,6 +638,16 @@ export function AiChatAssistant() {
       });
     };
 
+    const setAssistantNoMatch = (noMatch: NoMatchInfo) => {
+      setMessages((prev) => {
+        const lastIndex = prev.length - 1;
+        if (lastIndex < 0 || prev[lastIndex]?.role !== "assistant") return prev;
+        return prev.map((message, index) =>
+          index === lastIndex ? { ...message, noMatch } : message,
+        );
+      });
+    };
+
     try {
       const resp = await fetch(CHAT_URL, {
         method: "POST",
@@ -494,10 +656,13 @@ export function AiChatAssistant() {
           Authorization: `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({
+          message: text.trim(),
           messages: newMessages,
           conversation_id: conversationId,
           page_context: pageContext,
           course_id: currentCourseId,
+          booking_id: currentBookingId,
+          current_path: location.pathname,
         }),
       });
 
@@ -547,6 +712,10 @@ export function AiChatAssistant() {
             const recommendations = extractRecommendations(parsed);
             if (recommendations?.length) {
               setAssistantRecommendations(recommendations);
+            }
+            const noMatch = normalizeNoMatch(parsed);
+            if (noMatch) {
+              setAssistantNoMatch(noMatch);
             }
             if (typeof parsed.conversation_id === "string") {
               setConversationId(parsed.conversation_id);
@@ -728,7 +897,7 @@ export function AiChatAssistant() {
                   </div>
                   <p className="text-sm font-semibold text-foreground mb-1">Chào bạn!</p>
                   <p className="text-xs text-muted-foreground mb-4">
-                    Mình là EduBot, trợ lý AI giúp bạn tìm khóa học và mentor phù hợp. Tính năng này dùng 1 AI credit.
+                    Xin chào, mình là EduBot. Mình có thể giúp bạn tìm khóa học, đặt lịch, dùng VET Plus, voucher, thanh toán và cài đặt tài khoản. Tính năng này dùng 1 AI credit.
                   </p>
                   <div className="space-y-2">
                     {quickPrompts.map((prompt) => (
@@ -759,7 +928,21 @@ export function AiChatAssistant() {
                     >
                       {renderMessageContent(message.content)}
                     </div>
-                    {message.role === "assistant" && message.recommendations?.length ? (
+                    {message.role === "user" && isPasswordHelpQuestion(message.content) ? (
+                      <PasswordSafetyNotice />
+                    ) : null}
+                    {message.role === "assistant" && message.noMatch ? (
+                      <NoMatchPanel
+                        info={message.noMatch}
+                        onCreateRequest={() =>
+                          toast({
+                            title: "Đã ghi nhận nhu cầu học",
+                            description: "Tính năng ghi nhận nhu cầu sẽ được hoàn thiện sau.",
+                          })
+                        }
+                      />
+                    ) : null}
+                    {message.role === "assistant" && !message.noMatch && message.recommendations?.length ? (
                       <CourseRecommendationCards courses={message.recommendations} />
                     ) : null}
                   </div>

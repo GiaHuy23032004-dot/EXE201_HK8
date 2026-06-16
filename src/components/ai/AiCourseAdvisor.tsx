@@ -261,7 +261,7 @@ export function AiCourseAdvisor({
                 {subscriptionLoading
                   ? "Đang tải AI credits..."
                   : isLoggedIn
-                    ? `Bạn còn ${aiCreditsRemaining} AI credits. Credits dùng chung cho EduBot, AI Search, Advisor, Compare và Roadmap.`
+                    ? `Bạn còn ${aiCreditsRemaining} AI credits. Credits dùng chung cho EduBot, AI Advisor và AI Roadmap.`
                     : "Đăng nhập để dùng AI Advisor."}
               </p>
             </div>

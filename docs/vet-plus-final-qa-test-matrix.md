@@ -5,11 +5,11 @@ Dung bang nay de tick pass/fail truoc demo Phase 8. Moi test nen thuc hien tren 
 | Nhom test | Muc tieu | Buoc test | Ket qua ky vong | Status |
 | --- | --- | --- | --- | --- |
 | Learner Free | Xac nhan user Free co AI credits dung thu | Login learner Free, vao `/learner/subscription` | Hien goi Free, con 3 AI credits neu chua dung trong thang | [ ] Pass / [ ] Fail |
-| Learner Free | Chan AI khi het credit | Dung AI den khi credit ve 0, goi lai AI Course Match | Khong goi AI provider, hien modal/nut nang cap VET Plus | [ ] Pass / [ ] Fail |
+| Learner Free | Chan AI khi het credit | Dung AI den khi credit ve 0, goi AI Advisor/Roadmap/EduBot | Khong goi AI provider, hien modal/nut nang cap VET Plus | [ ] Pass / [ ] Fail |
 | Learner Plus | Xac nhan Plus active | Login learner Plus, vao `/learner/subscription` | Hien Plus active, 60 AI credits theo chu ky, 2 voucher neu data da tao | [ ] Pass / [ ] Fail |
-| AI Course Match | Tim khoa hoc bang AI co credit gating | Vao search/marketplace, nhap nhu cau, bam AI Course Match | Tru 1 credit, tra ve khoa hoc that, log vao `ai_usage_logs` | [ ] Pass / [ ] Fail |
+| Goi y khoa hoc | Tim khoa hoc phu hop bang du lieu that | Vao search/marketplace, nhap nhu cau, bam Goi y khoa hoc | Khong tru AI credits, khong goi `ai-search`, hien khoa hoc that va ly do khop rule-based | [ ] Pass / [ ] Fail |
 | AI Advisor | Tu van truoc booking | Mo course detail, bam AI Advisor | Tru 1 credit, ket qua khong bia gia/lich/link meeting, metadata co course_id | [ ] Pass / [ ] Fail |
-| AI Compare | So sanh 2-3 khoa hoc | Chon 2-3 khoa trong search, bam AI Compare | Tru 2 credits, hien bang so sanh va course ids hop le | [ ] Pass / [ ] Fail |
+| So sanh khoa hoc | So sanh 2-3 khoa hoc bang du lieu that | Chon 2-3 khoa trong search, bam So sanh khoa hoc | Khong tru AI credits, khong goi `ai-compare`, hien bang so sanh theo gia/lich/hinh thuc/danh gia/mentor | [ ] Pass / [ ] Fail |
 | AI Roadmap | Tao lo trinh hoc | Vao `/learner/roadmap`, nhap muc tieu va tao roadmap | Tru 3 credits, roadmap co weekly plan va khoa hoc goi y hop le | [ ] Pass / [ ] Fail |
 | Learning Profile | Luu ho so hoc tap | Vao `/learner/learning-profile`, nhap goal, category, budget, format, bam luu | RPC `upsert_my_learning_profile` thanh cong, toast thanh cong | [ ] Pass / [ ] Fail |
 | Learning Profile | AI dung profile lam context phu | Luu category/format/budget, goi AI Search/Roadmap voi query ngan | AI van uu tien query truc tiep, metadata co `learning_profile_used = true` | [ ] Pass / [ ] Fail |
@@ -28,7 +28,7 @@ Dung bang nay de tick pass/fail truoc demo Phase 8. Moi test nen thuc hien tren 
 | Marketplace regression | Search/filter marketplace | Mo `/search`, loc category, format, map neu can | Danh sach khoa hoc approved/visible load binh thuong | [ ] Pass / [ ] Fail |
 | Unauthorized access test | Chan learner vao admin | Login learner, mo `/admin/subscriptions` | Bi redirect/403, khong thay du lieu admin | [ ] Pass / [ ] Fail |
 | Unauthorized access test | Chan anonymous AI/private data | Logout, goi AI feature hoac `/learner/learning-profile` | Yeu cau dang nhap, khong tra AI history/profile | [ ] Pass / [ ] Fail |
-| Unauthorized access test | Mentor khong dung learner AI gated flow neu bi chan | Login mentor, goi AI Advisor/Compare/Roadmap learner-only | Tra `LEARNER_REQUIRED` hoac UI chan hop ly | [ ] Pass / [ ] Fail |
+| Unauthorized access test | Mentor khong dung learner AI gated flow neu bi chan | Login mentor, goi AI Advisor/Roadmap learner-only | Tra `LEARNER_REQUIRED` hoac UI chan hop ly | [ ] Pass / [ ] Fail |
 
 ## Smoke SQL Sau QA
 
@@ -52,4 +52,3 @@ from public.subscription_vouchers
 order by created_at desc
 limit 10;
 ```
-

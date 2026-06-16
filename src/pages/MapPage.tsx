@@ -538,26 +538,22 @@ export default function MapPage() {
       : null,
   ].filter(Boolean) as string[];
   const resultSummaryText =
-    filteredCourses.length === 0
-      ? "Không có lớp phù hợp"
-      : `${filteredCourses.length} lớp${selectedCategory !== "all" ? ` ${selectedCategoryLabel}` : ""}${
-          radius !== "all" ? ` trong ${radius}km` : ""
-        }`;
+    filteredCourses.length === 0 ? "Không có lớp phù hợp" : `${filteredCourses.length} lớp phù hợp`;
 
   return (
     <MainLayout hideFooter>
       <div className="flex min-h-[calc(100vh-4rem)] flex-col overflow-hidden bg-background lg:h-[calc(100vh-4rem)] lg:flex-row">
-        <aside className="order-2 flex min-h-0 w-full flex-col border-t bg-card lg:order-1 lg:h-full lg:w-[360px] xl:w-[380px] lg:border-r lg:border-t-0">
-          <div className="shrink-0 border-b p-3.5">
-            <div className="flex items-center gap-2">
+        <aside className="order-2 flex min-h-0 w-full flex-col border-t bg-white shadow-[12px_0_34px_rgba(15,23,42,0.06)] lg:order-1 lg:h-full lg:w-[400px] lg:border-r lg:border-t-0 xl:w-[420px]">
+          <div className="shrink-0 border-b bg-white px-5 py-4">
+            <div className="flex items-center gap-3">
               <Link to="/search">
-                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl">
+                <Button variant="ghost" size="icon" className="h-9 w-9 rounded-xl bg-muted/60 hover:bg-muted">
                   <ArrowLeft className="h-4 w-4" />
                 </Button>
               </Link>
               <div className="min-w-0">
-                <h1 className="text-xl font-bold text-foreground">Lớp học gần bạn</h1>
-                <p className="text-xs text-muted-foreground">
+                <h1 className="text-[22px] font-bold leading-tight text-foreground">Lớp học gần bạn</h1>
+                <p className="mt-0.5 text-sm leading-snug text-muted-foreground">
                   Khám phá khóa học offline quanh khu vực bạn quan tâm.
                 </p>
               </div>
@@ -574,13 +570,13 @@ export default function MapPage() {
             )}
           </div>
 
-          <div className="shrink-0 border-b bg-muted/20 p-2.5">
-            <div className="space-y-2 rounded-2xl border bg-card p-3 shadow-sm">
-              <div className="space-y-1">
-              <Label htmlFor="map-intent-search" className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          <div className="shrink-0 border-b bg-slate-50/80 px-5 py-4">
+            <div className="space-y-4 rounded-2xl border border-border/70 bg-white p-4 shadow-[0_10px_34px_rgba(15,23,42,0.07)]">
+              <div className="space-y-1.5">
+              <Label htmlFor="map-intent-search" className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                 Bạn muốn học gì?
               </Label>
-              <div className="flex h-10 items-center gap-2 rounded-xl border bg-background px-3">
+              <div className="flex h-[42px] items-center gap-2 rounded-xl border bg-background px-3 transition-colors focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
                 <Search className="h-4 w-4 text-muted-foreground" />
                 <Input
                   id="map-intent-search"
@@ -609,17 +605,17 @@ export default function MapPage() {
               )}
             </div>
 
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Danh mục</p>
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">Danh mục</p>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-10 w-full justify-between rounded-xl bg-background px-3 text-sm font-medium"
+                      className="h-[42px] w-full justify-between rounded-xl bg-background px-3 text-sm font-medium shadow-none"
                     >
                       <span className={selectedCategory === "all" ? "text-muted-foreground" : "text-foreground"}>
-                        {selectedCategory === "all" ? "Tất cả danh mục" : selectedCategoryLabel}
+                        {selectedCategory === "all" ? "Tất cả" : selectedCategoryLabel}
                       </span>
                       <ChevronDown className="h-4 w-4 text-muted-foreground" />
                     </Button>
@@ -638,12 +634,12 @@ export default function MapPage() {
                 </DropdownMenu>
               </div>
 
-              <form onSubmit={submitSearch} className="space-y-1">
-              <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <form onSubmit={submitSearch} className="space-y-2">
+              <Label className="text-[11px] font-bold uppercase tracking-wide text-muted-foreground">
                 Khu vực
               </Label>
               <div className="relative">
-                <div className="flex h-10 items-center gap-2 rounded-xl border bg-background px-3">
+                <div className="flex h-[42px] items-center gap-2 rounded-xl border bg-background px-3 transition-colors focus-within:border-primary/40 focus-within:ring-2 focus-within:ring-primary/10">
                   <Search className="h-4 w-4 text-muted-foreground" />
                   <Input
                     value={searchInput}
@@ -700,7 +696,7 @@ export default function MapPage() {
                   type="submit"
                   variant="outline"
                   disabled={isGeocoding || !searchInput.trim()}
-                  className="h-9 flex-1 rounded-xl"
+                  className="h-9 flex-1 rounded-xl bg-white text-sm shadow-none"
                 >
                   {isGeocoding ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
                   Tìm khu vực
@@ -720,12 +716,13 @@ export default function MapPage() {
               </div>
             </form>
 
-              <div className="space-y-1.5">
+              <div className="space-y-2">
               <Button
                 type="button"
                 onClick={requestCurrentLocation}
                 disabled={isGettingLocation}
-                className="h-10 w-full rounded-xl border border-primary/20 bg-primary/5 px-3 text-primary hover:bg-primary/10"
+                variant="outline"
+                className="h-[42px] w-full rounded-xl border-primary/20 bg-primary/5 px-3 font-semibold text-primary shadow-none hover:bg-primary/10"
               >
                 {isGettingLocation ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <LocateFixed className="mr-2 h-4 w-4" />}
                 {isGettingLocation ? "Đang lấy vị trí..." : "Dùng vị trí của tôi"}
@@ -762,14 +759,14 @@ export default function MapPage() {
               )}
 
               <div className="space-y-1.5">
-                <div className="grid grid-cols-4 rounded-xl border bg-background p-0.5">
+                <div className="grid grid-cols-4 rounded-xl border bg-background p-1">
                   {RADIUS_FILTERS.map((item) => (
                     <button
                       key={item.value}
                       type="button"
                       disabled={item.value !== "all" && !activeOrigin}
                       onClick={() => setRadius(item.value)}
-                      className={`h-8 rounded-lg px-2 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${
+                      className={`h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         radius === item.value
                           ? "bg-primary text-primary-foreground shadow-sm"
                           : "text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -779,11 +776,9 @@ export default function MapPage() {
                     </button>
                   ))}
                 </div>
-                {!activeOrigin && (
-                  <p className="text-[12px] leading-snug text-muted-foreground">
-                    Bật vị trí hoặc nhập khu vực để lọc theo khoảng cách.
-                  </p>
-                )}
+                <p className="text-[12px] leading-snug text-muted-foreground">
+                  Bật vị trí hoặc nhập khu vực để lọc theo khoảng cách.
+                </p>
               </div>
 
               {hasActiveFilters && (
@@ -792,7 +787,7 @@ export default function MapPage() {
                   variant="outline"
                   size="sm"
                   onClick={clearAllFilters}
-                  className="h-9 rounded-xl"
+                  className="h-8 w-fit rounded-xl px-3 text-xs"
                 >
                   <X className="mr-2 h-4 w-4" />
                   Xóa bộ lọc
@@ -802,15 +797,17 @@ export default function MapPage() {
             </div>
           </div>
 
-          <div className="shrink-0 border-b bg-background px-4 py-2.5">
+          <div className="shrink-0 border-b bg-white px-5 py-3">
             <div className="flex items-center justify-between gap-3">
-              <p className="text-sm font-semibold text-foreground">{resultSummaryText}</p>
-              <span className="shrink-0 text-xs text-muted-foreground">{markerCourses.length} marker</span>
+              <p className="text-base font-bold text-foreground">{resultSummaryText}</p>
+              <span className="shrink-0 rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+                {markerCourses.length} marker
+              </span>
             </div>
             {activeFilterBadges.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {activeFilterBadges.map((badge, index) => (
-                  <Badge key={`${badge}-${index}`} variant="outline" className="max-w-full rounded-full bg-muted/60 px-2 py-0.5 text-[11px]">
+                  <Badge key={`${badge}-${index}`} variant="outline" className="max-w-full rounded-full border-primary/15 bg-primary/5 px-2 py-0.5 text-[11px] text-primary">
                     <span className="truncate">{badge}</span>
                   </Badge>
                 ))}
@@ -821,7 +818,7 @@ export default function MapPage() {
             )}
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
+          <div className="min-h-0 flex-1 overflow-y-auto bg-slate-50/80">
             {isLoading ? (
               <div className="flex justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -840,7 +837,7 @@ export default function MapPage() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-2 p-3">
+              <div className="space-y-2.5 p-3.5">
                 {filteredCourses.map((course) => {
                   const courseHasCoordinates =
                     typeof course.latitude === "number" && typeof course.longitude === "number";
@@ -850,50 +847,53 @@ export default function MapPage() {
                       key={course.id}
                       type="button"
                       onClick={() => {
-                        setSelectedCourseId(course.id);
-                        if (!courseHasCoordinates) navigate(`/course/${course.id}`);
+                        navigate(`/course/${course.id}`);
                       }}
-                      className={`flex w-full gap-3 rounded-2xl border bg-card p-3 text-left shadow-sm transition-colors hover:border-primary/25 hover:bg-primary/5 ${
-                        selectedCourseId === course.id ? "border-primary/40 bg-primary/5 ring-1 ring-primary/15" : "border-border"
+                      onMouseEnter={() => courseHasCoordinates && setSelectedCourseId(course.id)}
+                      onFocus={() => courseHasCoordinates && setSelectedCourseId(course.id)}
+                      className={`group flex w-full gap-3 rounded-2xl border bg-white p-2.5 text-left shadow-[0_8px_24px_rgba(15,23,42,0.045)] transition-all hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_14px_34px_rgba(15,23,42,0.09)] ${
+                        selectedCourseId === course.id ? "border-primary/40 bg-primary/5 ring-1 ring-primary/15" : "border-border/80"
                       }`}
                     >
-                      <img
-                        src={course.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200&h=200&fit=crop"}
-                        alt={course.title}
-                        className="h-[68px] w-[68px] shrink-0 rounded-xl object-cover"
-                      />
+                      <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-muted">
+                        <img
+                          src={course.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=200&h=200&fit=crop"}
+                          alt={course.title}
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                        />
+                      </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-2">
-                          <h2 className="line-clamp-2 text-sm font-semibold leading-snug text-card-foreground">{course.title}</h2>
-                          <Badge variant="outline" className="shrink-0 rounded-full border-primary/20 bg-primary/5 px-1.5 py-0 text-[10px] text-primary">
+                          <h2 className="line-clamp-2 text-sm font-bold leading-snug text-card-foreground">{course.title}</h2>
+                          <Badge variant="outline" className="shrink-0 rounded-full border-primary/20 bg-primary/5 px-2 py-0 text-[10px] font-semibold text-primary">
                             Offline
                           </Badge>
                         </div>
-                        <p className="mt-1 truncate text-xs text-muted-foreground">{course.mentor?.name || "Mentor"}</p>
-                        <div className="mt-1.5 flex min-w-0 flex-wrap gap-1.5">
-                          <Badge variant="outline" className="rounded-full border-secondary/20 bg-secondary/5 px-1.5 py-0 text-[10px] text-secondary">
-                            {getCourseCategoryShortLabel(course.category)}
-                          </Badge>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">
+                          {course.mentor?.name || "Mentor"} · {getCourseCategoryShortLabel(course.category)}
+                        </p>
+                        <div className="mt-1.5 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1 font-medium text-foreground">
+                            <Star className="h-3.5 w-3.5 fill-warning text-warning" />
+                            {course.rating || "Mới"}
+                          </span>
+                          <span className="h-1 w-1 rounded-full bg-muted-foreground/40" />
+                          <span className="min-w-0 flex-1 truncate">{course.location || "Chưa có địa chỉ"}</span>
                           {!courseHasCoordinates && (
-                            <Badge variant="outline" className="rounded-full border-warning/30 bg-warning/10 px-1.5 py-0 text-[10px] text-warning">
+                            <Badge variant="outline" className="shrink-0 rounded-full border-warning/30 bg-warning/10 px-1.5 py-0 text-[10px] text-warning">
                               Chưa có tọa độ
                             </Badge>
                           )}
                         </div>
-                        <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <Star className="h-3 w-3 fill-warning text-warning" />
-                            {course.rating}
-                          </span>
+                        <div className="mt-2 flex items-end justify-between gap-2">
+                          <p className="text-sm font-bold text-primary">{formatPrice(course.price)}</p>
                           {typeof course.distanceKm === "number" && (
-                            <span className="flex min-w-0 items-center gap-1 truncate">
+                            <span className="flex min-w-0 items-center gap-1 rounded-full bg-primary/5 px-2 py-0.5 text-[11px] font-medium text-primary">
                               <Crosshair className="h-3 w-3" />
                               {course.distanceKm.toFixed(1)} km
                             </span>
                           )}
                         </div>
-                        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{course.location || "Chưa có địa chỉ"}</p>
-                        <p className="mt-1 text-sm font-bold text-primary">{formatPrice(course.price)}</p>
                       </div>
                     </button>
                   );
@@ -985,7 +985,7 @@ export default function MapPage() {
           )}
 
           <div className="pointer-events-none absolute bottom-4 left-1/2 z-[500] -translate-x-1/2">
-            <Badge className="bg-card px-3 py-1.5 text-xs text-card-foreground shadow-elevated">
+            <Badge className="rounded-full border border-border/70 bg-card/95 px-3 py-1.5 text-xs font-semibold text-card-foreground shadow-elevated backdrop-blur">
               <MapPin className="mr-1.5 h-3.5 w-3.5 text-primary" />
               {markerCourses.length} marker • {filteredCourses.length} lớp
             </Badge>

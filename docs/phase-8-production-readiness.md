@@ -16,7 +16,7 @@ Tai lieu nay dung de kiem tra lan cuoi truoc demo/production trial cho VET Plus,
 - [ ] `GEMINI_API_KEY` da cau hinh trong Edge Function secrets.
 - [ ] `AI_PROVIDER` da cau hinh va khop provider hien tai.
 - [ ] `GEMINI_MODEL_FAST` da cau hinh cho tac vu nhe/nhanh.
-- [ ] `GEMINI_MODEL_MAIN` da cau hinh cho tac vu chinh nhu compare/roadmap.
+- [ ] `GEMINI_MODEL_MAIN` da cau hinh cho tac vu chinh nhu roadmap va cac AI feature can output dai.
 - [ ] `AI_MAX_OUTPUT_TOKENS` da cau hinh neu provider wrapper dang doc bien nay.
 - [ ] API key AI khong bao gio duoc goi tu frontend.
 - [ ] AI credit gating van di qua `reserve_ai_usage` va `finalize_ai_usage`.
@@ -33,13 +33,13 @@ Tai lieu nay dung de kiem tra lan cuoi truoc demo/production trial cho VET Plus,
 - [ ] `ai-chat`
 - [ ] `ai-search`
 - [ ] `ai-advisor`
-- [ ] `ai-compare`
+- [ ] `ai-compare` chi la legacy/du phong; flow So sanh khoa hoc hien tai khong goi function nay.
 - [ ] `ai-roadmap`
 - [ ] `create-subscription-payment`
 - [ ] `sepay-webhook`
 - [ ] `admin-subscriptions`
 
-Ghi chu: neu vua sua AI Learning Profile/AI History integration, can deploy lai `ai-search`, `ai-advisor`, `ai-compare`, `ai-roadmap`.
+Ghi chu: neu vua sua AI Learning Profile/AI History integration, can deploy lai `ai-search`, `ai-advisor`, `ai-roadmap`. Flow So sanh khoa hoc hien tai dung du lieu frontend nen khong can deploy `ai-compare`.
 
 ## 3. Database / RPC Can Ton Tai
 
@@ -69,7 +69,7 @@ Ghi chu: neu vua sua AI Learning Profile/AI History integration, can deploy lai 
 - [ ] Can bat billing truoc public beta hoac truoc khi cho user tra tien that.
 - [ ] Khi bat billing, dat Project Spend Cap ban dau khoang 10-20 USD/thang.
 - [ ] Log token usage vao `ai_usage_logs.metadata` gom provider, model, input/output/total tokens neu provider tra ve.
-- [ ] Theo doi cac AI feature ton credit cao hon nhu `compare` va `roadmap`.
+- [ ] Theo doi cac AI feature ton credit cao hon nhu `roadmap`. So sanh khoa hoc hien tai khong tru AI credits.
 
 ## 5. Security & Access
 
@@ -91,4 +91,3 @@ Ghi chu: neu vua sua AI Learning Profile/AI History integration, can deploy lai 
 - [ ] Demo AI History hien log sau khi goi AI.
 - [ ] Demo Learning Profile luu duoc va AI functions doc context ngan.
 - [ ] Regression marketplace, booking, mentor dashboard, mentor wallet va admin pages van load.
-

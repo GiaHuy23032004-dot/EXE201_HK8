@@ -26,6 +26,47 @@ const validCategories = [
   "ai-productivity",
 ] as const;
 
+const RELATED_MATCH_THRESHOLD = 25;
+
+const COURSE_TOPIC_GROUPS = [
+  {
+    id: "martial_arts",
+    terms: ["vo thuat", "mma", "boxing", "boxer", "karate", "taekwondo", "vovinam", "muay thai", "kickboxing", "judo"],
+  },
+  {
+    id: "racket_sports",
+    terms: ["pickleball", "tennis", "cau long", "badminton", "bong ban", "table tennis"],
+  },
+  {
+    id: "guitar",
+    terms: ["guitar", "gita", "dan guitar", "acoustic", "guitar acoustic"],
+  },
+  {
+    id: "english",
+    terms: ["tieng anh", "english", "ielts", "toeic", "anh van", "giao tiep tieng anh"],
+  },
+  {
+    id: "programming",
+    terms: ["python", "java", "react", "javascript", "typescript", "fullstack", "backend", "frontend", "lap trinh", "coding", "web"],
+  },
+  {
+    id: "design_creative",
+    terms: ["photoshop", "figma", "thiet ke", "design", "ui ux", "illustrator"],
+  },
+  {
+    id: "public_speaking",
+    terms: ["mc", "thuyet trinh", "public speaking", "noi truoc dam dong", "dan chuong trinh"],
+  },
+  {
+    id: "barista",
+    terms: ["barista", "pha che", "ca phe", "coffee", "do uong", "bartender", "cocktail"],
+  },
+  {
+    id: "wellness",
+    terms: ["yoga", "gym", "fitness", "boi", "swimming"],
+  },
+] as const;
+
 type CourseCategory = (typeof validCategories)[number];
 type AiFeature = keyof typeof aiCreditCosts;
 type DetectedFormat = "online" | "offline" | "any";
@@ -87,6 +128,7 @@ type ParsedNeed = {
   location: string | null;
   schedulePreference: string | null;
   keywords: string[];
+  topicGroup: string | null;
 };
 
 type LearningProfile = {
@@ -160,6 +202,21 @@ function normalizeText(value: unknown) {
     .replace(/đ/g, "d");
 }
 
+function findTopicGroup(normalizedText: string) {
+  return COURSE_TOPIC_GROUPS.find((group) =>
+    group.terms.some((term) => normalizedText.includes(term))
+  ) ?? null;
+}
+
+function getTopicMatch(topicGroupId: string | null, candidateText: string) {
+  if (!topicGroupId) return { required: false, score: 0, matchType: "none" as const };
+  const topicGroup = COURSE_TOPIC_GROUPS.find((group) => group.id === topicGroupId);
+  if (!topicGroup) return { required: false, score: 0, matchType: "none" as const };
+  const relatedTopicHit = topicGroup.terms.some((term) => candidateText.includes(term));
+  if (!relatedTopicHit) return { required: true, score: 0, matchType: "none" as const };
+  return { required: true, score: 32, matchType: "related" as const };
+}
+
 function clampScore(value: unknown) {
   const score = Number(value);
   if (!Number.isFinite(score)) return 70;
@@ -172,7 +229,7 @@ function normalizeCategory(value: unknown): CourseCategory {
 
   if (["chess", "board-game", "co", "cờ"].includes(normalized)) return "mind-sports";
   if (["english", "language", "ngoai-ngu", "tieng-anh"].includes(normalized)) return "career-english";
-  if (["sport", "sports", "fitness", "yoga", "pickleball", "tennis"].includes(normalized)) return "modern-sports";
+  if (["sport", "sports", "fitness", "yoga", "pickleball", "tennis", "vo-thuat", "mma", "boxing", "karate", "taekwondo", "vovinam", "muay-thai", "kickboxing", "judo"].includes(normalized)) return "modern-sports";
   if (["barista", "beverage", "coffee", "cooking", "food"].includes(normalized)) return "barista-beverage";
   if (["content", "speaking", "presentation", "mc", "thuyet-trinh"].includes(normalized)) return "content-speaking";
   return "ai-productivity";
@@ -207,7 +264,7 @@ function detectCategory(text: string): CourseCategory | null {
   const rules: Array<[CourseCategory, string[]]> = [
     ["mind-sports", ["co vua", "co tuong", "chess", "tu duy chien thuat", "chien thuat"]],
     ["career-english", ["tieng anh", "ielts", "toeic", "giao tiep", "english", "cong viec"]],
-    ["modern-sports", ["the thao", "yoga", "pickleball", "tennis", "boi", "gym", "fitness"]],
+    ["modern-sports", ["the thao", "yoga", "pickleball", "tennis", "boi", "gym", "fitness", "vo thuat", "mma", "boxing", "karate", "taekwondo", "vovinam", "muay thai", "kickboxing", "judo"]],
     ["barista-beverage", ["barista", "ca phe", "coffee", "do uong", "pha che", "bartender"]],
     ["content-speaking", ["mc", "thuyet trinh", "noi dung", "content", "presentation", "noi truoc dam dong"]],
     ["ai-productivity", ["ai", "automation", "tu dong hoa", "cong cu", "nang suat", "lap trinh", "coding"]],
@@ -263,6 +320,7 @@ function parseNeed(query: string, filters: Record<string, unknown>): ParsedNeed 
     location: String(filters.location ?? "").trim() || null,
     schedulePreference: String(filters.schedulePreference ?? "").trim() || null,
     keywords: extractKeywords(query),
+    topicGroup: findTopicGroup(normalizeText(query))?.id ?? null,
   };
 }
 
@@ -330,14 +388,24 @@ function keywordScore(candidate: CourseCandidate, keywords: string[]) {
 }
 
 function scoreCandidate(candidate: CourseCandidate, need: ParsedNeed) {
-  let score = 20;
-  if (need.category && candidate.category === need.category) score += 30;
-  if (need.format !== "any" && candidate.format === need.format) score += 20;
-  if (need.budget && candidate.price <= need.budget) score += 20;
-  if (need.location && normalizeText(candidate.location).includes(normalizeText(need.location))) score += 10;
-  score += Math.min(10, Math.round((candidate.rating || 0) * 1.5 + Math.min(candidate.review_count, 50) / 10));
-  score += keywordScore(candidate, need.keywords);
-  if (candidate.is_promoted) score += 3;
+  const candidateText = normalizeText(`${candidate.title} ${candidate.description} ${candidate.location ?? ""} ${candidate.category}`);
+  const topicMatch = getTopicMatch(need.topicGroup, candidateText);
+  if (topicMatch.required && topicMatch.score <= 0) return 0;
+
+  const keywordHits = need.keywords.filter((keyword) => candidateText.includes(keyword)).length;
+  if (!topicMatch.required && need.keywords.length && keywordHits === 0 && need.category !== candidate.category) {
+    return 0;
+  }
+
+  let score = 0;
+  score += topicMatch.score;
+  if (need.category && candidate.category === need.category) score += need.keywords.length || topicMatch.required ? 10 : 25;
+  if (need.format !== "any" && candidate.format === need.format) score += 10;
+  if (need.budget && candidate.price <= need.budget) score += 10;
+  if (need.location && normalizeText(candidate.location).includes(normalizeText(need.location))) score += 8;
+  score += Math.min(8, Math.round((candidate.rating || 0) + Math.min(candidate.review_count, 30) / 10));
+  score += Math.min(24, keywordHits * 8);
+  if (candidate.is_promoted && score >= RELATED_MATCH_THRESHOLD) score += 2;
   return Math.max(0, Math.min(100, score));
 }
 
@@ -404,8 +472,13 @@ function buildFallbackResult(
     ],
     course: toPublicCourse(candidate),
   }));
+  const noMatch = recommendations.length === 0;
 
   return {
+    no_match: noMatch,
+    message: noMatch
+      ? "Hiện tại VET chưa có khóa học khớp chính xác với nhu cầu này."
+      : undefined,
     intent_summary: query
       ? `Bạn đang tìm khóa học phù hợp với nhu cầu: "${query}".`
       : "Bạn đang tìm khóa học phù hợp trong VET.",
@@ -418,7 +491,22 @@ function buildFallbackResult(
       : "Bạn có thể chia sẻ thêm ngân sách, hình thức học online/offline hoặc thời gian học mong muốn không?",
     fallback: true,
     fallback_reason: fallbackReason,
-    suggestions: recommendations.map((item) => item.course.title),
+    suggestions: noMatch
+      ? [
+          "Thử nới ngân sách hoặc bỏ điều kiện giá quá thấp.",
+          "Thử đổi hình thức học online/offline.",
+          "Thử dùng từ khóa rộng hơn hoặc chọn danh mục gần liên quan.",
+        ]
+      : recommendations.map((item) => item.course.title),
+    suggested_filters: noMatch
+      ? {
+          category: need.category,
+          format: need.format,
+          budget: need.budget,
+          location: need.location,
+        }
+      : undefined,
+    can_create_request: noMatch,
   };
 }
 
@@ -730,6 +818,7 @@ async function fetchCourseCandidates(
   }
 
   return candidates
+    .filter((candidate) => candidate.score >= RELATED_MATCH_THRESHOLD)
     .sort((a, b) => b.score - a.score || b.rating - a.rating || b.review_count - a.review_count)
     .slice(0, 10);
 }
@@ -758,6 +847,15 @@ serve(async (req) => {
     const learningProfile = await fetchLearningProfile(supabase, userId);
     need = applyLearningProfileToNeed(need, learningProfile);
 
+    const candidates = await fetchCourseCandidates(supabase, need);
+
+    if (!candidates.length) {
+      return jsonResponse({
+        ...buildFallbackResult(prompt, need, [], "no_candidates"),
+        credit_charged: false,
+      });
+    }
+
     const reservation = await reserveAiUsage(supabase, feature, credits, prompt, {
       function: "ai-search",
       type,
@@ -766,25 +864,13 @@ serve(async (req) => {
       parsed_category: need.category,
       parsed_format: need.format,
       parsed_budget: need.budget,
+      topic_group: need.topicGroup,
+      candidate_count: candidates.length,
       learning_profile_used: Boolean(learningProfile),
       profile_preferred_categories: learningProfile?.preferred_categories?.slice(0, 3) ?? [],
     });
     if (!reservation.ok) return reservation.response!;
     usageLogId = reservation.usageLogId;
-
-    const candidates = await fetchCourseCandidates(supabase, need);
-
-    if (!candidates.length) {
-      await finalizeAiUsage(supabase, usageLogId, "success", null);
-      await updateAiUsageMetadata(usageLogId, {
-        task: feature,
-        fallback: true,
-        fallback_reason: "no_candidates",
-        candidate_count: 0,
-        result_summary: "Không tìm thấy khóa học phù hợp trong bộ lọc hiện tại.",
-      });
-      return jsonResponse(buildFallbackResult(prompt, need, [], "no_candidates"));
-    }
 
     try {
       const aiResult = await callAI({

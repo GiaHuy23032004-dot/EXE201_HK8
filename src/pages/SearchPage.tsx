@@ -1,29 +1,20 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { MainLayout } from "@/components/layout/MainLayout";
 import { CourseCard } from "@/components/marketplace/CourseCard";
 import { useLearnerSearchCourses } from "@/hooks/useLearnerCourses";
-import { Search, SlidersHorizontal, MapPin, Monitor, X, LayoutGrid, List, Sparkles, Brain, Loader2, GitCompareArrows, CheckCircle2 } from "lucide-react";
+import { Search, SlidersHorizontal, MapPin, X, LayoutGrid, List, Sparkles, Loader2, GitCompareArrows, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Slider } from "@/components/ui/slider";
 import { motion, AnimatePresence } from "framer-motion";
 import { Link, useSearchParams } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { usePublicMentorTrustBadgeMap } from "@/hooks/usePublicMentorVerification";
 import { COURSE_CATEGORIES, getCourseCategoryShortLabel, normalizeCourseCategory } from "@/constants/courseCategories";
-import { useAuth } from "@/contexts/AuthContext";
-import { useSubscription } from "@/hooks/useSubscription";
 import { useToast } from "@/hooks/use-toast";
-import { AI_CREDIT_COSTS } from "@/constants/aiCredits";
-import { AiCreditUpgradeDialog } from "@/components/subscription/AiCreditUpgradeDialog";
-import { isAiCreditRequiredPayload, readFunctionErrorPayload } from "@/lib/aiCreditErrors";
 import { COURSE_COMPARE_GOALS, DEFAULT_COMPARE_GOAL } from "@/utils/courseCompareRubrics";
 
-const SEARCH_AI_COST = AI_CREDIT_COSTS.search;
-const COMPARE_AI_COST = AI_CREDIT_COSTS.compare;
-
-type AiCourseMatchRecommendation = {
+type CourseSuggestionRecommendation = {
   course_id: string;
   match_score: number;
   reason: string;
@@ -46,96 +37,67 @@ type AiCourseMatchRecommendation = {
   };
 };
 
-type AiCourseMatchResult = {
+type CourseSuggestionResult = {
   intent_summary: string;
   detected_category: string | null;
   detected_format: "online" | "offline" | "any";
   detected_budget: number | null;
-  recommendations: AiCourseMatchRecommendation[];
+  recommendations: CourseSuggestionRecommendation[];
   follow_up_question: string | null;
-  fallback?: boolean;
-  fallback_reason?: string;
-  credit_refunded?: boolean;
 };
 
-type AiCompareCourse = {
+type SuggestionCourseInput = {
   id: string;
   title: string;
-  category?: string | null;
-  category_slug?: string | null;
-  category_name?: string | null;
-  skill_topic?: string | null;
-  skill_domain?: string | null;
-  skill_kind?: string | null;
-  skill_tags?: string[];
-  learning_outcomes?: string[];
-  prerequisites?: string[];
+  mentorName: string;
+  mentorAvatar: string;
+  price: number;
+  rating: number;
+  reviewCount: number;
+  image: string;
+  category: string;
+  format: "online" | "offline";
+  location?: string;
+  promoted?: boolean;
+  studentsCount?: number;
+  scheduleSummary?: string | null;
+  mentorBadges?: string[];
+};
+
+type CompareCourse = {
+  id: string;
+  title: string;
+  category: string | null;
   format?: "online" | "offline";
   price?: number;
-  mentor_name?: string;
+  mentorName: string;
   location?: string | null;
   rating?: number;
-  review_count?: number;
-  students_count?: number;
-  mentor_trust_badges?: string[];
-  mentor_verification_status?: string | null;
-  schedule_summary?: string | null;
+  reviewCount?: number;
+  studentsCount?: number;
+  mentorBadges?: string[];
+  scheduleSummary?: string | null;
 };
 
-type AiCompareResult = {
-  compare_mode?: "same_category" | "cross_category";
-  goal_interpretation?: string;
-  overall_summary?: string;
+type CompareTableRow = {
+  criterion: string;
+  values: Array<{ courseId: string; value: string }>;
+};
+
+type CompareDecisionBranch = {
+  condition: string;
+  courseId: string | null;
+  reason: string;
+};
+
+type CourseCompareResult = {
+  relation: "same_category" | "cross_category";
   summary: string;
-  recommendedCourseId?: string | null;
-  confidence?: "low" | "medium" | "high";
-  best_choice_condition?: string | null;
-  decision_branches?: Array<{
-    condition: string;
-    recommended_course_id: string;
-    reason: string;
-  }>;
-  factualComparison?: Array<{
-    criterion: string;
-    courseA: string;
-    courseB: string;
-  }>;
-  goalBasedAnalysis?: Array<{
-    goal: string;
-    betterChoice: "courseA" | "courseB" | "tie";
-    reason: string;
-  }>;
-  skillInsights?: string[];
-  courseAPros?: string[];
-  courseACons?: string[];
-  courseBPros?: string[];
-  courseBCons?: string[];
-  questionsToAskMentor?: string[];
-  missingInformation?: string[];
-  missing_information?: string[];
-  best_choice_course_id: string | null;
-  comparison_table: Array<{
-    criterion: string;
-    course_values: Array<{ course_id: string; value: string }>;
-  }>;
-  course_analysis: Array<{
-    course_id: string;
-    category_understanding?: string;
-    strengths: string[];
-    weaknesses: string[];
-    best_for: string;
-    not_best_for?: string;
-    practical_outcome?: string;
-  }>;
-  recommendation: string;
-  final_advice?: string;
-  questions_to_ask_mentor: string[];
-};
-
-type AiCompareResponse = {
-  comparison: AiCompareResult;
-  courses: AiCompareCourse[];
-  fallback?: boolean;
+  decisionBranches: CompareDecisionBranch[];
+  tableRows: CompareTableRow[];
+  missingInformation: string[];
+  questionsToAskMentor: string[];
+  courses: CompareCourse[];
 };
 
 function formatVnd(value: number | null | undefined) {
@@ -143,7 +105,419 @@ function formatVnd(value: number | null | undefined) {
   return `${Math.round(value).toLocaleString("vi-VN")}đ`;
 }
 
-function AiCourseMatchPanel({ result }: { result: AiCourseMatchResult }) {
+function normalizeSearchText(value: unknown) {
+  return String(value ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/[^a-z0-9\s./-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function includesAny(text: string, terms: string[]) {
+  return terms.some((term) => text.includes(term));
+}
+
+const SUGGESTION_MATCH_THRESHOLD = 25;
+
+const SUGGESTION_TOPIC_GROUPS = [
+  { id: "martial_arts", terms: ["vo thuat", "mma", "boxing", "karate", "taekwondo", "vovinam", "muay thai", "kickboxing", "judo"] },
+  { id: "racket_sports", terms: ["pickleball", "tennis", "cau long", "badminton", "bong ban"] },
+  { id: "guitar", terms: ["guitar", "gita", "dan guitar", "acoustic"] },
+  { id: "english", terms: ["tieng anh", "english", "ielts", "toeic", "anh van", "giao tiep tieng anh"] },
+  { id: "programming", terms: ["python", "java", "react", "javascript", "typescript", "fullstack", "backend", "frontend", "lap trinh", "coding", "web"] },
+  { id: "design_creative", terms: ["photoshop", "figma", "thiet ke", "design", "ui ux", "illustrator"] },
+  { id: "public_speaking", terms: ["mc", "thuyet trinh", "public speaking", "noi truoc dam dong", "dan chuong trinh"] },
+  { id: "barista", terms: ["barista", "pha che", "ca phe", "coffee", "do uong", "bartender", "cocktail"] },
+  { id: "wellness", terms: ["yoga", "gym", "fitness", "boi", "swimming"] },
+];
+
+function findSuggestionTopicGroup(normalizedText: string) {
+  return SUGGESTION_TOPIC_GROUPS.find((group) => group.terms.some((term) => normalizedText.includes(term))) ?? null;
+}
+
+function getSuggestionTopicScore(topicGroupId: string | null, haystack: string) {
+  if (!topicGroupId) return { required: false, score: 0 };
+  const topicGroup = SUGGESTION_TOPIC_GROUPS.find((group) => group.id === topicGroupId);
+  if (!topicGroup) return { required: false, score: 0 };
+  return topicGroup.terms.some((term) => haystack.includes(term))
+    ? { required: true, score: 32 }
+    : { required: true, score: 0 };
+}
+
+function inferSuggestionCategory(query: string) {
+  const normalized = normalizeSearchText(query);
+  const categoryTerms: Array<{ slug: string; terms: string[] }> = [
+    { slug: "career-english", terms: ["tieng anh", "english", "ielts", "toeic", "giao tiep"] },
+    { slug: "modern-sports", terms: ["pickleball", "tennis", "cau long", "badminton", "bong ro", "the thao", "yoga", "fitness", "gym", "vo thuat", "mma", "boxing", "karate", "taekwondo", "vovinam", "muay thai", "kickboxing", "judo"] },
+    { slug: "ai-productivity", terms: ["ai", "lap trinh", "code", "python", "react", "java", "excel", "automation", "cong cu"] },
+    { slug: "content-speaking", terms: ["mc", "thuyet trinh", "noi truoc dam dong", "content", "video", "sang tao"] },
+    { slug: "barista-beverage", terms: ["barista", "pha che", "ca phe", "cafe", "do uong", "bartender"] },
+    { slug: "mind-sports", terms: ["co vua", "co tuong", "chess", "tu duy", "chien thuat"] },
+  ];
+  return categoryTerms.find((entry) => includesAny(normalized, entry.terms))?.slug ?? null;
+}
+
+function inferSuggestionFormat(query: string): "online" | "offline" | "any" {
+  const normalized = normalizeSearchText(query);
+  if (includesAny(normalized, ["online", "truc tuyen", "tu xa"])) return "online";
+  if (includesAny(normalized, ["offline", "truc tiep", "gan toi", "gan day", "quan ", "o "])) return "offline";
+  return "any";
+}
+
+function inferSuggestionBudget(query: string) {
+  const normalized = normalizeSearchText(query);
+  const hasBudgetIntent = includesAny(normalized, ["duoi", "ngan sach", "gia", "hoc phi", "toi da", "vnd", "dong", " k", " nghin", " trieu"]);
+  const budgetMatch = normalized.match(/(?:duoi|ngan sach|gia|hoc phi|toi da|<=|<)?\s*(\d+(?:[.,]\d+)?)\s*(k|nghin|tr|trieu|vnd|dong|d)?/);
+  if (!budgetMatch || (!hasBudgetIntent && !budgetMatch[2])) return null;
+  const raw = Number(budgetMatch[1].replace(",", "."));
+  if (!Number.isFinite(raw) || raw <= 0) return null;
+  const unit = budgetMatch[2] ?? "";
+  if (unit === "tr" || unit === "trieu") return Math.round(raw * 1_000_000);
+  if (unit === "k" || unit === "nghin") return Math.round(raw * 1_000);
+  return raw > 10_000 ? Math.round(raw) : Math.round(raw * 1_000);
+}
+
+function extractSuggestionKeywords(query: string) {
+  const stopWords = new Set([
+    "toi",
+    "muon",
+    "hoc",
+    "khoa",
+    "lop",
+    "tim",
+    "goi",
+    "y",
+    "duoi",
+    "tren",
+    "gan",
+    "o",
+    "tai",
+    "online",
+    "offline",
+    "truc",
+    "tuyen",
+    "tiep",
+  ]);
+  return normalizeSearchText(query)
+    .split(" ")
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 3 && !stopWords.has(term))
+    .slice(0, 8);
+}
+
+function buildCourseSuggestions(
+  courses: SuggestionCourseInput[],
+  query: string,
+  selectedCategory: string | null,
+  selectedFormat: "all" | "online" | "offline",
+  maxBudget: number,
+  locationQuery: string,
+): CourseSuggestionResult {
+  const inferredCategory = selectedCategory || inferSuggestionCategory(query);
+  const inferredFormat = selectedFormat !== "all" ? selectedFormat : inferSuggestionFormat(query);
+  const inferredBudget = inferSuggestionBudget(query) ?? (maxBudget < 1_000_000 ? maxBudget : null);
+  const keywords = extractSuggestionKeywords(query);
+  const topicGroup = findSuggestionTopicGroup(normalizeSearchText(query));
+  const normalizedLocation = normalizeSearchText(locationQuery || query);
+
+  const scored = courses
+    .map((course) => {
+      let score = 0;
+      const reasons: string[] = [];
+      const haystack = normalizeSearchText([
+        course.title,
+        getCourseCategoryShortLabel(course.category),
+        course.mentorName,
+        course.location,
+      ].filter(Boolean).join(" "));
+      const topicScore = getSuggestionTopicScore(topicGroup?.id ?? null, haystack);
+      if (topicScore.required && topicScore.score <= 0) {
+        return { course, score: 0, reasons };
+      }
+
+      const keywordHits = keywords.filter((keyword) => haystack.includes(keyword)).length;
+      score += topicScore.score;
+
+      if (keywordHits > 0) {
+        score += Math.min(24, keywordHits * 8);
+        reasons.push("Khớp với từ khóa bạn nhập.");
+      }
+
+      if (inferredCategory && course.category === inferredCategory) {
+        score += keywords.length || topicScore.required ? 10 : 25;
+        reasons.push(`Khớp với danh mục ${getCourseCategoryShortLabel(course.category)}.`);
+      }
+
+      if (!topicScore.required && keywords.length && keywordHits === 0 && inferredCategory !== course.category) {
+        return { course, score: 0, reasons: [] };
+      }
+
+      if (inferredFormat !== "any" && course.format === inferredFormat) {
+        score += 10;
+        reasons.push(`Hình thức ${course.format === "online" ? "online" : "offline"}.`);
+      }
+
+      if (inferredBudget && course.price <= inferredBudget) {
+        score += 10;
+        reasons.push(`Phù hợp ngân sách dưới ${formatVnd(inferredBudget)}.`);
+      }
+
+      const ratingScore = Math.min(10, Math.round(Number(course.rating ?? 0) + Math.min(Number(course.reviewCount ?? 0), 20) / 4));
+      if (ratingScore > 0 && score >= SUGGESTION_MATCH_THRESHOLD) {
+        score += ratingScore;
+        reasons.push("Có dữ liệu đánh giá/review để tham khảo.");
+      }
+
+      const normalizedCourseLocation = normalizeSearchText(course.location);
+      if (
+        (course.scheduleSummary && inferredFormat !== "online") ||
+        (normalizedLocation && normalizedCourseLocation && normalizedLocation.split(" ").some((part) => part.length >= 3 && normalizedCourseLocation.includes(part)))
+      ) {
+        score += 5;
+        reasons.push(course.location ? "Có địa điểm/lịch học để đối chiếu." : "Có lịch học để tham khảo.");
+      }
+
+      return { course, score, reasons };
+    })
+    .filter((item) => item.score >= SUGGESTION_MATCH_THRESHOLD)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 4);
+
+  const recommendations = scored.map(({ course, score, reasons }) => ({
+    course_id: course.id,
+    match_score: Math.min(100, score),
+    reason: reasons.slice(0, 3).join(" "),
+    pros: reasons.slice(0, 3),
+    considerations: [
+      !course.scheduleSummary ? "Chưa có lịch học trong dữ liệu danh sách." : "",
+      !course.mentorBadges?.length ? "Chưa có badge uy tín công khai." : "",
+    ].filter(Boolean),
+    course: {
+      id: course.id,
+      title: course.title,
+      mentorName: course.mentorName,
+      mentorAvatar: course.mentorAvatar,
+      price: course.price,
+      rating: course.rating,
+      reviewCount: course.reviewCount,
+      image: course.image,
+      category: course.category,
+      format: course.format,
+      location: course.location,
+      studentsCount: course.studentsCount,
+      promoted: course.promoted,
+    },
+  }));
+
+  return {
+    intent_summary: query.trim() || "Gợi ý dựa trên bộ lọc hiện tại.",
+    detected_category: inferredCategory,
+    detected_format: inferredFormat,
+    detected_budget: inferredBudget,
+    recommendations,
+    follow_up_question: recommendations.length
+      ? "Bạn có thể mở chi tiết khóa học để xem mô tả, lịch học và đặt câu hỏi cho mentor."
+      : null,
+  };
+}
+
+function formatCompareVnd(value: number | null | undefined) {
+  return value ? formatVnd(value) : "Chưa cập nhật";
+}
+
+function formatCompareRating(course: CompareCourse) {
+  const rating = Number(course.rating ?? 0);
+  const reviews = Number(course.reviewCount ?? 0);
+  if (!rating && !reviews) return "Chưa có đánh giá";
+  return `${rating ? rating.toFixed(1) : "Chưa có điểm"} · ${reviews} đánh giá`;
+}
+
+function formatCompareSchedule(course: CompareCourse) {
+  return course.scheduleSummary || "Chưa có lịch học trong dữ liệu danh sách";
+}
+
+function formatCompareTrustBadge(course: CompareCourse) {
+  return course.mentorBadges?.length ? course.mentorBadges.join(", ") : "Chưa có badge uy tín công khai";
+}
+
+function formatCompareLocation(course: CompareCourse) {
+  if (course.format === "online") return "Online";
+  return course.location || "Chưa cập nhật địa điểm";
+}
+
+function trustScore(course: CompareCourse) {
+  const ratingScore = Number(course.rating ?? 0) * 20;
+  const reviewScore = Math.min(Number(course.reviewCount ?? 0), 100);
+  const studentScore = Math.min(Number(course.studentsCount ?? 0), 100) / 2;
+  const badgeScore = course.mentorBadges?.length ? 25 : 0;
+  return ratingScore + reviewScore + studentScore + badgeScore;
+}
+
+function pickByScore(courses: CompareCourse[], scorer: (course: CompareCourse) => number) {
+  let bestCourse: CompareCourse | null = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (const course of courses) {
+    const score = scorer(course);
+    if (score > bestScore) {
+      bestCourse = course;
+      bestScore = score;
+    }
+  }
+  return bestCourse;
+}
+
+function buildCompareBranch(
+  condition: string,
+  course: CompareCourse | null,
+  reason: string,
+): CompareDecisionBranch {
+  return {
+    condition,
+    courseId: course?.id ?? null,
+    reason,
+  };
+}
+
+function buildCourseComparison(courses: CompareCourse[], selectedGoal: string): CourseCompareResult {
+  const categorySet = new Set(courses.map((course) => course.category).filter(Boolean));
+  const relation = categorySet.size <= 1 ? "same_category" : "cross_category";
+  const lowerCostCourse = pickByScore(courses, (course) => -Number(course.price ?? Number.MAX_SAFE_INTEGER));
+  const trustedCourse = pickByScore(courses, trustScore);
+  const flexibleCourse = pickByScore(courses, (course) => {
+    const onlineScore = course.format === "online" ? 40 : 0;
+    const scheduleScore = course.scheduleSummary ? 20 : 0;
+    return onlineScore + scheduleScore + trustScore(course) / 20;
+  });
+  const practicalCourse = pickByScore(courses, (course) => {
+    const offlineScore = course.format === "offline" ? 45 : 0;
+    const categoryScore = ["modern-sports", "barista-beverage", "content-speaking"].includes(course.category ?? "") ? 25 : 0;
+    return offlineScore + categoryScore + trustScore(course) / 20;
+  });
+  const careerCourse = pickByScore(courses, (course) => {
+    const categoryScore = ["ai-productivity", "career-english", "content-speaking"].includes(course.category ?? "") ? 45 : 0;
+    return categoryScore + trustScore(course) / 20;
+  });
+  const beginnerCourse = pickByScore(courses, (course) => {
+    const affordableScore = course.price ? Math.max(0, 50 - course.price / 20000) : 10;
+    return affordableScore + trustScore(course) / 25;
+  });
+  const confidenceCourse = pickByScore(courses, (course) => {
+    const categoryScore = ["career-english", "content-speaking"].includes(course.category ?? "") ? 45 : 0;
+    const offlineScore = course.format === "offline" ? 12 : 0;
+    return categoryScore + offlineScore + trustScore(course) / 20;
+  });
+  const hobbyCourse = pickByScore(courses, (course) => {
+    const categoryScore = ["modern-sports", "mind-sports", "barista-beverage"].includes(course.category ?? "") ? 35 : 0;
+    return categoryScore + trustScore(course) / 25;
+  });
+
+  const branches = [
+    buildCompareBranch(
+      "Học để đi làm",
+      careerCourse,
+      careerCourse
+        ? `${careerCourse.title} có tín hiệu phù hợp hơn với mục tiêu ứng dụng nghề nghiệp dựa trên category, đánh giá và dữ liệu mentor hiện có.`
+        : "Các khóa thuộc hướng học khác nhau; VET chưa có đủ dữ liệu đầu ra nghề nghiệp để chọn thay bạn.",
+    ),
+    buildCompareBranch(
+      "Học từ số 0",
+      beginnerCourse,
+      "VET chưa có field yêu cầu đầu vào riêng, nên gợi ý này ưu tiên học phí dễ tiếp cận và tín hiệu tin cậy công khai.",
+    ),
+    buildCompareBranch(
+      "Giao tiếp/tự tin hơn",
+      confidenceCourse,
+      "Ưu tiên khóa thuộc hướng tiếng Anh, nội dung, MC hoặc thuyết trình; nếu khác lĩnh vực, hãy chọn theo mục tiêu thật của bạn.",
+    ),
+    buildCompareBranch(
+      "Giải trí/sức khỏe",
+      hobbyCourse,
+      "Ưu tiên các khóa thể thao, tư duy chiến thuật hoặc trải nghiệm thực hành nhẹ nhàng nếu dữ liệu category phù hợp.",
+    ),
+    buildCompareBranch(
+      "Tiết kiệm học phí",
+      lowerCostCourse,
+      lowerCostCourse ? `${lowerCostCourse.title} đang có học phí thấp hơn trong các khóa đã chọn.` : "Chưa đủ dữ liệu học phí để so sánh.",
+    ),
+    buildCompareBranch(
+      "Mentor uy tín hơn",
+      trustedCourse,
+      trustedCourse
+        ? `${trustedCourse.title} có tín hiệu tin cậy tốt hơn dựa trên rating, số đánh giá, số học viên và badge công khai nếu có.`
+        : "Chưa đủ dữ liệu rating, review hoặc badge để so sánh độ tin cậy.",
+    ),
+    buildCompareBranch(
+      "Linh hoạt lịch học",
+      flexibleCourse,
+      flexibleCourse
+        ? `${flexibleCourse.title} có lợi thế hơn nếu bạn ưu tiên học online hoặc khóa có lịch học đã được cập nhật.`
+        : "Chưa đủ dữ liệu lịch học để đánh giá độ linh hoạt.",
+    ),
+  ];
+
+  const selectedGoalMap: Record<string, string> = {
+    career: "Học để đi làm",
+    beginner_zero: "Học từ số 0",
+    communication_confidence: "Giao tiếp/tự tin hơn",
+    hobby_health: "Giải trí/sức khỏe",
+    lower_cost: "Tiết kiệm học phí",
+    trusted_mentor: "Mentor uy tín hơn",
+    unsure: "Mentor uy tín hơn",
+  };
+  const selectedCondition = selectedGoalMap[selectedGoal];
+  const orderedBranches = selectedCondition
+    ? [
+        ...branches.filter((branch) => branch.condition === selectedCondition),
+        ...branches.filter((branch) => branch.condition !== selectedCondition),
+      ]
+    : branches;
+
+  const tableRows: CompareTableRow[] = [
+    { criterion: "Học phí", values: courses.map((course) => ({ courseId: course.id, value: formatCompareVnd(course.price) })) },
+    { criterion: "Hình thức", values: courses.map((course) => ({ courseId: course.id, value: course.format === "online" ? "Online" : "Offline" })) },
+    { criterion: "Lịch học", values: courses.map((course) => ({ courseId: course.id, value: formatCompareSchedule(course) })) },
+    { criterion: "Đánh giá", values: courses.map((course) => ({ courseId: course.id, value: formatCompareRating(course) })) },
+    { criterion: "Mentor", values: courses.map((course) => ({ courseId: course.id, value: course.mentorName || "Mentor VET" })) },
+    { criterion: "Số học viên", values: courses.map((course) => ({ courseId: course.id, value: `${course.studentsCount ?? 0} học viên` })) },
+    { criterion: "Badge uy tín", values: courses.map((course) => ({ courseId: course.id, value: formatCompareTrustBadge(course) })) },
+    { criterion: "Địa điểm", values: courses.map((course) => ({ courseId: course.id, value: formatCompareLocation(course) })) },
+  ];
+
+  const missingInformation = [
+    "Chưa có đầu ra cụ thể sau khóa học trong dữ liệu danh sách.",
+    "Chưa có yêu cầu đầu vào trong dữ liệu danh sách.",
+    "Chưa rõ tỷ lệ thực hành/feedback từ dữ liệu hiện có.",
+    ...courses
+      .filter((course) => !course.mentorBadges?.length)
+      .map((course) => `${course.title}: chưa có badge uy tín công khai.`),
+    ...courses
+      .filter((course) => !course.scheduleSummary)
+      .map((course) => `${course.title}: chưa có lịch học trong dữ liệu danh sách.`),
+  ];
+
+  return {
+    relation,
+    summary:
+      relation === "cross_category"
+        ? "Hai khóa học thuộc hai hướng học khác nhau. Lựa chọn phù hợp phụ thuộc vào mục tiêu học của bạn."
+        : "Các khóa học có thể so sánh trực tiếp theo giá, lịch học, hình thức và đánh giá.",
+    decisionBranches: orderedBranches,
+    tableRows,
+    missingInformation: [...new Set(missingInformation)],
+    questionsToAskMentor: [
+      "Khóa học có đầu ra cụ thể hoặc sản phẩm thực hành cuối khóa không?",
+      "Người mới bắt đầu cần chuẩn bị kiến thức hoặc dụng cụ gì?",
+      "Mentor phản hồi bài tập và theo dõi tiến độ như thế nào?",
+      "Lịch học có thể điều chỉnh nếu learner bận không?",
+    ],
+    courses,
+  };
+}
+
+function CourseSuggestionPanel({ result }: { result: CourseSuggestionResult }) {
   return (
     <div className="container pt-6">
       <Card className="overflow-hidden rounded-2xl border-primary/15 bg-gradient-to-br from-primary/5 via-background to-cyan-50/60 shadow-card">
@@ -151,17 +525,14 @@ function AiCourseMatchPanel({ result }: { result: AiCourseMatchResult }) {
           <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="min-w-0">
               <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                <Brain className="h-3.5 w-3.5" />
-                AI Course Match
+                <Sparkles className="h-3.5 w-3.5" />
+                Gợi ý khóa học
               </div>
               <h2 className="text-xl font-bold text-foreground">Gợi ý khóa học phù hợp</h2>
-              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{result.intent_summary}</p>
+              <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                VET gợi ý dựa trên từ khóa, danh mục, hình thức học, học phí và đánh giá.
+              </p>
             </div>
-            {result.fallback && (
-              <Badge variant="outline" className="w-fit rounded-full border-amber-200 bg-amber-50 text-amber-700">
-                Gợi ý dự phòng
-              </Badge>
-            )}
           </div>
 
           <div className="mb-5 flex flex-wrap gap-2">
@@ -178,18 +549,13 @@ function AiCourseMatchPanel({ result }: { result: AiCourseMatchResult }) {
                 Ngân sách: dưới {formatVnd(result.detected_budget)}
               </Badge>
             )}
-            {result.credit_refunded && (
-              <Badge variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 text-emerald-700">
-                Credit đã được hoàn do AI lỗi
-              </Badge>
-            )}
           </div>
 
           {result.recommendations.length === 0 ? (
             <div className="rounded-2xl border border-dashed bg-background/70 p-6 text-center">
-              <p className="font-semibold text-foreground">Hiện chưa có khóa học phù hợp.</p>
+              <p className="font-semibold text-foreground">Chưa có khóa học phù hợp.</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Hãy thử nới ngân sách hoặc chọn hình thức học khác.
+                Hãy thử đổi từ khóa, ngân sách hoặc hình thức học.
               </p>
               {result.follow_up_question && (
                 <p className="mt-3 text-sm font-medium text-primary">{result.follow_up_question}</p>
@@ -266,41 +632,9 @@ function AiCourseMatchPanel({ result }: { result: AiCourseMatchResult }) {
   );
 }
 
-function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
+function CourseCompareResultPanel({ result }: { result: CourseCompareResult }) {
   const courseMap = new Map(result.courses.map((course) => [course.id, course]));
-  const recommendedCourseId = result.comparison.recommendedCourseId ?? result.comparison.best_choice_course_id;
-  const bestCourse = recommendedCourseId
-    ? courseMap.get(recommendedCourseId)
-    : null;
-  const confidenceLabel = result.comparison.confidence === "high"
-    ? "Tự tin cao"
-    : result.comparison.confidence === "medium"
-      ? "Tự tin vừa"
-      : "Cần hỏi thêm";
-  const confidenceClass = result.comparison.confidence === "high"
-    ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-    : result.comparison.confidence === "medium"
-      ? "border-blue-200 bg-blue-50 text-blue-700"
-      : "border-amber-200 bg-amber-50 text-amber-700";
-  const factualRows = result.comparison.factualComparison?.length
-    ? result.comparison.factualComparison
-    : result.comparison.comparison_table.map((row) => ({
-        criterion: row.criterion,
-        courseA: row.course_values.find((item) => item.course_id === result.courses[0]?.id)?.value ?? "-",
-        courseB: row.course_values.find((item) => item.course_id === result.courses[1]?.id)?.value ?? "-",
-      }));
-  const questions = result.comparison.questionsToAskMentor?.length
-    ? result.comparison.questionsToAskMentor
-    : result.comparison.questions_to_ask_mentor;
-  const skillInsights = result.comparison.skillInsights ?? [];
-  const compareMode = result.comparison.compare_mode ?? "same_category";
-  const isCrossCategory = compareMode === "cross_category";
-  const decisionBranches = result.comparison.decision_branches ?? [];
-  const missingInfo = result.comparison.missingInformation?.length
-    ? result.comparison.missingInformation
-    : result.comparison.missing_information ?? [];
-  const summary = result.comparison.overall_summary ?? result.comparison.summary;
-  const finalAdvice = result.comparison.final_advice ?? result.comparison.recommendation;
+  const isCrossCategory = result.relation === "cross_category";
 
   return (
     <div className="container pt-6">
@@ -310,100 +644,56 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
             <div>
               <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-cyan-100 px-3 py-1 text-xs font-semibold text-cyan-700">
                 <GitCompareArrows className="h-3.5 w-3.5" />
-                AI Compare
+                So sánh khóa học
               </div>
-              <h2 className="text-xl font-bold text-foreground">So sánh khóa học bằng AI</h2>
+              <h2 className="text-xl font-bold text-foreground">So sánh khóa học</h2>
               <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-                {summary}
+                VET so sánh dựa trên dữ liệu khóa học hiện có: học phí, hình thức, lịch học, đánh giá và mentor.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
-              {isCrossCategory && (
-                <Badge variant="outline" className="w-fit rounded-full border-orange-200 bg-orange-50 text-orange-700">
-                  Khác lĩnh vực
-                </Badge>
-              )}
-              <Badge variant="outline" className={`w-fit rounded-full ${confidenceClass}`}>
-                {confidenceLabel}
+              <Badge
+                variant="outline"
+                className={`w-fit rounded-full ${
+                  isCrossCategory
+                    ? "border-orange-200 bg-orange-50 text-orange-700"
+                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                }`}
+              >
+                {isCrossCategory ? "Khác lĩnh vực" : "Cùng lĩnh vực"}
               </Badge>
             </div>
           </div>
 
-          {isCrossCategory && (
-            <div className="mb-5 rounded-2xl border border-orange-200 bg-orange-50 p-4 text-sm leading-relaxed text-orange-900">
-              Hai khóa học thuộc hai hướng học khác nhau, nên lựa chọn phụ thuộc vào mục tiêu của bạn.
-              {result.comparison.goal_interpretation ? (
-                <span className="ml-1">{result.comparison.goal_interpretation}</span>
-              ) : null}
-            </div>
-          )}
+          <div className={`mb-5 rounded-2xl border p-4 text-sm leading-relaxed ${
+            isCrossCategory
+              ? "border-orange-200 bg-orange-50 text-orange-900"
+              : "border-emerald-200 bg-emerald-50 text-emerald-900"
+          }`}>
+            {result.summary}
+          </div>
 
-          {bestCourse && (
-            <div className="mb-5 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-              <CheckCircle2 className="mr-2 inline h-4 w-4" />
-              Nếu mục tiêu của bạn là <strong>{result.comparison.best_choice_condition || result.comparison.goalBasedAnalysis?.[0]?.goal || "mục tiêu đã chọn"}</strong>, AI khuyến nghị cân nhắc trước:{" "}
-              <Link to={`/course/${bestCourse.id}`} className="font-bold underline underline-offset-2">
-                {bestCourse.title}
-              </Link>
-            </div>
-          )}
-
-          {!bestCourse && isCrossCategory && (
-            <div className="mb-5 rounded-2xl border border-cyan-200 bg-cyan-50 p-4 text-sm leading-relaxed text-cyan-900">
-              AI chưa thể chọn một khóa tốt nhất vì mục tiêu của bạn chưa rõ. Hãy chọn theo nhánh quyết định phù hợp nhất bên dưới.
-            </div>
-          )}
-
-          {decisionBranches.length > 0 ? (
-            <div className="mb-5 grid gap-3 md:grid-cols-2">
-              {decisionBranches.map((branch) => {
-                const course = courseMap.get(branch.recommended_course_id);
-                return (
-                  <div key={`${branch.condition}-${branch.recommended_course_id}`} className="rounded-2xl border bg-background p-4 shadow-sm">
-                    <p className="text-sm font-semibold text-foreground">{branch.condition}</p>
-                    {course && (
-                      <p className="mt-1 text-xs font-medium text-primary">
-                        Nên cân nhắc:{" "}
-                        <Link to={`/course/${course.id}`} className="underline underline-offset-2">
-                          {course.title}
-                        </Link>
-                      </p>
-                    )}
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{branch.reason}</p>
-                  </div>
-                );
-              })}
-            </div>
-          ) : result.comparison.goalBasedAnalysis?.length ? (
-            <div className="mb-5 grid gap-3 md:grid-cols-2">
-              {result.comparison.goalBasedAnalysis.map((item) => {
-                const betterLabel =
-                  item.betterChoice === "courseA"
-                    ? result.courses[0]?.title
-                    : item.betterChoice === "courseB"
-                      ? result.courses[1]?.title
-                      : "Tùy mục tiêu";
-                return (
-                  <div key={`${item.goal}-${item.reason}`} className="rounded-2xl border bg-background p-4 shadow-sm">
-                    <p className="text-sm font-semibold text-foreground">Nếu ưu tiên: {item.goal}</p>
-                    <p className="mt-1 text-xs font-medium text-primary">Lựa chọn nghiêng về: {betterLabel}</p>
-                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{item.reason}</p>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-
-          {skillInsights.length > 0 && (
-            <div className="mb-5 rounded-2xl border border-cyan-200 bg-cyan-50/70 p-4">
-              <p className="mb-2 font-semibold text-cyan-900">Nhận định AI về kỹ năng/chủ đề</p>
-              <ul className="space-y-1 text-sm leading-relaxed text-cyan-800">
-                {skillInsights.map((item) => (
-                  <li key={item}>• {item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <div className="mb-5 grid gap-3 md:grid-cols-2">
+            {result.decisionBranches.map((branch) => {
+              const course = branch.courseId ? courseMap.get(branch.courseId) : null;
+              return (
+                <div key={`${branch.condition}-${branch.courseId ?? "none"}`} className="rounded-2xl border bg-background p-4 shadow-sm">
+                  <p className="text-sm font-semibold text-foreground">{branch.condition}</p>
+                  {course ? (
+                    <p className="mt-1 text-xs font-medium text-primary">
+                      Nên cân nhắc:{" "}
+                      <Link to={`/course/${course.id}`} className="underline underline-offset-2">
+                        {course.title}
+                      </Link>
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs font-medium text-muted-foreground">Không đủ dữ liệu để chọn một khóa cụ thể.</p>
+                  )}
+                  <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{branch.reason}</p>
+                </div>
+              );
+            })}
+          </div>
 
           <div className="mb-5 overflow-x-auto rounded-2xl border bg-background">
             <table className="w-full min-w-[720px] text-sm">
@@ -415,26 +705,22 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
                       <Link to={`/course/${course.id}`} className="hover:text-primary">
                         {course.title}
                       </Link>
-                      {(course.skill_topic || course.skill_domain) && (
-                        <p className="mt-1 text-xs font-normal text-muted-foreground">
-                          {[course.category_name, course.skill_topic].filter(Boolean).join(" · ")}
-                        </p>
-                      )}
+                      <p className="mt-1 text-xs font-normal text-muted-foreground">
+                        {getCourseCategoryShortLabel(course.category ?? "")}
+                      </p>
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {factualRows.map((row) => (
+                {result.tableRows.map((row) => (
                   <tr key={row.criterion} className="border-t">
                     <td className="px-4 py-3 font-medium text-foreground">{row.criterion}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{row.courseA}</td>
-                    <td className="px-4 py-3 text-muted-foreground">{row.courseB}</td>
-                    {result.courses.slice(2).map((course) => {
-                      const legacyRow = result.comparison.comparison_table.find((item) => item.criterion === row.criterion);
-                      const value = legacyRow?.course_values.find((item) => item.course_id === course.id)?.value ?? "-";
-                      return <td key={course.id} className="px-4 py-3 text-muted-foreground">{value}</td>;
-                    })}
+                    {result.courses.map((course) => (
+                      <td key={course.id} className="px-4 py-3 text-muted-foreground">
+                        {row.values.find((item) => item.courseId === course.id)?.value ?? "-"}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
@@ -442,68 +728,43 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-2">
-            {result.courses.slice(0, 2).map((course, index) => {
-              const analysis = result.comparison.course_analysis.find((item) => item.course_id === course.id);
-              const pros = index === 0
-                ? result.comparison.courseAPros ?? analysis?.strengths ?? []
-                : result.comparison.courseBPros ?? analysis?.strengths ?? [];
-              const cons = index === 0
-                ? result.comparison.courseACons ?? analysis?.weaknesses ?? []
-                : result.comparison.courseBCons ?? analysis?.weaknesses ?? [];
-              if (!course) return null;
-              return (
-                <div key={course.id} className="rounded-2xl border bg-background p-4 shadow-sm">
-                  <h3 className="line-clamp-2 font-semibold text-foreground">{course.title}</h3>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {course.mentor_name || "Mentor"} · {course.price ? formatVnd(course.price) : ""}
-                  </p>
-                  {analysis?.category_understanding && (
-                    <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{analysis.category_understanding}</p>
-                  )}
-                  {analysis?.practical_outcome && (
-                    <p className="mt-3 rounded-xl bg-cyan-50 px-3 py-2 text-sm text-cyan-900">
-                      {analysis.practical_outcome}
-                    </p>
-                  )}
-                  <p className="mt-3 text-sm font-medium text-foreground">Điểm mạnh</p>
-                  <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
-                    {pros.map((item) => <li key={item}>+ {item}</li>)}
-                  </ul>
-                  <p className="mt-3 text-sm font-medium text-foreground">Cần cân nhắc</p>
-                  <ul className="mt-1 space-y-1 text-sm text-muted-foreground">
-                    {cons.map((item) => <li key={item}>- {item}</li>)}
-                  </ul>
-                  {analysis?.not_best_for && (
-                    <p className="mt-3 text-sm text-muted-foreground">
-                      <span className="font-medium text-foreground">Không phù hợp nhất nếu: </span>
-                      {analysis.not_best_for}
-                    </p>
-                  )}
+            {result.courses.map((course) => (
+              <div key={course.id} className="rounded-2xl border bg-background p-4 shadow-sm">
+                <div className="mb-2 flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="rounded-full">{getCourseCategoryShortLabel(course.category ?? "")}</Badge>
+                  <Badge variant="outline" className="rounded-full">{course.format === "online" ? "Online" : "Offline"}</Badge>
                 </div>
-              );
-            })}
+                <h3 className="line-clamp-2 font-semibold text-foreground">{course.title}</h3>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {course.mentorName || "Mentor"} · {formatCompareVnd(course.price)}
+                </p>
+                <ul className="mt-3 space-y-1 text-sm text-muted-foreground">
+                  <li>Đánh giá: {formatCompareRating(course)}</li>
+                  <li>Số học viên: {course.studentsCount ?? 0}</li>
+                  <li>Lịch học: {formatCompareSchedule(course)}</li>
+                  <li>Badge uy tín: {formatCompareTrustBadge(course)}</li>
+                  {course.format === "offline" && <li>Địa điểm: {formatCompareLocation(course)}</li>}
+                </ul>
+              </div>
+            ))}
           </div>
 
-          <div className="mt-5 rounded-2xl bg-primary/5 p-4 text-sm leading-relaxed text-foreground">
-            <strong>Khuyến nghị:</strong> {finalAdvice}
-          </div>
-
-          {missingInfo.length ? (
+          {result.missingInformation.length ? (
             <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4">
-              <p className="mb-2 font-semibold text-amber-900">Thông tin còn thiếu để so sánh chính xác hơn</p>
+              <p className="mb-2 font-semibold text-amber-900">Thông tin còn thiếu</p>
               <ul className="space-y-1 text-sm text-amber-800">
-                {missingInfo.map((item) => (
+                {result.missingInformation.map((item) => (
                   <li key={item}>• {item}</li>
                 ))}
               </ul>
             </div>
           ) : null}
 
-          {questions.length > 0 && (
+          {result.questionsToAskMentor.length > 0 && (
             <div className="mt-4 rounded-2xl border bg-background p-4">
               <p className="mb-2 font-semibold text-foreground">Nên hỏi mentor trước khi đặt lịch</p>
               <ul className="space-y-1 text-sm text-muted-foreground">
-                {questions.map((question) => (
+                {result.questionsToAskMentor.map((question) => (
                   <li key={question}>• {question}</li>
                 ))}
               </ul>
@@ -516,13 +777,7 @@ function AiCompareResultPanel({ result }: { result: AiCompareResponse }) {
 }
 
 export default function SearchPage() {
-  const { session, isLoggedIn } = useAuth();
   const { toast } = useToast();
-  const {
-    aiCreditsRemaining,
-    isLoading: subscriptionLoading,
-    refetch: refetchSubscription,
-  } = useSubscription();
   const [query, setQuery] = useState("");
   const [locationQuery, setLocationQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -530,15 +785,12 @@ export default function SearchPage() {
   const [format, setFormat] = useState<"all" | "online" | "offline">("all");
   const [priceRange, setPriceRange] = useState([0, 1000000]);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  const [aiSuggestions, setAiSuggestions] = useState<string[]>([]);
-  const [aiMatchResult, setAiMatchResult] = useState<AiCourseMatchResult | null>(null);
+  const [courseSuggestionResult, setCourseSuggestionResult] = useState<CourseSuggestionResult | null>(null);
   const [compareCourseIds, setCompareCourseIds] = useState<string[]>([]);
-  const [compareResult, setCompareResult] = useState<AiCompareResponse | null>(null);
+  const [compareResult, setCompareResult] = useState<CourseCompareResult | null>(null);
   const [compareGoal, setCompareGoal] = useState(DEFAULT_COMPARE_GOAL);
   const [compareLoading, setCompareLoading] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
-  const [showAiPanel, setShowAiPanel] = useState(false);
-  const [creditDialogOpen, setCreditDialogOpen] = useState(false);
+  const [courseSuggestionLoading, setCourseSuggestionLoading] = useState(false);
   const [searchParams] = useSearchParams();
 
   // Read query from URL
@@ -560,131 +812,16 @@ export default function SearchPage() {
     minPrice: priceRange[0],
     maxPrice: priceRange[1],
   });
+  const { data: suggestionCandidateCourses = [] } = useLearnerSearchCourses({
+    location: locationQuery,
+    category: selectedCategory,
+    format,
+    minPrice: priceRange[0],
+    maxPrice: priceRange[1],
+  });
   const { data: mentorTrustBadges = new Map() } = usePublicMentorTrustBadgeMap(
-    courses.map((course) => course.mentor?.user_id || course.mentor_id),
+    [...courses, ...suggestionCandidateCourses].map((course) => course.mentor?.user_id || course.mentor_id),
   );
-
-  // AI Course Match suggestions
-  const fetchAiSuggestions = useCallback(async (searchQuery: string) => {
-    const cleanQuery = searchQuery.trim();
-    if (!cleanQuery || cleanQuery.length < 2) {
-      setAiSuggestions([]);
-      setAiMatchResult(null);
-      toast({
-        title: "Nhập từ khóa trước khi dùng AI",
-        description: "Tính năng này dùng 1 AI credit.",
-      });
-      return;
-    }
-
-    if (!session) {
-      toast({
-        title: "Vui lòng đăng nhập để dùng AI",
-        description: "Free có 3 AI credits dùng thử mỗi tháng.",
-      });
-      return;
-    }
-
-    if (aiCreditsRemaining < SEARCH_AI_COST) {
-      setCreditDialogOpen(true);
-      return;
-    }
-
-    setAiLoading(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-search", {
-        body: {
-          query: cleanQuery,
-          type: "course_match",
-          filters: {
-            category: selectedCategory,
-            format,
-            budget: priceRange[1] < 1000000 ? priceRange[1] : undefined,
-            location: locationQuery,
-          },
-        },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-
-      if (error) {
-        const payload = await readFunctionErrorPayload(error);
-        if (isAiCreditRequiredPayload(payload)) {
-          setCreditDialogOpen(true);
-          return;
-        }
-        throw error;
-      }
-
-      if (isAiCreditRequiredPayload(data)) {
-        setCreditDialogOpen(true);
-        return;
-      }
-
-      if (Array.isArray(data?.recommendations)) {
-        setAiMatchResult(data as AiCourseMatchResult);
-        setAiSuggestions([]);
-        setShowAiPanel(false);
-        if (data.recommendations.length === 0) {
-          toast({
-            title: "Chưa có khóa học phù hợp",
-            description: "Hãy thử nới ngân sách hoặc chọn hình thức học khác.",
-          });
-        }
-        return;
-      }
-
-      if (data?.suggestions) {
-        let raw = data.suggestions;
-        if (Array.isArray(raw)) {
-          const suggestions = raw.map((item) => String(item)).filter(Boolean).slice(0, 5);
-          setAiSuggestions(suggestions);
-          setShowAiPanel(suggestions.length > 0);
-          setAiMatchResult(null);
-          return;
-        }
-        if (typeof raw === "string") {
-          try {
-            raw = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              const suggestions = parsed
-                .map((item: unknown) => {
-                  if (typeof item === "string") return item;
-                  if (item && typeof item === "object" && "title" in item) {
-                    const title = (item as { title?: unknown }).title;
-                    return typeof title === "string" ? title : "";
-                  }
-                  return "";
-                })
-                .filter(Boolean)
-                .slice(0, 5);
-              setAiSuggestions(suggestions);
-              setShowAiPanel(suggestions.length > 0);
-              setAiMatchResult(null);
-              return;
-            }
-          } catch (parseError) {
-            console.error("Parse AI suggestions error:", parseError);
-          }
-        }
-      }
-
-      toast({
-        title: "AI chưa có gợi ý phù hợp",
-        description: "Bạn có thể thử từ khóa cụ thể hơn.",
-      });
-    } catch (error) {
-      console.error("AI search error:", error);
-      toast({
-        title: "Không thể dùng AI lúc này",
-        description: "Vui lòng thử lại sau. Nếu AI đã bị lỗi, credit sẽ được hoàn qua hệ thống.",
-        variant: "destructive",
-      });
-    } finally {
-      setAiLoading(false);
-      await refetchSubscription();
-    }
-  }, [aiCreditsRemaining, format, locationQuery, priceRange, refetchSubscription, selectedCategory, session, toast]);
 
   // Map Supabase course sang CourseCard format
   const mappedCourses = courses.map((c) => ({
@@ -701,10 +838,55 @@ export default function SearchPage() {
     location: c.location || undefined,
     promoted: c.is_promoted,
     studentsCount: c.students_count,
+    scheduleSummary: c.course_schedules?.length
+      ? c.course_schedules.map((slot) => `${slot.day_of_week}: ${slot.start_time} - ${slot.end_time}`).join(", ")
+      : null,
+    mentorBadges: mentorTrustBadges.get(c.mentor?.user_id || c.mentor_id) ?? [],
+  }));
+  const mappedSuggestionCourses = suggestionCandidateCourses.map((c) => ({
+    id: c.id,
+    title: c.title,
+    mentorName: c.mentor?.name || "Mentor",
+    mentorAvatar: c.mentor?.avatar_url || "",
+    price: c.price,
+    rating: c.rating,
+    reviewCount: c.review_count,
+    image: c.image_url || "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=600&h=400&fit=crop",
+    category: c.category,
+    format: c.format,
+    location: c.location || undefined,
+    promoted: c.is_promoted,
+    studentsCount: c.students_count,
+    scheduleSummary: c.course_schedules?.length
+      ? c.course_schedules.map((slot) => `${slot.day_of_week}: ${slot.start_time} - ${slot.end_time}`).join(", ")
+      : null,
     mentorBadges: mentorTrustBadges.get(c.mentor?.user_id || c.mentor_id) ?? [],
   }));
 
   const selectedCompareCourses = mappedCourses.filter((course) => compareCourseIds.includes(course.id));
+
+  const handleCourseSuggestions = () => {
+    setCourseSuggestionLoading(true);
+    try {
+      const result = buildCourseSuggestions(
+        mappedSuggestionCourses,
+        query,
+        selectedCategory,
+        format,
+        priceRange[1],
+        locationQuery,
+      );
+      setCourseSuggestionResult(result);
+      toast({
+        title: result.recommendations.length ? "Đã gợi ý khóa học phù hợp" : "Chưa có khóa học phù hợp",
+        description: result.recommendations.length
+          ? "Kết quả dựa trên dữ liệu khóa học hiện có trên VET."
+          : "Hãy thử đổi từ khóa, ngân sách hoặc hình thức học.",
+      });
+    } finally {
+      setCourseSuggestionLoading(false);
+    }
+  };
 
   const toggleCompareCourse = (courseId: string) => {
     setCompareResult(null);
@@ -721,68 +903,28 @@ export default function SearchPage() {
     });
   };
 
-  const handleAiCompare = async () => {
+  const handleCourseCompare = () => {
     if (compareCourseIds.length < 2 || compareCourseIds.length > 3) {
       toast({ title: "Vui lòng chọn từ 2 đến 3 khóa học để so sánh." });
       return;
     }
 
-    if (!session) {
-      toast({
-        title: "Vui lòng đăng nhập để dùng AI Compare",
-        description: "Tính năng này dùng 2 AI credits.",
-      });
-      return;
-    }
-
-    if (aiCreditsRemaining < COMPARE_AI_COST) {
-      setCreditDialogOpen(true);
-      return;
-    }
-
     setCompareLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke("ai-compare", {
-        body: {
-          course_ids: compareCourseIds,
-          comparison_goal: compareGoal,
-          learner_goal: query.trim() || undefined,
-          preferred_format: format === "all" ? "any" : format,
-          budget: priceRange[1] < 1000000 ? priceRange[1] : undefined,
-        },
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
-
-      if (error) {
-        const payload = await readFunctionErrorPayload(error);
-        if (isAiCreditRequiredPayload(payload)) {
-          setCreditDialogOpen(true);
-          return;
-        }
-        throw error;
-      }
-
-      if (isAiCreditRequiredPayload(data)) {
-        setCreditDialogOpen(true);
-        return;
-      }
-
-      if (!data?.comparison || !Array.isArray(data?.courses)) {
-        throw new Error("AI Compare chưa trả về kết quả hợp lệ.");
-      }
-
-      setCompareResult(data as AiCompareResponse);
-      toast({ title: "AI đã so sánh khóa học", description: "Credit đã được cập nhật trong gói của bạn." });
-    } catch (error: any) {
-      console.error("AI compare error:", error);
+      setCompareResult(buildCourseComparison(selectedCompareCourses, compareGoal));
       toast({
-        title: "Không thể dùng AI Compare",
-        description: error?.message || "Vui lòng thử lại sau. Nếu AI lỗi, credit sẽ được hoàn qua hệ thống.",
+        title: "Đã tạo bảng so sánh khóa học",
+        description: "Kết quả dựa trên dữ liệu khóa học hiện có trên VET.",
+      });
+    } catch (error) {
+      console.error("Course compare error:", error);
+      toast({
+        title: "Không thể so sánh khóa học",
+        description: "Vui lòng thử lại sau.",
         variant: "destructive",
       });
     } finally {
       setCompareLoading(false);
-      await refetchSubscription();
     }
   };
 
@@ -801,45 +943,13 @@ export default function SearchPage() {
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
-              {aiLoading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
-              {query && !aiLoading && (
-                <button onClick={() => { setQuery(""); setAiSuggestions([]); setAiMatchResult(null); }} className="text-muted-foreground hover:text-foreground">
+              {courseSuggestionLoading && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+              {query && !courseSuggestionLoading && (
+                <button onClick={() => { setQuery(""); setCourseSuggestionResult(null); }} className="text-muted-foreground hover:text-foreground">
                   <X className="h-4 w-4" />
                 </button>
               )}
             </div>
-
-            <AnimatePresence>
-              {showAiPanel && aiSuggestions.length > 0 && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  className="absolute left-0 right-0 top-full z-50 mt-1 rounded-xl border bg-card p-2 shadow-elevated"
-                >
-                  <div className="mb-2 flex items-center gap-1.5 px-2 text-xs text-muted-foreground">
-                    <Brain className="h-3.5 w-3.5 text-primary" />
-                    <span className="font-medium">AI gợi ý</span>
-                  </div>
-                  {aiSuggestions.map((s, i) => (
-                    <button
-                      key={i}
-                      onClick={() => { setQuery(s); setShowAiPanel(false); }}
-                      className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-foreground hover:bg-accent transition-colors"
-                    >
-                      <Sparkles className="h-3 w-3 text-primary/60" />
-                      {s}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setShowAiPanel(false)}
-                    className="mt-1 w-full rounded-lg px-3 py-1.5 text-center text-xs text-muted-foreground hover:bg-muted transition-colors"
-                  >
-                    Đóng
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
           </div>
 
           <Button
@@ -860,16 +970,13 @@ export default function SearchPage() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => fetchAiSuggestions(query)}
-            disabled={aiLoading || subscriptionLoading}
+            onClick={handleCourseSuggestions}
+            disabled={courseSuggestionLoading}
             className="border-primary/20 bg-primary/5 text-primary hover:bg-primary/10"
           >
-            {aiLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Brain className="mr-2 h-4 w-4" />}
-            {aiLoading ? "AI đang phân tích..." : `AI Course Match · ${SEARCH_AI_COST} credit`}
+            {courseSuggestionLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
+            {courseSuggestionLoading ? "Đang gợi ý..." : "Gợi ý khóa học"}
           </Button>
-          <Badge variant="outline" className="hidden rounded-full border-primary/20 bg-background px-3 py-1.5 text-primary md:inline-flex">
-            {isLoggedIn ? `Bạn còn ${aiCreditsRemaining} AI credits` : "Đăng nhập để dùng AI"}
-          </Badge>
         </div>
 
         {/* Category pills */}
@@ -954,16 +1061,16 @@ export default function SearchPage() {
         )}
       </AnimatePresence>
 
-      {aiLoading && (
+      {courseSuggestionLoading && (
         <div className="container pt-6">
           <div className="rounded-2xl border border-primary/15 bg-primary/5 p-5 text-sm text-primary shadow-sm">
             <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-            AI đang phân tích nhu cầu học của bạn...
+            VET đang tìm khóa phù hợp với nhu cầu của bạn...
           </div>
         </div>
       )}
 
-      {!aiLoading && aiMatchResult && <AiCourseMatchPanel result={aiMatchResult} />}
+      {!courseSuggestionLoading && courseSuggestionResult && <CourseSuggestionPanel result={courseSuggestionResult} />}
 
       {compareCourseIds.length > 0 && (
         <div className="container pt-6">
@@ -1029,8 +1136,8 @@ export default function SearchPage() {
                 </Button>
                 <Button
                   type="button"
-                  onClick={handleAiCompare}
-                  disabled={compareLoading || compareCourseIds.length < 2 || subscriptionLoading}
+                  onClick={handleCourseCompare}
+                  disabled={compareLoading || compareCourseIds.length < 2}
                   className="rounded-xl border-0 gradient-primary text-primary-foreground"
                 >
                   {compareLoading ? (
@@ -1038,7 +1145,7 @@ export default function SearchPage() {
                   ) : (
                     <GitCompareArrows className="mr-2 h-4 w-4" />
                   )}
-                  {compareLoading ? "AI đang so sánh..." : `So sánh bằng AI · ${COMPARE_AI_COST} credits`}
+                  {compareLoading ? "Đang so sánh..." : "So sánh khóa học"}
                 </Button>
               </div>
             </CardContent>
@@ -1050,12 +1157,12 @@ export default function SearchPage() {
         <div className="container pt-6">
           <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-5 text-sm text-cyan-800 shadow-sm">
             <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
-            AI đang so sánh các khóa học bạn chọn...
+            VET đang so sánh các khóa học bạn chọn...
           </div>
         </div>
       )}
 
-      {!compareLoading && compareResult && <AiCompareResultPanel result={compareResult} />}
+      {!compareLoading && compareResult && <CourseCompareResultPanel result={compareResult} />}
 
       {/* Results */}
       <div className="container py-8">
@@ -1127,8 +1234,6 @@ export default function SearchPage() {
           </div>
         )}
       </div>
-
-      <AiCreditUpgradeDialog open={creditDialogOpen} onOpenChange={setCreditDialogOpen} />
     </MainLayout>
   );
 }
