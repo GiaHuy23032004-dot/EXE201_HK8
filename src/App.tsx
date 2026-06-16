@@ -49,6 +49,7 @@ import AdminSettings from "./pages/admin/AdminSettings";
 import MapConfigPage from "./pages/dev/MapConfigPage";
 import ProfilePage from "./pages/ProfilePage";
 import SettingsPage from "./pages/SettingsPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import ReceiptPage from "./pages/ReceiptPage";
 import HelpCenterPage from "./pages/HelpCenterPage";
 import PrivacyPolicyPage from "./pages/PrivacyPolicyPage";
@@ -147,6 +148,7 @@ const App = () => (
             <Route path="/admin/settings" element={<AdminRoute><AdminSettings /></AdminRoute>} />
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/notifications" element={<NotificationsPage />} />
             <Route path="/receipt/:bookingId" element={<ReceiptPage />} />
             <Route path="/help" element={<HelpCenterPage />} />
             <Route path="/privacy" element={<PrivacyPolicyPage />} />

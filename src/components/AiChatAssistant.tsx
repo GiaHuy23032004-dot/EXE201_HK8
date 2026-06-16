@@ -126,8 +126,9 @@ function clampPosition(position: WidgetPosition, size = { width: LAUNCHER_SIZE, 
 function getInitialWidgetPosition() {
   if (typeof window === "undefined") return { x: 24, y: 480 };
 
+  // Default: bottom-right corner
   const fallback = {
-    x: 24,
+    x: Math.max(WIDGET_MARGIN, window.innerWidth - LAUNCHER_SIZE - 24),
     y: Math.max(WIDGET_MARGIN, window.innerHeight - LAUNCHER_SIZE - 24),
   };
 
@@ -136,6 +137,8 @@ function getInitialWidgetPosition() {
     if (!raw) return clampPosition(fallback);
     const parsed = JSON.parse(raw) as Partial<WidgetPosition>;
     if (typeof parsed.x !== "number" || typeof parsed.y !== "number") return clampPosition(fallback);
+    // If stored position is on the left side (old default), reset to bottom-right
+    if (parsed.x < 100) return clampPosition(fallback);
     return clampPosition({ x: parsed.x, y: parsed.y });
   } catch {
     return clampPosition(fallback);
