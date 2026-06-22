@@ -92,7 +92,7 @@ export default function MentorProfile() {
               <CardHeader>
                 <CardTitle>Xác minh mentor</CardTitle>
                 <CardDescription>
-                  Hoàn thiện hồ sơ và thêm bằng chứng tin cậy để nhận huy hiệu Verified Mentor.
+                  Hoàn thiện hồ sơ và thêm tài liệu tin cậy để nhận huy hiệu Verified Mentor.
                 </CardDescription>
               </CardHeader>
             </Card>

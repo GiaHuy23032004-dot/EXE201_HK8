@@ -66,7 +66,7 @@ export function SubmitVerificationCard({
 
         <div className="space-y-2">
           <ChecklistRow complete={completion.profileComplete} label="Hồ sơ cá nhân đủ thông tin" />
-          <ChecklistRow complete={completion.proofsComplete} label="Có ít nhất 2 bằng chứng hợp lệ" />
+          <ChecklistRow complete={completion.proofsComplete} label="Có ít nhất 2 tài liệu hợp lệ" />
           <ChecklistRow complete label="Không yêu cầu CCCD" />
           <ChecklistRow complete label="Không yêu cầu CV" />
           <ChecklistRow complete label="Không bắt buộc chứng chỉ nếu có portfolio/minh chứng tốt" />

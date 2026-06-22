@@ -78,7 +78,7 @@ function validateFile(file: File, type: ProofType) {
   }
 
   if (file.size > MAX_PROOF_FILE_SIZE) {
-    return "Tệp bằng chứng không được vượt quá 5MB.";
+    return "Tệp tài liệu không được vượt quá 5MB.";
   }
 
   return null;
@@ -89,12 +89,12 @@ function validateForm(values: ProofFormValues, editing?: MentorVerificationProof
   const existingFile = editing?.file_path;
 
   if (!values.proof_type) {
-    errors.proof_type = "Vui lòng chọn loại bằng chứng.";
+    errors.proof_type = "Vui lòng chọn loại tài liệu.";
     return errors;
   }
 
   if (values.proof_type !== "social" && !values.title.trim()) {
-    errors.title = "Vui lòng nhập tiêu đề bằng chứng.";
+    errors.title = "Vui lòng nhập tiêu đề tài liệu.";
   }
 
   if (values.proof_type === "social") {
@@ -108,7 +108,7 @@ function validateForm(values: ProofFormValues, editing?: MentorVerificationProof
 
   if (values.proof_type === "certificate") {
     if (!values.url.trim() && !values.file && !existingFile) {
-      errors.file = "Vui lòng nhập URL hoặc tải lên tệp bằng chứng.";
+      errors.file = "Vui lòng nhập URL hoặc tải lên tệp tài liệu.";
     }
     if (values.url.trim() && !isValidUrl(values.url)) errors.url = "URL xác thực không hợp lệ.";
     if (values.issued_year.trim() && Number.isNaN(Number(values.issued_year))) {
@@ -119,7 +119,7 @@ function validateForm(values: ProofFormValues, editing?: MentorVerificationProof
 
   if (values.url.trim() && !isValidUrl(values.url)) errors.url = "URL không hợp lệ.";
   if (!values.url.trim() && !values.file && !existingFile) {
-    errors.file = "Vui lòng nhập URL hoặc tải lên tệp bằng chứng.";
+    errors.file = "Vui lòng nhập URL hoặc tải lên tệp tài liệu.";
   }
 
   return errors;
@@ -191,16 +191,16 @@ export function ProofFormDialog({ open, onClose, editing, isBusy, onSubmit }: Pr
             <span className="flex h-9 w-9 items-center justify-center rounded-xl text-primary-foreground gradient-primary">
               <Plus className="h-4 w-4" />
             </span>
-            {editing ? "Chỉnh sửa bằng chứng" : "Thêm bằng chứng"}
+            {editing ? "Chỉnh sửa tài liệu" : "Thêm tài liệu"}
           </DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label>Loại bằng chứng</Label>
+            <Label>Loại tài liệu</Label>
             <Select value={form.proof_type} onValueChange={(value) => handleTypeChange(value as ProofType)}>
               <SelectTrigger className="rounded-xl">
-                <SelectValue placeholder="Chọn loại bằng chứng" />
+                <SelectValue placeholder="Chọn loại tài liệu" />
               </SelectTrigger>
               <SelectContent>
                 {SUPPORTED_PROOF_TYPES.map((type) => (
@@ -357,7 +357,7 @@ export function ProofFormDialog({ open, onClose, editing, isBusy, onSubmit }: Pr
                 value={form.description}
                 onChange={(event) => set("description", event.target.value)}
                 rows={3}
-                placeholder="Giải thích ngắn gọn vì sao bằng chứng này thể hiện chuyên môn của bạn..."
+                placeholder="Giải thích ngắn gọn vì sao tài liệu này thể hiện chuyên môn của bạn..."
                 className="rounded-xl"
               />
             </div>
@@ -369,7 +369,7 @@ export function ProofFormDialog({ open, onClose, editing, isBusy, onSubmit }: Pr
             </Button>
             <Button type="submit" disabled={isBusy} className="rounded-xl border-0 text-primary-foreground gradient-primary">
               {isBusy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {editing ? "Lưu thay đổi" : "Thêm bằng chứng"}
+              {editing ? "Lưu thay đổi" : "Thêm tài liệu"}
             </Button>
           </DialogFooter>
         </form>

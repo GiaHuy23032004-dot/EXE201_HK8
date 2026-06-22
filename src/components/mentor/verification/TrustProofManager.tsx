@@ -66,16 +66,16 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
           values,
           currentFilePath: editing.file_path,
         });
-        toast({ title: "Đã cập nhật bằng chứng" });
+        toast({ title: "Đã cập nhật tài liệu" });
       } else {
         await proofsQuery.createProof.mutateAsync(values);
-        toast({ title: "Đã thêm bằng chứng" });
+        toast({ title: "Đã thêm tài liệu" });
       }
       setDialogOpen(false);
       setEditingProof(null);
     } catch (error: unknown) {
       toast({
-        title: "Không thể lưu bằng chứng",
+        title: "Không thể lưu tài liệu",
         description: getErrorMessage(error),
         variant: "destructive",
       });
@@ -86,11 +86,11 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
     if (!deleteTarget) return;
     try {
       await proofsQuery.deleteProof.mutateAsync(deleteTarget);
-      toast({ title: "Đã xóa bằng chứng" });
+      toast({ title: "Đã xóa tài liệu" });
       setDeleteTarget(null);
     } catch (error: unknown) {
       toast({
-        title: "Không thể xóa bằng chứng",
+        title: "Không thể xóa tài liệu",
         description: getErrorMessage(error),
         variant: "destructive",
       });
@@ -103,10 +103,10 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
         <div>
           <CardTitle className="flex items-center gap-2">
             <FilePlus2 className="h-5 w-5 text-primary" />
-            Bằng chứng tin cậy
+            Tài liệu tin cậy
           </CardTitle>
           <p className="mt-2 text-sm text-muted-foreground">
-            Bạn cần thêm ít nhất 2 bằng chứng hợp lệ.
+            Bạn cần thêm ít nhất 2 tài liệu hợp lệ.
           </p>
         </div>
         <Button
@@ -115,13 +115,13 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
           disabled={readOnly}
           className="rounded-xl border-0 text-primary-foreground gradient-primary"
         >
-          Thêm bằng chứng
+          Thêm tài liệu
         </Button>
       </CardHeader>
       <CardContent className="space-y-4">
         {status === "pending" && (
           <div className="rounded-2xl border border-warning/20 bg-warning/5 p-4 text-sm text-muted-foreground">
-            Hồ sơ đang chờ duyệt, bạn không thể chỉnh sửa bằng chứng.
+            Hồ sơ đang chờ duyệt, bạn không thể chỉnh sửa tài liệu.
           </div>
         )}
 
@@ -133,7 +133,7 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
 
         {status !== "pending" && status !== "approved" && readOnly && (
           <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">
-            Trạng thái hồ sơ hiện tại không cho phép chỉnh sửa bằng chứng.
+            Trạng thái hồ sơ hiện tại không cho phép chỉnh sửa tài liệu.
           </div>
         )}
 
@@ -151,7 +151,7 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
         ) : proofs.length === 0 ? (
           <div className="rounded-2xl border-2 border-dashed border-border px-6 py-10 text-center">
             <FilePlus2 className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-            <p className="font-semibold text-foreground">Chưa có bằng chứng nào</p>
+            <p className="font-semibold text-foreground">Chưa có tài liệu nào</p>
             <p className="mt-1 text-sm text-muted-foreground">
               Thêm portfolio, chứng chỉ hoặc minh chứng giảng dạy để bắt đầu xác minh.
             </p>
@@ -175,7 +175,7 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
 
         {validProofCount < 2 && proofs.length > 0 && (
           <div className="rounded-2xl border border-warning/20 bg-warning/5 p-4 text-sm text-muted-foreground">
-            Bạn cần thêm ít nhất 2 bằng chứng hợp lệ.
+            Bạn cần thêm ít nhất 2 tài liệu hợp lệ.
           </div>
         )}
       </CardContent>
@@ -194,7 +194,7 @@ export function TrustProofManager({ userId, status }: TrustProofManagerProps) {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent className="rounded-2xl">
           <AlertDialogHeader>
-            <AlertDialogTitle>Xóa bằng chứng?</AlertDialogTitle>
+            <AlertDialogTitle>Xóa tài liệu?</AlertDialogTitle>
             <AlertDialogDescription>
               Bạn sắp xóa “{deleteTarget?.title}”. Hành động này không thể hoàn tác.
             </AlertDialogDescription>

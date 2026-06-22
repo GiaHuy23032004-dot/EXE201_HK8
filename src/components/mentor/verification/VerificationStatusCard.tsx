@@ -38,7 +38,7 @@ function getStatusMessage(status: MentorVerificationStatus, adminNote?: string |
       return "Hồ sơ xác minh chưa hoàn tất. Bạn có thể tiếp tục bổ sung thông tin trước khi gửi duyệt.";
     case "unverified":
     default:
-      return "Hoàn thiện hồ sơ và thêm bằng chứng chuyên môn để tăng độ tin cậy với học viên.";
+      return "Hoàn thiện hồ sơ và thêm tài liệu chuyên môn để tăng độ tin cậy với học viên.";
   }
 }
 

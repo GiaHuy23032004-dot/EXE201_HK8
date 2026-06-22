@@ -52,9 +52,9 @@ export function VerificationPreview({ profile, proofs }: VerificationPreviewProp
         </div>
 
         <div className="rounded-xl border bg-card p-3">
-          <p className="text-sm font-semibold text-foreground">Bằng chứng</p>
+          <p className="text-sm font-semibold text-foreground">Tài liệu</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            {validProofCount} bằng chứng hợp lệ
+            {validProofCount} tài liệu hợp lệ
           </p>
         </div>
       </CardContent>

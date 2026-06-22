@@ -15,7 +15,7 @@ export function VerificationProgress({ completion, status }: VerificationProgres
 
   const steps = [
     { label: "Hồ sơ cá nhân", complete: completion.profileComplete, icon: UserCheck },
-    { label: "Bằng chứng tin cậy", complete: completion.proofsComplete, icon: FileCheck2 },
+    { label: "Tài liệu tin cậy", complete: completion.proofsComplete, icon: FileCheck2 },
     { label: "Gửi xác minh", complete: submitted, icon: BadgeCheck },
   ];
 

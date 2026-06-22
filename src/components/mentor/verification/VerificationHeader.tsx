@@ -10,7 +10,7 @@ export function VerificationHeader() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Xác minh mentor</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Bổ sung hồ sơ và bằng chứng chuyên môn để tăng độ tin cậy với học viên.
+            Bổ sung hồ sơ và tài liệu chuyên môn để tăng độ tin cậy với học viên.
           </p>
         </div>
       </div>

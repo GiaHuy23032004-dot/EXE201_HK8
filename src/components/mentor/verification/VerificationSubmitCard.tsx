@@ -41,7 +41,7 @@ export function VerificationSubmitCard({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
-          VET không yêu cầu CCCD hoặc CV. Bạn chỉ cần hoàn thiện hồ sơ cá nhân và cung cấp ít nhất 2 bằng chứng hợp lệ.
+          VET không yêu cầu CCCD hoặc CV. Bạn chỉ cần hoàn thiện hồ sơ cá nhân và cung cấp ít nhất 2 tài liệu hợp lệ.
         </div>
 
         {isPending && (
@@ -64,7 +64,7 @@ export function VerificationSubmitCard({
 
         <div className="space-y-2">
           <ChecklistRow complete={completion.profileComplete} label="Hồ sơ cá nhân đủ thông tin" />
-          <ChecklistRow complete={completion.proofsComplete} label="Có ít nhất 2 bằng chứng hợp lệ" />
+          <ChecklistRow complete={completion.proofsComplete} label="Có ít nhất 2 tài liệu hợp lệ" />
           <ChecklistRow complete label="Không yêu cầu CCCD" />
           <ChecklistRow complete label="Không yêu cầu CV" />
           <ChecklistRow complete label="Không bắt buộc chứng chỉ nếu có portfolio/minh chứng tốt" />
