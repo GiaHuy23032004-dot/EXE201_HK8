@@ -23,7 +23,7 @@ function getFileName(path: string) {
 }
 
 function getTypeLabel(type: string) {
-  return isSupportedProofType(type) ? PROOF_TYPE_LABELS[type as ProofType] : "Bằng chứng không còn hỗ trợ";
+  return isSupportedProofType(type) ? PROOF_TYPE_LABELS[type as ProofType] : "Tài liệu không còn hỗ trợ";
 }
 
 function getSubtitle(proof: MentorVerificationProof) {
@@ -50,7 +50,7 @@ function getSubtitle(proof: MentorVerificationProof) {
     return "Minh chứng giảng dạy";
   }
 
-  return "Loại bằng chứng cũ";
+  return "Loại tài liệu cũ";
 }
 
 export function ProofCard({ proof, disabled, onEdit, onDelete }: ProofCardProps) {

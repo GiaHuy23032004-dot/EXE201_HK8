@@ -56,7 +56,7 @@ export function SubmitVerificationCard({ status, adminNote, completion, isSubmit
 
         <div className="space-y-2">
           <ChecklistRow complete={completion.profileComplete} label="Hồ sơ cá nhân đủ thông tin" />
-          <ChecklistRow complete={completion.proofsComplete} label="Có ít nhất 2 loại bằng chứng khác nhau" />
+          <ChecklistRow complete={completion.proofsComplete} label="Có ít nhất 2 loại tài liệu khác nhau" />
         </div>
 
         <Button
