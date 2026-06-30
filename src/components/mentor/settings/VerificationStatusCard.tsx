@@ -56,7 +56,7 @@ export function VerificationStatusCard({ status, adminNote, completion }: Verifi
           )}
           {completion && !approved && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Hồ sơ: {completion.completedProfileItems}/{completion.totalProfileItems} mục · Bằng chứng:{" "}
+              Hồ sơ: {completion.completedProfileItems}/{completion.totalProfileItems} mục · Tài liệu:{" "}
               {completion.validProofCount}/2 hợp lệ
             </p>
           )}
