@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { callAI, type CallAIResult } from "../_shared/aiProvider.ts";
 import { buildVetHelpSystemContext, type VetHelpIntent } from "../_shared/vetHelpKnowledge.ts";
+import { classifyEduBotIntent, type EduBotIntentClassification } from "../_shared/eduBotIntent.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -288,6 +289,10 @@ const COURSE_TOPIC_GROUPS = [
     id: "wellness",
     terms: ["yoga", "gym", "fitness", "boi", "swimming"],
   },
+  {
+    id: "mind_sports",
+    terms: ["co vua", "co tuong", "chess", "khai cuoc", "tan cong", "chien thuat co"],
+  },
 ] as const;
 
 function jsonResponse(body: unknown, status = 200) {
@@ -407,116 +412,107 @@ function normalizePageContext(value: unknown): PageContext {
   return allowed.has(raw) ? raw as PageContext : null;
 }
 
-function detectVetHelpIntent(
-  message: string,
-  pageContext: PageContext,
-  courseIntent: DetectedCourseIntent,
-  courseDetailIntent: boolean,
-): VetHelpIntent {
-  if (courseDetailIntent) return "course_detail";
-
-  const normalized = normalizeText(message);
-  const hasPaymentTerms = containsAny(normalized, [
-    "thanh toan",
-    "chuyen khoan",
-    "reference",
-    "ma chuyen khoan",
-    "vietqr",
-    "webhook",
-    "active vet plus",
-    "chua active",
-    "da tra tien",
-    "da chuyen tien",
-    "checkout",
-  ]);
-  if (hasPaymentTerms || pageContext === "booking") return "payment_help";
-
-  const hasAccountTerms = containsAny(normalized, [
-    "mat khau",
-    "password",
-    "quen mat khau",
-    "doi mat khau",
-    "otp",
-    "ma bao mat",
-    "tai khoan",
-    "dang nhap",
-    "setting",
-    "cai dat",
-  ]);
-  if (hasAccountTerms) return "account_setting";
-
-  const hasVoucherTerms = containsAny(normalized, [
-    "voucher",
-    "ma giam",
-    "giam gia",
-    "ap dung voucher",
-  ]);
-  if (hasVoucherTerms) return "voucher_help";
-
-  const hasPlusTerms = containsAny(normalized, [
-    "vet plus",
-    "plus",
-    "subscription",
-    "goi cua toi",
-    "goi plus",
-    "ai credit",
-    "credits",
-    "99",
-  ]);
-  if (hasPlusTerms || pageContext === "pricing") return "vet_plus_help";
-
-  const hasMentorTerms = containsAny(normalized, [
-    "mentor dashboard",
-    "rut tien",
-    "vi mentor",
-    "lich day",
-    "hoc vien",
-    "quan ly khoa",
-    "tao khoa",
-    "day hoc",
-  ]);
-  if (hasMentorTerms || pageContext === "mentor_dashboard") return "mentor_help";
-
-  const asksHowTo = containsAny(normalized, [
-    "lam sao",
-    "cach",
-    "huong dan",
-    "su dung",
-    "nhu the nao",
-  ]);
-  const asksSearchHowTo = asksHowTo && containsAny(normalized, [
-    "tim khoa",
-    "tim lop",
-    "tim mentor",
-    "khoa hoc phu hop",
-    "loc",
-    "filter",
-  ]);
-  if (asksSearchHowTo) return "platform_help";
-
-  if (courseIntent.shouldRetrieve || pageContext === "search") return "course_search";
-
-  const hasPlatformTerms = containsAny(normalized, [
-    "lam sao",
-    "huong dan",
-    "su dung",
-    "dat lich",
-    "booking",
-    "ho so hoc tap",
-    "learning profile",
-    "lich su ai",
-    "bao cao",
-    "support",
-  ]);
-  if (hasPlatformTerms || pageContext === "learner_dashboard" || pageContext === "learning_profile" || pageContext === "admin") {
-    return "platform_help";
-  }
-
-  return "general_chat";
-}
-
 function shouldInjectVetHelpKnowledge(intent: VetHelpIntent, pageContext: PageContext) {
   return intent !== "course_search" || Boolean(pageContext);
+}
+
+function toVetHelpIntent(classification: EduBotIntentClassification): VetHelpIntent {
+  switch (classification.intent) {
+    case "course_search":
+    case "course_detail":
+    case "learning_guidance":
+    case "platform_help":
+    case "payment_help":
+    case "account_help":
+    case "vet_plus_help":
+    case "voucher_help":
+    case "mentor_help":
+      return classification.intent;
+    default:
+      return "platform_help";
+  }
+}
+
+const LEARNING_GUIDANCE_PRIORITY_TERMS = [
+  "ky thuat",
+  "cach",
+  "lam sao",
+  "nhu the nao",
+  "nen bat dau",
+  "bat dau tu dau",
+  "luyen",
+  "luyen tap",
+  "luyen noi",
+  "hoc gi truoc",
+  "hoc gi dau tien",
+  "can hoc gi",
+  "khai cuoc",
+];
+
+const EXPLICIT_COURSE_SEARCH_TERMS = [
+  "tim khoa",
+  "tim lop",
+  "tim mentor",
+  "co khoa",
+  "co lop",
+  "co mentor",
+  "mentor",
+  "dang ky",
+  "dang ki",
+  "gan toi",
+  "gan day",
+  "gan quan",
+  "hoc o dau",
+  "bao nhieu tien",
+  "hoc phi",
+  "gia tien",
+  "muc gia",
+  "gia bao nhieu",
+  "duoi ",
+  "ngan sach",
+];
+
+function hasSupportedLearningTopic(normalized: string) {
+  return Boolean(findTopicGroup(normalized)) || CATEGORY_TERMS.some((entry) => containsAny(normalized, entry.terms));
+}
+
+function applyAiChatIntentOverrides(
+  message: string,
+  classification: EduBotIntentClassification,
+): EduBotIntentClassification {
+  if (["spam", "prompt_injection", "unsafe"].includes(classification.intent)) return classification;
+
+  const normalized = normalizeText(message);
+  const hasLearningCue = containsAny(normalized, LEARNING_GUIDANCE_PRIORITY_TERMS);
+  const hasExplicitCourseSearch = containsAny(normalized, EXPLICIT_COURSE_SEARCH_TERMS);
+
+  if (hasLearningCue && hasSupportedLearningTopic(normalized) && !hasExplicitCourseSearch) {
+    return {
+      ...classification,
+      intent: "learning_guidance",
+      shouldCallAI: true,
+      shouldChargeCredit: true,
+      reason: `${classification.reason}; ai-chat override: learning guidance cue without explicit course search.`,
+    };
+  }
+
+  return classification;
+}
+
+function buildBlockedIntentAnswer(classification: EduBotIntentClassification) {
+  switch (classification.intent) {
+    case "prompt_injection":
+      return "Mình không thể bỏ qua quy tắc bảo mật của VET hoặc cung cấp thông tin nội bộ. Bạn có thể hỏi mình về khóa học, đặt lịch, thanh toán hoặc cách sử dụng nền tảng.";
+    case "unsafe":
+      return "Mình không thể hỗ trợ yêu cầu này. Nếu bạn cần trợ giúp hợp lệ trên VET như tài khoản, thanh toán, booking hoặc khóa học, mình có thể hướng dẫn từng bước.";
+    case "out_of_scope":
+      return "Hiện EduBot tập trung hỗ trợ các nhóm kỹ năng trên VET như tiếng Anh công việc, thể thao hiện đại, barista, thuyết trình, cờ và AI công việc. Bạn có thể hỏi mình trong các nhóm này nhé.";
+    case "spam":
+      return "Mình chưa hiểu yêu cầu của bạn. Bạn có thể hỏi rõ hơn về khóa học, VET Plus, booking hoặc kỹ năng bạn muốn học không?";
+    case "unclear":
+    default:
+      return "Tin nhắn này hơi khó hiểu. Bạn thử mô tả mục tiêu học hoặc vấn đề bạn đang gặp trên VET nhé.";
+  }
 }
 
 function extractLocationLabel(normalizedText: string) {
@@ -1404,12 +1400,13 @@ function createSseResponse(text: string, metadata?: ChatHistoryMetadata) {
   });
 }
 
-const systemPrompt = `Bạn là EduBot - trợ lý hướng dẫn sử dụng nền tảng VET, marketplace giáo dục kết nối người học và mentor.
+const systemPrompt = `Bạn là EduBot - trợ lý học tập và hướng dẫn sử dụng nền tảng VET, marketplace giáo dục kết nối người học và mentor.
 
 Nhiệm vụ:
 - Giúp người dùng tìm khóa học phù hợp.
 - Gợi ý mentor dựa trên nhu cầu.
 - Tư vấn lộ trình học tập.
+- Giải thích kiến thức học tập/kỹ năng chung trong các lĩnh vực VET như tiếng Anh, thể thao, cờ, barista, thuyết trình, AI/công cụ làm việc và sáng tạo nội dung.
 - Hướng dẫn người dùng sử dụng nền tảng: tìm kiếm, đặt lịch, thanh toán, VET Plus, voucher, tài khoản, cài đặt, learner dashboard, mentor dashboard và liên hệ support/admin khi cần.
 - Trả lời ngắn, rõ, theo từng bước.
 - Nếu không chắc dữ liệu/tính năng có tồn tại, nói "hiện hệ thống chưa có thông tin này" và hướng user tới trang phù hợp hoặc support/admin.
@@ -1447,6 +1444,20 @@ Khi có COURSE_DETAIL_CONTEXT:
 
 Phong cách: thân thiện, ngắn gọn, dùng tiếng Việt. Giữ câu trả lời dưới 150 từ.`;
 
+const LEARNING_GUIDANCE_SYSTEM_CONTEXT = `LEARNING_GUIDANCE_MODE
+- Người dùng đang hỏi kiến thức học tập/kỹ năng chung, không nhất thiết đang tìm khóa học.
+- Trả lời bằng tiếng Việt như một learning assistant của VET.
+- Format nên gồm:
+  1. Tóm tắt ngắn
+  2. Các kỹ thuật/bước học chính
+  3. Lộ trình luyện tập cơ bản
+  4. Lưu ý an toàn/lỗi thường gặp
+  5. Gợi ý tìm mentor/khóa học trên VET nếu phù hợp
+- Được giải thích kiến thức chung trong các lĩnh vực của VET: tiếng Anh, thể thao hiện đại, cờ/tư duy chiến thuật, barista, MC/thuyết trình, AI/công cụ làm việc và nội dung sáng tạo.
+- Nếu nhắc đến khóa học VET, chỉ nhắc khóa có trong COURSE_RECOMMENDATION_CONTEXT. Nếu không có context khóa học, không bịa tên khóa/mentor/giá/lịch; chỉ nói user có thể tìm khóa liên quan trên VET hoặc gửi nhu cầu học.
+- Với thể thao, luôn nhắc khởi động, tập an toàn, không tập quá sức và nên học với mentor/coach nếu cần chỉnh kỹ thuật.
+- Không đưa lời khuyên y tế, pháp lý hoặc chẩn đoán chuyên môn.`;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -1471,7 +1482,11 @@ serve(async (req) => {
     const currentCourseId = pageContext === "course_detail" ? normalizeCourseId(body?.course_id) : null;
     const courseDetailIntent =
       pageContext === "course_detail" && Boolean(currentCourseId) && isCourseDetailQuestion(promptPreview);
-    const vetHelpIntent = detectVetHelpIntent(promptPreview, pageContext, courseIntent, courseDetailIntent);
+    const intentClassification = applyAiChatIntentOverrides(promptPreview, classifyEduBotIntent(promptPreview, {
+      pageContext,
+      courseDetailIntent,
+    }));
+    const vetHelpIntent = toVetHelpIntent(intentClassification);
 
     const { error: authError, supabase, userId } = await getAuthedSupabase(req);
     if (authError || !supabase || !userId) {
@@ -1498,20 +1513,62 @@ serve(async (req) => {
         current_path: currentPath,
         course_id: currentCourseId,
         booking_id: bookingId,
-        chat_intent: vetHelpIntent,
+        chat_intent: intentClassification.intent,
+        intent_reason: intentClassification.reason,
+        detected_category: intentClassification.detectedCategory,
         course_detail_intent: courseDetailIntent,
         course_recommendation_intent: courseIntent.shouldRetrieve,
       },
     });
 
+    if (!intentClassification.shouldCallAI) {
+      const assistantText = buildBlockedIntentAnswer(intentClassification);
+      const assistantMessageId = await saveChatMessage(serviceClient, {
+        conversationId,
+        learnerId: userId,
+        role: "assistant",
+        content: assistantText,
+        metadata: {
+          feature: "chat",
+          usage_log_id: null,
+          user_message_id: userMessageId,
+          provider: "internal_intent_classifier",
+          model: null,
+          page_context: pageContext,
+          current_path: currentPath,
+          course_id: currentCourseId,
+          booking_id: bookingId,
+          task: intentClassification.intent,
+          chat_intent: intentClassification.intent,
+          intent_reason: intentClassification.reason,
+          detected_category: intentClassification.detectedCategory,
+          credit_charged: false,
+        },
+      });
+      await touchChatConversation(serviceClient, conversationId, promptPreview);
+
+      return new Response(createSseResponse(assistantText, {
+        conversation_id: conversationId,
+        message_id: assistantMessageId,
+      }), {
+        headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      });
+    }
+
     const courseDetailContext = courseDetailIntent
       ? await fetchCourseDetailContext(serviceClient ?? supabase, currentCourseId)
       : null;
-    const courseContext = courseDetailIntent
-      ? null
-      : await buildCourseRecommendationContext(serviceClient ?? supabase, courseIntent);
+    const shouldBuildCourseContext =
+      !courseDetailIntent && (vetHelpIntent === "course_search" || vetHelpIntent === "learning_guidance");
+    const fetchedCourseContext = shouldBuildCourseContext
+      ? await buildCourseRecommendationContext(serviceClient ?? supabase, courseIntent)
+      : null;
+    const courseContext =
+      vetHelpIntent === "learning_guidance" && !fetchedCourseContext?.exactCourses.length
+        ? null
+        : fetchedCourseContext;
     const recommendations = courseDetailIntent ? [] : buildPublicCourseRecommendations(courseContext);
-    const noMatchPayload = courseDetailIntent ? null : buildNoMatchPayload(courseContext);
+    const noMatchPayload = vetHelpIntent === "course_search" ? buildNoMatchPayload(courseContext) : null;
 
     if (noMatchPayload) {
       const assistantText = buildDeterministicCourseAnswer(courseContext!);
@@ -1531,7 +1588,9 @@ serve(async (req) => {
           course_id: currentCourseId,
           booking_id: bookingId,
           task: "course_no_match",
-          chat_intent: vetHelpIntent,
+          chat_intent: intentClassification.intent,
+          intent_reason: intentClassification.reason,
+          detected_category: intentClassification.detectedCategory,
           course_recommendation_intent: courseIntent.shouldRetrieve,
           topic_group: findTopicGroup(normalizeText(courseIntent.originalRequest))?.id ?? null,
           exact_course_count: courseContext?.exactCourses.length ?? 0,
@@ -1565,6 +1624,8 @@ serve(async (req) => {
       booking_id: bookingId,
       task: courseDetailIntent ? "course_detail_chat" : vetHelpIntent,
       chat_intent: vetHelpIntent,
+      intent_reason: intentClassification.reason,
+      detected_category: intentClassification.detectedCategory,
       course_detail_intent: courseDetailIntent,
       course_recommendation_intent: courseIntent.shouldRetrieve,
       course_category: courseIntent.category,
@@ -1588,6 +1649,9 @@ serve(async (req) => {
         }),
       });
     }
+    if (vetHelpIntent === "learning_guidance") {
+      aiMessages.unshift({ role: "system", content: LEARNING_GUIDANCE_SYSTEM_CONTEXT });
+    }
     if (courseDetailContext?.systemContext) {
       aiMessages.unshift({ role: "system", content: courseDetailContext.systemContext });
     } else if (courseContext?.systemContext) {
@@ -1610,7 +1674,7 @@ serve(async (req) => {
         temperature: 0.45,
       });
       assistantText = aiResult.text;
-    } else if (courseContext) {
+    } else if (courseContext && vetHelpIntent === "course_search") {
       assistantText = buildDeterministicCourseAnswer(courseContext);
     } else {
       aiResult = await callAI({
@@ -1618,7 +1682,7 @@ serve(async (req) => {
         modelTier: "fast",
         systemPrompt,
         messages: aiMessages,
-        temperature: 0.7,
+        temperature: vetHelpIntent === "learning_guidance" ? 0.55 : 0.7,
       });
       assistantText = aiResult.text;
     }
@@ -1644,7 +1708,9 @@ serve(async (req) => {
         course_id: currentCourseId,
         booking_id: bookingId,
         task,
-        chat_intent: vetHelpIntent,
+        chat_intent: intentClassification.intent,
+        intent_reason: intentClassification.reason,
+        detected_category: intentClassification.detectedCategory,
         course_detail_intent: courseDetailIntent,
         course_detail_found: courseDetailIntent ? Boolean(courseDetailContext) : null,
         course_detail_title: courseDetailContext?.title ?? null,
@@ -1666,7 +1732,9 @@ serve(async (req) => {
       course_id: currentCourseId,
       booking_id: bookingId,
       course_detail_intent: courseDetailIntent,
-      chat_intent: vetHelpIntent,
+      chat_intent: intentClassification.intent,
+      intent_reason: intentClassification.reason,
+      detected_category: intentClassification.detectedCategory,
       course_detail_found: courseDetailIntent ? Boolean(courseDetailContext) : null,
       course_detail_title: courseDetailContext?.title ?? null,
       course_recommendation_intent: courseIntent.shouldRetrieve,

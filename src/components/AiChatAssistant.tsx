@@ -11,6 +11,7 @@ import { AiCreditUpgradeDialog } from "@/components/subscription/AiCreditUpgrade
 import { isAiCreditRequiredPayload } from "@/lib/aiCreditErrors";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAnalyticsTracker } from "@/hooks/useAnalyticsTracker";
 
 type CourseRecommendation = {
   id: string;
@@ -95,12 +96,12 @@ type DragState = {
 };
 
 const quickPrompts = [
-  "Cách tìm khóa học phù hợp?",
-  "Tôi đã thanh toán nhưng chưa thấy cập nhật",
+  "Kỹ thuật đánh pickleball cho người mới?",
+  "Cách luyện nói tiếng Anh công việc?",
   "Làm sao dùng voucher VET Plus?",
-  "Tôi muốn đổi mật khẩu",
-  "Làm sao đặt lịch học?",
-  "Tôi muốn gửi nhu cầu nếu chưa có khóa phù hợp",
+  "Tôi đã thanh toán nhưng chưa thấy cập nhật",
+  "Làm sao đổi mật khẩu?",
+  "Tìm khóa học phù hợp với tôi",
 ];
 
 function getPanelSize() {
@@ -234,6 +235,8 @@ function getFormatLabel(format: CourseRecommendation["format"]) {
 }
 
 function CourseRecommendationCards({ courses }: { courses: CourseRecommendation[] }) {
+  const { trackEvent } = useAnalyticsTracker();
+
   if (!courses.length) return null;
 
   return (
@@ -242,6 +245,24 @@ function CourseRecommendationCards({ courses }: { courses: CourseRecommendation[
         <Link
           key={`${course.matchType}-${course.id}`}
           to={course.detailUrl}
+          onClick={() => {
+            void trackEvent("course_detail_click", {
+              courseId: course.id,
+              source: "edubot_recommendation",
+              metadata: {
+                title: course.title,
+                matchType: course.matchType,
+              },
+            });
+            void trackEvent("ai_course_recommendation_click", {
+              courseId: course.id,
+              source: "edubot_recommendation",
+              metadata: {
+                title: course.title,
+                matchType: course.matchType,
+              },
+            });
+          }}
           className="group block overflow-hidden rounded-2xl border bg-background text-foreground shadow-sm transition hover:border-primary/50 hover:shadow-md"
         >
           <div className="flex gap-3 p-2.5">
@@ -439,6 +460,7 @@ export function AiChatAssistant() {
   const { session, isLoggedIn } = useAuth();
   const location = useLocation();
   const { toast } = useToast();
+  const { trackEvent } = useAnalyticsTracker();
   const {
     aiCreditsRemaining,
     isLoading: subscriptionLoading,
@@ -591,20 +613,21 @@ export function AiChatAssistant() {
       return;
     }
 
-    if (aiCreditsRemaining < CHAT_AI_COST) {
-      setCreditDialogOpen(true);
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Bạn đã hết AI credits. Nâng cấp VET Plus để nhận thêm credits mỗi tháng nhé." },
-      ]);
-      return;
-    }
-
     const userMsg: Msg = { role: "user", content: text.trim() };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
     setInput("");
     setIsLoading(true);
+    void trackEvent("ai_chat_message", {
+      courseId: currentCourseId,
+      bookingId: currentBookingId,
+      source: "edubot",
+      metadata: {
+        page_context: pageContext,
+        message_length: text.trim().length,
+        has_conversation: Boolean(conversationId),
+      },
+    });
 
     let assistantSoFar = "";
     const upsertAssistant = (chunk: string) => {
@@ -900,7 +923,7 @@ export function AiChatAssistant() {
                   </div>
                   <p className="text-sm font-semibold text-foreground mb-1">Chào bạn!</p>
                   <p className="text-xs text-muted-foreground mb-4">
-                    Xin chào, mình là EduBot. Mình có thể giúp bạn tìm khóa học, đặt lịch, dùng VET Plus, voucher, thanh toán và cài đặt tài khoản. Tính năng này dùng 1 AI credit.
+                    Xin chào, mình là EduBot. Mình có thể giúp bạn tìm khóa học, giải thích kỹ năng học tập, đặt lịch, thanh toán, dùng VET Plus, voucher và cài đặt tài khoản. Tính năng này dùng 1 AI credit.
                   </p>
                   <div className="space-y-2">
                     {quickPrompts.map((prompt) => (

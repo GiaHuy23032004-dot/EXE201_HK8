@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
   ArrowLeft, Calendar, CheckCircle2, Clock,
@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useLearnerReceipt } from "@/hooks/useLearnerPayments";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useAnalyticsTracker } from "@/hooks/useAnalyticsTracker";
 import { calculateDepositBreakdown, calculateVoucherPaymentBreakdown, formatVnd, inferPaymentOptionFromBooking } from "@/lib/learnerPayment";
 
 interface PaymentSession {
@@ -31,7 +32,9 @@ export default function CheckoutPage() {
   const { bookingId } = useParams();
   const { session } = useAuth();
   const { toast } = useToast();
+  const { trackEvent } = useAnalyticsTracker();
   const { data, isLoading, refetch } = useLearnerReceipt(bookingId, session?.user?.id);
+  const trackedPaymentSuccessRef = useRef(false);
 
   const [paymentSession, setPaymentSession] = useState<PaymentSession | null>(null);
   const [creating, setCreating] = useState(false);
@@ -49,11 +52,41 @@ export default function CheckoutPage() {
       if ((result.data as any)?.transaction?.status === "success") {
         setPaid(true);
         clearInterval(interval);
+        if (!trackedPaymentSuccessRef.current) {
+          trackedPaymentSuccessRef.current = true;
+          void trackEvent("payment_success", {
+            courseId: (result.data as any)?.booking?.course_id,
+            bookingId,
+            transactionId: (result.data as any)?.transaction?.id,
+            source: "checkout_poll",
+            metadata: {
+              referenceCode: (result.data as any)?.transaction?.reference_code,
+              amount: (result.data as any)?.transaction?.amount,
+            },
+          });
+        }
         toast({ title: "🎉 Thanh toán thành công!" });
       }
     }, 5000);
     return () => clearInterval(interval);
   }, [paymentSession, paid]);
+
+  useEffect(() => {
+    const transaction = (data as any)?.transaction;
+    const booking = (data as any)?.booking;
+    if (transaction?.status !== "success" || trackedPaymentSuccessRef.current) return;
+    trackedPaymentSuccessRef.current = true;
+    void trackEvent("payment_success", {
+      courseId: booking?.course_id,
+      bookingId,
+      transactionId: transaction?.id,
+      source: "checkout_loaded_success",
+      metadata: {
+        referenceCode: transaction?.reference_code,
+        amount: transaction?.amount,
+      },
+    });
+  }, [bookingId, data, trackEvent]);
 
   const createPayment = async () => {
     if (!data || !session) return;
@@ -74,7 +107,26 @@ export default function CheckoutPage() {
       });
       if (error) throw error;
       setPaymentSession(result);
+      void trackEvent("payment_start", {
+        courseId: booking.course_id,
+        bookingId,
+        transactionId: result?.transaction_id,
+        source: "checkout_create_payment",
+        metadata: {
+          amount: amountDue,
+          referenceCode: result?.reference_code,
+          paymentOption,
+        },
+      });
     } catch (err: any) {
+      void trackEvent("payment_failed", {
+        courseId: data?.booking?.course_id,
+        bookingId,
+        source: "checkout_create_payment",
+        metadata: {
+          message: err.message,
+        },
+      });
       toast({ title: "Không thể tạo phiên thanh toán", description: err.message, variant: "destructive" });
     }
     setCreating(false);

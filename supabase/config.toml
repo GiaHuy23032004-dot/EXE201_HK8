@@ -39,6 +39,12 @@ verify_jwt = false
 [functions.admin-subscriptions]
 verify_jwt = false
 
+[functions.admin-dashboard-metrics]
+verify_jwt = false
+
+[functions.track-event]
+verify_jwt = false
+
 [functions.learner-report-actions]
 verify_jwt = false
 

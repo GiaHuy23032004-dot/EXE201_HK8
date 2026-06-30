@@ -26,6 +26,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useAnalyticsTracker } from "@/hooks/useAnalyticsTracker";
 import { type Course, useCourses } from "@/hooks/use-courses";
 import {
   DEFAULT_MAP_CENTER,
@@ -236,6 +237,7 @@ function MapFocusController({
 export default function MapPage() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { trackEvent } = useAnalyticsTracker();
   const [searchParams] = useSearchParams();
   const initialLocation = searchParams.get("location") ?? "";
   const { data: allCourses = [], isLoading, isError, error } = useCourses({ format: "offline" });
@@ -264,6 +266,16 @@ export default function MapPage() {
     () => detectedIntent.expandedTerms.map(normalizeIntentText).filter(Boolean),
     [detectedIntent.expandedTerms],
   );
+
+  useEffect(() => {
+    void trackEvent("map_view", {
+      route: "/map",
+      source: "map_page",
+      metadata: {
+        initialLocation,
+      },
+    });
+  }, [initialLocation, trackEvent]);
 
   useEffect(() => {
     if (initialSearchHandledRef.current || !initialLocation.trim()) return;
@@ -395,6 +407,10 @@ export default function MapPage() {
       }
 
       applyAddressPoint(point);
+      void trackEvent("map_filter_apply", {
+        source: "location_search",
+        metadata: { query: term, location: point.label },
+      });
       toast({ title: `Đang tìm lớp gần: ${point.label}` });
     } catch {
       setActiveSearchLocation(null);
@@ -452,6 +468,10 @@ export default function MapPage() {
         setAutocompleteOptions([]);
         setSelectedCourseId(null);
         setIsGettingLocation(false);
+        void trackEvent("map_filter_apply", {
+          source: "current_location",
+          metadata: { location: nextLocation.label },
+        });
         toast({ title: "Đã dùng vị trí hiện tại để sắp xếp lớp học gần bạn." });
       },
       (locationError) => {
@@ -624,7 +644,13 @@ export default function MapPage() {
                     {MAP_CATEGORY_FILTERS.map((item) => (
                       <DropdownMenuItem
                         key={item.value}
-                        onClick={() => setSelectedCategory(item.value)}
+                      onClick={() => {
+                        setSelectedCategory(item.value);
+                        void trackEvent("map_filter_apply", {
+                          source: "category_filter",
+                          metadata: { category: item.value },
+                        });
+                      }}
                         className={selectedCategory === item.value ? "bg-primary/10 text-primary" : ""}
                       >
                         {item.label}
@@ -765,7 +791,13 @@ export default function MapPage() {
                       key={item.value}
                       type="button"
                       disabled={item.value !== "all" && !activeOrigin}
-                      onClick={() => setRadius(item.value)}
+                      onClick={() => {
+                        setRadius(item.value);
+                        void trackEvent("map_filter_apply", {
+                          source: "radius_filter",
+                          metadata: { radius: item.value },
+                        });
+                      }}
                       className={`h-8 rounded-lg px-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
                         radius === item.value
                           ? "bg-primary text-primary-foreground shadow-sm"
@@ -847,6 +879,12 @@ export default function MapPage() {
                       key={course.id}
                       type="button"
                       onClick={() => {
+                        void trackEvent("course_detail_click", {
+                          courseId: course.id,
+                          mentorId: course.mentor_id,
+                          source: "map_result_list",
+                          metadata: { title: course.title, category: course.category },
+                        });
                         navigate(`/course/${course.id}`);
                       }}
                       onMouseEnter={() => courseHasCoordinates && setSelectedCourseId(course.id)}
@@ -958,7 +996,19 @@ export default function MapPage() {
                       </div>
                       <p className="text-xs text-muted-foreground">{course.location || "Chưa có địa chỉ"}</p>
                       <p className="font-bold text-primary">{formatPrice(course.price)}</p>
-                      <Button size="sm" className="w-full rounded-xl" onClick={() => navigate(`/course/${course.id}`)}>
+                      <Button
+                        size="sm"
+                        className="w-full rounded-xl"
+                        onClick={() => {
+                          void trackEvent("course_detail_click", {
+                            courseId: course.id,
+                            mentorId: course.mentor_id,
+                            source: "map_marker_popup",
+                            metadata: { title: course.title, category: course.category },
+                          });
+                          navigate(`/course/${course.id}`);
+                        }}
+                      >
                         Xem chi tiết
                       </Button>
                     </div>

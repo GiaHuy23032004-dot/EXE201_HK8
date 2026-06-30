@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { TrustBadges } from "@/components/marketplace/TrustBadges";
 import type { PublicMentorTrustBadge } from "@/hooks/usePublicMentorVerification";
 import { getCourseCategoryShortLabel, getCourseCategoryGradient } from "@/constants/courseCategories";
+import { useAnalyticsTracker } from "@/hooks/useAnalyticsTracker";
 
 export interface CourseData {
   id: string;
@@ -35,6 +36,8 @@ function CategoryImageFallback({ category }: { category: string }) {
 }
 
 export function CourseCard({ course }: { course: CourseData }) {
+  const { trackEvent } = useAnalyticsTracker();
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -45,6 +48,15 @@ export function CourseCard({ course }: { course: CourseData }) {
     >
       <Link
         to={`/course/${course.id}`}
+        onClick={() => void trackEvent("course_detail_click", {
+          courseId: course.id,
+          source: "course_card",
+          metadata: {
+            title: course.title,
+            category: course.category,
+            format: course.format,
+          },
+        })}
         className="group flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-white shadow-sm transition-all duration-200 hover:shadow-lg hover:border-primary/20"
       >
         {/* Image area — fixed 16:9 */}

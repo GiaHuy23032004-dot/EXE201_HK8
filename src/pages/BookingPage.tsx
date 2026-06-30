@@ -31,6 +31,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
+import { useAnalyticsTracker } from "@/hooks/useAnalyticsTracker";
 import {
   calculateDepositBreakdown,
   calculateVoucherPaymentBreakdown,
@@ -170,6 +171,7 @@ export default function BookingPage() {
   const navigate = useNavigate();
   const { session } = useAuth();
   const { toast } = useToast();
+  const { trackEvent } = useAnalyticsTracker();
 
   const { data: course, isLoading } = useLearnerCourseDetail(id);
   const createBooking = useCreateLearnerBooking();
@@ -335,6 +337,19 @@ export default function BookingPage() {
       });
 
       setBookingId(booking.id);
+      void trackEvent("booking_created", {
+        courseId: course.id,
+        mentorId: course.mentor_id,
+        bookingId: booking.id,
+        source: "booking_page",
+        metadata: {
+          paymentOption,
+          platformPaymentSelected,
+          totalPrice,
+          platformAmount,
+          voucherSelected: Boolean(selectedVoucher),
+        },
+      });
 
       if (platformPaymentSelected && selectedVoucher && voucherPreview?.ok) {
         try {

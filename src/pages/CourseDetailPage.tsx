@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -23,7 +23,9 @@ import {
 import { useCourseReviews } from "@/hooks/useLearnerReviews";
 import { usePublicMentorVerification } from "@/hooks/usePublicMentorVerification";
 import { useToast } from "@/hooks/use-toast";
+import { useAnalyticsTracker } from "@/hooks/useAnalyticsTracker";
 import { getCourseCategoryLabel, getCourseCategoryGradient } from "@/constants/courseCategories";
+import { supabase } from "@/integrations/supabase/client";
 
 type CourseDetailMentor = NonNullable<LearnerCourse["mentor"]> & {
   bio?: string | null;
@@ -36,6 +38,18 @@ type CourseDetail = LearnerCourse & {
 
 const fallbackAvatar =
   "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=face";
+
+function getOrCreateCourseViewSessionId() {
+  const key = "vet_session_id";
+  const existing = window.localStorage.getItem(key);
+  if (existing) return existing;
+  const generated =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  window.localStorage.setItem(key, generated);
+  return generated;
+}
 
 // ── Image with gradient fallback ─────────────────────────────────────────────
 function CourseImage({ src, alt, category }: { src: string | null; alt: string; category: string }) {
@@ -107,6 +121,8 @@ export default function CourseDetailPage() {
   const { id } = useParams();
   const { user, session } = useAuth();
   const { toast } = useToast();
+  const { trackEvent } = useAnalyticsTracker();
+  const trackedCourseRef = useRef<string | null>(null);
   const isLearner = !user || user.role === "learner";
   const [reportOpen, setReportOpen] = useState(false);
   const [commentReport, setCommentReport] = useState<{
@@ -126,6 +142,38 @@ export default function CourseDetailPage() {
   const isVerifiedMentor = mentorVerification?.verified === true;
   const mentorBadges = mentorVerification?.badges ?? [];
   const categoryLabel = getCourseCategoryLabel(courseDetail?.category);
+
+  useEffect(() => {
+    if (!courseDetail?.id || courseDetail.status !== "approved") return;
+    if (session?.user?.id && session.user.id === courseDetail.mentor_id) return;
+    if (trackedCourseRef.current === courseDetail.id) return;
+
+    trackedCourseRef.current = courseDetail.id;
+    const sessionId = getOrCreateCourseViewSessionId();
+
+    void trackEvent("course_view", {
+      courseId: courseDetail.id,
+      mentorId: courseDetail.mentor_id,
+      source: "course_detail",
+      metadata: {
+        title: courseDetail.title,
+        category: courseDetail.category,
+        format: courseDetail.format,
+      },
+    });
+
+    (supabase as any)
+      .rpc("track_course_view", {
+        course_id: courseDetail.id,
+        session_id: sessionId,
+        source: "course_detail",
+      })
+      .then(({ error }: { error: unknown }) => {
+        if (error && import.meta.env.DEV) {
+          console.warn("track_course_view failed", error);
+        }
+      });
+  }, [courseDetail?.id, courseDetail?.mentor_id, courseDetail?.status, courseDetail?.title, courseDetail?.category, courseDetail?.format, session?.user?.id, trackEvent]);
 
   const handleSave = () => {
     if (!session?.user?.id) {
@@ -454,7 +502,15 @@ export default function CourseDetailPage() {
                   {isLearner ? (
                     <div className="space-y-3">
                       {/* Primary CTA */}
-                      <Link to={`/booking/${courseDetail.id}`}>
+                      <Link
+                        to={`/booking/${courseDetail.id}`}
+                        onClick={() => void trackEvent("booking_start", {
+                          courseId: courseDetail.id,
+                          mentorId: courseDetail.mentor_id,
+                          source: "course_detail_cta",
+                          metadata: { title: courseDetail.title },
+                        })}
+                      >
                         <Button className="h-12 w-full rounded-2xl border-0 bg-gradient-to-r from-cyan-500 to-teal-600 text-sm font-bold text-white shadow-lg shadow-cyan-200/60 transition-all hover:brightness-110 hover:-translate-y-0.5">
                           Đặt lịch học ngay
                         </Button>

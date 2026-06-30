@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
-import { Users, BookOpen, DollarSign, TrendingUp, Shield, Check, X, Eye, BarChart3, Flag, Megaphone, UserX, UserCheck, Crown, Loader2, Search, AlertCircle, Wallet, Copy, Banknote, Download, BookText } from "lucide-react";
-import { useLocation } from "react-router-dom";
+import { Users, BookOpen, DollarSign, TrendingUp, Shield, Check, X, BarChart3, Flag, Megaphone, UserX, UserCheck, Crown, Loader2, Search, AlertCircle, Wallet, Copy, Banknote, Download, BookText, ClipboardCheck, Activity, ArrowUpRight, RefreshCw, Info, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Link, useLocation } from "react-router-dom";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -17,17 +17,18 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Separator } from "@/components/ui/separator";
 import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from "recharts";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, ReferenceLine } from "recharts";
 import { useAuth } from "@/contexts/AuthContext";
-import { getCourseCategoryLabel, normalizeCourseCategory } from "@/constants/courseCategories";
-
-const COLORS = ["hsl(var(--primary))", "hsl(var(--secondary))", "hsl(var(--accent))", "hsl(var(--warning, 38 92% 50%))", "hsl(var(--muted-foreground))"];
+import { useAdminDashboardMetrics, type AdminDashboardRange, type AdminRecentActivityItem } from "@/hooks/admin/useAdminDashboardMetrics";
+import { cn } from "@/lib/utils";
 
 type AdminSection = "analytics" | "users" | "mentors" | "courses" | "reports" | "promoted" | "payouts" | "ledger";
 
@@ -45,7 +46,7 @@ const adminRouteSections: Record<string, AdminSection> = {
 
 const adminSectionMeta: Record<AdminSection, { title: string; description: string; icon: typeof Shield }> = {
   analytics: {
-    title: "Admin Dashboard",
+    title: "Tổng quan quản trị",
     description: "Tổng quan số liệu, doanh thu và hoạt động marketplace.",
     icon: Shield,
   },
@@ -86,11 +87,17 @@ const adminSectionMeta: Record<AdminSection, { title: string; description: strin
   },
 };
 
+const dashboardRangeOptions: Array<{ value: AdminDashboardRange; label: string }> = [
+  { value: "30d", label: "30 ngày" },
+  { value: "1y", label: "1 năm" },
+];
+
 type UserRecord = {
   user_id: string;
   name: string | null;
   username: string | null;
   email: string | null;
+  phone?: string | null;
   avatar_url: string | null;
   product_role: "learner" | "mentor";
   role?: string;
@@ -98,12 +105,27 @@ type UserRecord = {
   is_blocked: boolean;
   roles: string[];
   is_admin?: boolean;
+  bookings_count?: number | null;
+  reports_submitted_count?: number | null;
+  reports_against_count?: number | null;
 };
 
 type UserActionDialogState = {
   type: "block" | "grant_admin" | "revoke_admin";
   user: UserRecord;
 } | null;
+
+type UserFilter = "all" | "learner" | "mentor" | "admin" | "blocked";
+
+const USER_PAGE_SIZE = 10;
+
+const userFilterOptions: Array<{ value: UserFilter; label: string }> = [
+  { value: "all", label: "Tất cả" },
+  { value: "learner", label: "Learner" },
+  { value: "mentor", label: "Mentor" },
+  { value: "admin", label: "Admin" },
+  { value: "blocked", label: "Đã khóa" },
+];
 
 type PayoutOrder = { code: string; date: string; gross: number };
 type PayoutRequest = {
@@ -121,13 +143,19 @@ type LedgerEntry = {
 export default function AdminDashboard() {
   const { toast } = useToast();
   const { session } = useAuth();
-  const qc = useQueryClient();
   const location = useLocation();
   const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
-  const FEE = 0.15;
   const currentSection = adminRouteSections[location.pathname] ?? "analytics";
   const currentMeta = adminSectionMeta[currentSection];
   const PageIcon = currentMeta.icon;
+  const [dashboardRange, setDashboardRange] = useState<AdminDashboardRange>("30d");
+  const {
+    data: dashboardMetrics,
+    isLoading: dashboardLoading,
+    error: dashboardError,
+    refetch: refetchDashboardMetrics,
+    isFetching: dashboardFetching,
+  } = useAdminDashboardMetrics(dashboardRange, currentSection === "analytics");
 
   // ── UI state ──────────────────────────────────────────────
   const [userList, setUserList] = useState<UserRecord[]>([]);
@@ -137,6 +165,10 @@ export default function AdminDashboard() {
   const [userLoadError, setUserLoadError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [userActionDialog, setUserActionDialog] = useState<UserActionDialogState>(null);
+  const [userFilter, setUserFilter] = useState<UserFilter>("all");
+  const [hideDemoUsers, setHideDemoUsers] = useState(false);
+  const [userPage, setUserPage] = useState(1);
+  const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null);
   const [activePayout, setActivePayout] = useState<PayoutRequest | null>(null);
   const [ledgerFrom, setLedgerFrom] = useState("");
   const [ledgerTo, setLedgerTo] = useState("");
@@ -248,74 +280,6 @@ export default function AdminDashboard() {
         gross: t.amount,
         commission: t.platform_fee,
       })) as LedgerEntry[];
-    },
-  });
-
-  // Analytics aggregates
-  const { data: analytics, isLoading: analyticsLoading } = useQuery({
-    queryKey: ["admin-analytics"],
-    enabled: currentSection === "analytics",
-    queryFn: async () => {
-      const [usersRes, coursesRes, bookingsRes, revenueRes, mentorsRes] = await Promise.all([
-        supabase.from("profiles").select("user_id", { count: "exact", head: true }),
-        supabase.from("courses").select("id", { count: "exact", head: true }),
-        supabase.from("bookings").select("id", { count: "exact", head: true }),
-        supabase.from("transactions").select("amount").eq("status", "success"),
-        supabase.from("profiles").select("user_id", { count: "exact", head: true }).eq("role", "mentor"),
-      ]);
-      const totalRevenue = (revenueRes.data ?? []).reduce((s: number, t: any) => s + t.amount, 0);
-      return {
-        users: usersRes.count ?? 0,
-        courses: coursesRes.count ?? 0,
-        bookings: bookingsRes.count ?? 0,
-        revenue: totalRevenue,
-        activeMentors: mentorsRes.count ?? 0,
-      };
-    },
-  });
-
-  // Monthly revenue from transactions
-  const { data: monthlyRevenue = [] } = useQuery({
-    queryKey: ["admin-monthly-revenue"],
-    enabled: currentSection === "analytics",
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("transactions")
-        .select("amount, created_at")
-        .eq("status", "success")
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      const map: Record<string, { revenue: number; bookings: number }> = {};
-      (data ?? []).forEach((t: any) => {
-        const d = new Date(t.created_at);
-        const key = `T${d.getMonth() + 1}`;
-        if (!map[key]) map[key] = { revenue: 0, bookings: 0 };
-        map[key].revenue += Math.round(t.amount / 1_000_000);
-        map[key].bookings += 1;
-      });
-      return Object.entries(map).map(([month, v]) => ({ month, ...v, users: 0 }));
-    },
-  });
-
-  // Category distribution
-  const { data: categoryData = [] } = useQuery({
-    queryKey: ["admin-categories"],
-    enabled: currentSection === "analytics",
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("courses")
-        .select("category")
-        .eq("status", "approved");
-      if (error) throw error;
-      const map: Record<string, number> = {};
-      (data ?? []).forEach((c: any) => {
-        const category = normalizeCourseCategory(c.category);
-        map[category] = (map[category] ?? 0) + 1;
-      });
-      return Object.entries(map)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 5)
-        .map(([name, value]) => ({ name: getCourseCategoryLabel(name), value }));
     },
   });
 
@@ -483,18 +447,61 @@ export default function AdminDashboard() {
   };
 
   const currentAdminId = session?.user?.id ?? "";
-  const adminUserCount = new Set(userList.filter((u) => u.roles.includes("admin")).map((u) => u.user_id)).size;
+  const isAdminUser = (user: UserRecord) => user.roles.includes("admin") || user.is_admin === true;
+  const getProductRole = (user: UserRecord) => (user.product_role === "mentor" ? "mentor" : "learner");
+  const getUserName = (user: UserRecord) => user.name || user.email || "Không có tên";
+  const getUserInitial = (user: UserRecord) => (user.name || user.email || "?").trim().charAt(0).toUpperCase();
+  const isDemoUser = (user: UserRecord) => {
+    const email = (user.email ?? "").toLowerCase();
+    return email.startsWith("demo-dashboard") || email.includes("vet.local");
+  };
+
+  const adminUserCount = new Set(userList.filter((u) => isAdminUser(u)).map((u) => u.user_id)).size;
+  const hasDemoUsers = userList.some(isDemoUser);
+  const userMetrics = {
+    total: userList.length,
+    learners: userList.filter((u) => getProductRole(u) === "learner").length,
+    mentors: userList.filter((u) => getProductRole(u) === "mentor").length,
+    admins: adminUserCount,
+    blocked: userList.filter((u) => u.is_blocked).length,
+  };
   const userSearchText = userSearch.trim().toLowerCase();
   const filteredUsers = userList.filter((u) => {
+    if (hideDemoUsers && isDemoUser(u)) return false;
+
+    if (userFilter === "learner" && getProductRole(u) !== "learner") return false;
+    if (userFilter === "mentor" && getProductRole(u) !== "mentor") return false;
+    if (userFilter === "admin" && !isAdminUser(u)) return false;
+    if (userFilter === "blocked" && !u.is_blocked) return false;
+
     if (!userSearchText) return true;
     return [u.name, u.email, u.username]
       .filter(Boolean)
       .some((value) => value!.toLowerCase().includes(userSearchText));
   });
+  const totalUserPages = Math.max(1, Math.ceil(filteredUsers.length / USER_PAGE_SIZE));
+  const paginatedUsers = filteredUsers.slice((userPage - 1) * USER_PAGE_SIZE, userPage * USER_PAGE_SIZE);
+  const userPageStart = filteredUsers.length === 0 ? 0 : (userPage - 1) * USER_PAGE_SIZE + 1;
+  const userPageEnd = Math.min(userPage * USER_PAGE_SIZE, filteredUsers.length);
+
+  useEffect(() => {
+    setUserPage(1);
+  }, [userSearch, userFilter, hideDemoUsers]);
+
+  useEffect(() => {
+    if (userPage > totalUserPages) {
+      setUserPage(totalUserPages);
+    }
+  }, [totalUserPages, userPage]);
 
   const formatUserDate = (value?: string | null) => {
     if (!value) return "";
     return new Date(value).toLocaleString("vi-VN");
+  };
+
+  const formatUserDateShort = (value?: string | null) => {
+    if (!value) return "—";
+    return new Date(value).toLocaleDateString("vi-VN");
   };
 
   const escapeCsvCell = (value: unknown) => {
@@ -506,12 +513,13 @@ export default function AdminDashboard() {
     const rows = filteredUsers.map((u) => [
       u.name ?? "",
       u.email ?? "",
-      u.product_role,
-      u.roles.includes("admin") ? "Yes" : "No",
+      u.username ?? "",
+      getProductRole(u),
+      isAdminUser(u) ? "Yes" : "No",
       u.is_blocked ? "Yes" : "No",
       formatUserDate(u.created_at),
     ]);
-    const header = ["Name", "Email", "Product Role", "Is Admin", "Is Blocked", "Created At"];
+    const header = ["Name", "Email", "Username", "Product Role", "Is Admin", "Is Blocked", "Created At"];
     const csv = [header, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\n");
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
     const url = URL.createObjectURL(blob);
@@ -525,6 +533,89 @@ export default function AdminDashboard() {
   };
 
   // ── Ledger filter logic ───────────────────────────────────
+  const renderUserAvatar = (user: UserRecord, className = "h-10 w-10") => (
+    <Avatar className={cn("shrink-0 rounded-xl", className)}>
+      <AvatarImage src={user.avatar_url ?? undefined} />
+      <AvatarFallback className="rounded-xl bg-primary/10 text-primary text-sm font-bold">
+        {getUserInitial(user)}
+      </AvatarFallback>
+    </Avatar>
+  );
+
+  const renderProductRoleBadge = (user: UserRecord) => {
+    const role = getProductRole(user);
+    return (
+      <Badge
+        variant="outline"
+        className={cn(
+          "rounded-full text-xs",
+          role === "mentor" ? "border-teal-200 bg-teal-50 text-teal-700" : "border-blue-200 bg-blue-50 text-blue-700",
+        )}
+      >
+        {role === "mentor" ? "Mentor" : "Learner"}
+      </Badge>
+    );
+  };
+
+  const renderSystemRoleBadge = (user: UserRecord) => (
+    isAdminUser(user)
+      ? <Badge className="rounded-full border-0 bg-amber-100 text-amber-700"><Crown className="mr-1 h-3 w-3" />Admin</Badge>
+      : <Badge variant="outline" className="rounded-full text-xs text-muted-foreground">User</Badge>
+  );
+
+  const renderStatusBadge = (user: UserRecord) => (
+    user.is_blocked
+      ? <Badge className="rounded-full border-0 bg-destructive/10 text-destructive">Blocked</Badge>
+      : <Badge className="rounded-full border-0 bg-emerald-100 text-emerald-700">Active</Badge>
+  );
+
+  const renderUserActions = (user: UserRecord, compact = false) => {
+    const admin = isAdminUser(user);
+    const isSelf = user.user_id === currentAdminId;
+    const cannotRevokeAdmin = isSelf || (admin && adminUserCount <= 1);
+    const blockLoading = actionLoading === `${user.user_id}_block`;
+    const roleLoading = actionLoading === `${user.user_id}_role`;
+
+    return (
+      <div className={cn("flex flex-wrap items-center gap-2", compact ? "justify-start" : "justify-end")}>
+        <Button
+          size="sm"
+          variant={user.is_blocked ? "default" : "outline"}
+          className={cn(
+            "h-8 rounded-lg px-3 text-xs",
+            user.is_blocked ? "gradient-primary border-0 text-primary-foreground" : "text-destructive hover:text-destructive",
+          )}
+          disabled={blockLoading || (isSelf && !user.is_blocked)}
+          onClick={(event) => {
+            event.stopPropagation();
+            user.is_blocked ? void handleUnblockUser(user) : handleUserAction("block", user);
+          }}
+        >
+          {blockLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : user.is_blocked ? <><UserCheck className="mr-1 h-3 w-3" />Mở khóa</> : <><UserX className="mr-1 h-3 w-3" />Khóa</>}
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className={cn("h-8 rounded-lg px-3 text-xs", admin ? "text-destructive hover:text-destructive" : "")}
+          disabled={roleLoading || (admin && cannotRevokeAdmin)}
+          onClick={(event) => {
+            event.stopPropagation();
+            handleUserAction(admin ? "revoke_admin" : "grant_admin", user);
+          }}
+        >
+          {roleLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : admin ? <><Crown className="mr-1 h-3 w-3" />Thu hồi Admin</> : <><Crown className="mr-1 h-3 w-3" />Cấp Admin</>}
+        </Button>
+      </div>
+    );
+  };
+
+  const renderDetailStat = (label: string, value: string | number | null | undefined) => (
+    <div className="rounded-xl border bg-muted/30 p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="mt-1 font-semibold text-foreground">{value ?? "Chưa có dữ liệu"}</p>
+    </div>
+  );
+
   const filteredLedger = (() => {
     const parse = (s: string) => {
       const parts = s.split(/[\s/]/);
@@ -570,147 +661,1026 @@ export default function AdminDashboard() {
     toast({ title: "Đã xuất file CSV", description: `${filteredLedger.length} giao dịch` });
   };
 
-  const renderChartEmpty = (message: string) => (
-    <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed bg-muted/30 px-6 text-center text-sm text-muted-foreground">
-      {message}
-    </div>
+  const formatCount = (value: number | null | undefined) => (value ?? 0).toLocaleString("vi-VN");
+  const getFunnelLabel = (key: string, fallback: string) => {
+    const labels: Record<string, string> = {
+      page_view: "Truy cập",
+      search_submit: "Tìm kiếm",
+      course_view: "Xem khóa học",
+      booking_start: "Bắt đầu đặt lịch",
+      booking_created: "Tạo booking",
+      payment_success: "Thanh toán thành công",
+    };
+    return labels[key] ?? fallback;
+  };
+  const getTrafficConversionLabel = (key: string, fallback: string) => {
+    const labels: Record<string, string> = {
+      search_per_visit: "Truy cập → Tìm kiếm",
+      course_view_per_search: "Tìm kiếm → Xem khóa học",
+      booking_start_per_course_view: "Xem khóa học → Bắt đầu đặt lịch",
+      booking_created_per_booking_start: "Bắt đầu đặt lịch → Tạo booking",
+      payment_success_per_booking_created: "Tạo booking → Thanh toán thành công",
+    };
+    return labels[key] ?? fallback;
+  };
+  const getOperationalConversionLabel = (key: string, fallback: string) => {
+    const labels: Record<string, string> = {
+      booking_to_payment_success: "Booking → Thanh toán thành công",
+      payment_success_to_completed_booking: "Thanh toán → Hoàn thành buổi học",
+      completed_booking_to_review: "Hoàn thành → Đánh giá",
+      refund_rate: "Tỷ lệ hoàn tiền",
+      course_approval_rate: "Tỷ lệ duyệt khóa học",
+      report_resolution_rate: "Tỷ lệ xử lý báo cáo",
+      withdrawal_processing_rate: "Tỷ lệ xử lý rút tiền",
+    };
+    return labels[key] ?? fallback;
+  };
+  const getOperationalConversionHelper = (key: string, fallback: string) => {
+    const helpers: Record<string, string> = {
+      booking_to_payment_success: "Giao dịch thành công / booking được tạo",
+      payment_success_to_completed_booking: "Booking hoàn thành / giao dịch thành công",
+      completed_booking_to_review: "Review được gửi / booking hoàn thành",
+      refund_rate: "Giao dịch hoàn tiền / giao dịch thành công",
+      course_approval_rate: "Khóa đã duyệt / khóa tạo mới",
+      report_resolution_rate: "Report đã xử lý hoặc bỏ qua / report mới",
+      withdrawal_processing_rate: "Yêu cầu đã xử lý / yêu cầu rút tiền mới",
+    };
+    return helpers[key] ?? fallback;
+  };
+  const formatCompactVnd = (value: number | null | undefined) => {
+    const amount = value ?? 0;
+    if (amount >= 1_000_000_000) return `${(amount / 1_000_000_000).toFixed(1).replace(".0", "")}B VNĐ`;
+    if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(1).replace(".0", "")}M VNĐ`;
+    return fmtVnd(amount);
+  };
+  const formatAxisVnd = (value: number) => {
+    if (value === 0) return "0đ";
+    if (Math.abs(value) >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(1).replace(".0", "")} tỷ`;
+    if (Math.abs(value) >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(".0", "")} tr`;
+    if (Math.abs(value) >= 1_000) return `${Math.round(value / 1_000)}k`;
+    return `${value}đ`;
+  };
+  const formatPercent = (value: number | null | undefined) =>
+    value === null || value === undefined ? "Chưa đủ dữ liệu" : `${(value * 100).toFixed(1).replace(".0", "")}%`;
+
+  const dashboard = dashboardMetrics;
+  const overview = dashboard?.overview;
+  const revenueChartData = dashboard?.charts?.revenue ?? [];
+  const bookingChartData = dashboard?.charts?.bookings ?? [];
+  const buildFallbackTimeline = () => {
+    if (dashboardRange === "1y") {
+      const now = new Date();
+      const currentMonthStart = new Date(now.getFullYear(), 0, 1);
+      return Array.from({ length: 12 }, (_, index) => {
+        const start = new Date(currentMonthStart.getFullYear(), index, 1);
+        const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+        return {
+          bucketKey: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`,
+          label: `T${start.getMonth() + 1}`,
+          start: start.toISOString(),
+          end: end.toISOString(),
+        };
+      });
+    }
+
+    const today = new Date();
+    const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
+    const firstDay = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate() - 30);
+
+    const buckets = [];
+    for (let index = 0; index < 5; index += 1) {
+      const start = new Date(firstDay.getFullYear(), firstDay.getMonth(), firstDay.getDate() + index * 7);
+      if (start >= tomorrow) break;
+      const rawEnd = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
+      const end = rawEnd < tomorrow ? rawEnd : tomorrow;
+      const daysInBucket = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000));
+      const endLabelDate = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
+      buckets.push({
+        bucketKey: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}_${endLabelDate.getFullYear()}-${String(endLabelDate.getMonth() + 1).padStart(2, "0")}-${String(endLabelDate.getDate()).padStart(2, "0")}`,
+        label: daysInBucket < 7 ? "Tuần hiện tại" : `Tuần ${index + 1}`,
+        start: start.toISOString(),
+        end: end.toISOString(),
+      });
+    }
+
+    return buckets;
+  };
+  const fallbackTimeline = buildFallbackTimeline();
+  const revenueTimelineData = revenueChartData.length > 0
+    ? revenueChartData
+    : fallbackTimeline.map((bucket) => ({ ...bucket, gmv: 0, platformFee: 0 }));
+  const bookingTimelineData = bookingChartData.length > 0
+    ? bookingChartData
+    : fallbackTimeline.map((bucket) => ({ ...bucket, total: 0, completed: 0 }));
+  const revenueTotal = revenueChartData.reduce(
+    (sum, item) => sum + Number(item.gmv || 0) + Number(item.platformFee || 0),
+    0,
   );
+  const bookingTotal = bookingChartData.reduce(
+    (sum, item) => sum + Number(item.total || 0) + Number(item.completed || 0),
+    0,
+  );
+  const hasRevenueSeriesData = revenueTotal > 0;
+  const hasBookingSeriesData = bookingTotal > 0;
+  const operationalRates = dashboard?.operationalRates ?? [];
+  const trafficFunnel = dashboard?.trafficFunnel ?? null;
+  const trafficConversionRates = dashboard?.conversionRates ?? [];
+  const pendingActions = dashboard?.pendingActions;
+  const recentActivity = dashboard?.recentActivity ?? [];
+  const selectedRangeLabel = dashboardRangeOptions.find((option) => option.value === (dashboard?.range ?? dashboardRange))?.label ?? "30 ngày";
+  const chartGranularityLabel = dashboard?.granularity === "week" ? "tuần" : "tháng";
+  const formatDateShort = (value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+  };
+  const formatBucketRange = (start?: string, end?: string) => {
+    if (!start || !end) return "";
+    const endDate = new Date(end);
+    if (Number.isNaN(endDate.getTime())) return "";
+    const inclusiveEnd = new Date(endDate.getFullYear(), endDate.getMonth(), endDate.getDate() - 1);
+    return `${formatDateShort(start)} - ${inclusiveEnd.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" })}`;
+  };
+  type ChartTooltipPayload = {
+    value?: number | string;
+    dataKey?: string | number;
+    name?: string;
+    payload?: {
+      label?: string;
+      start?: string;
+      end?: string;
+      gmv?: number;
+      platformFee?: number;
+      total?: number;
+      completed?: number;
+    };
+  };
+  const renderLegendText = (value: unknown) => (
+    <span className="text-sm font-medium text-foreground">{String(value)}</span>
+  );
+  const formatAxisLabel = (value: string) => value === "Tuần hiện tại" ? "Tuần này" : value;
+  const RevenueTooltip = ({ active, payload }: { active?: boolean; payload?: ChartTooltipPayload[] }) => {
+    if (!active || !payload?.length) return null;
+    const point = payload[0]?.payload;
+    const header = `${point?.label ?? ""}${point?.start && point?.end ? ` · ${formatBucketRange(point.start, point.end)}` : ""}`;
+
+    return (
+      <div className="rounded-xl border bg-background p-3 text-xs shadow-lg">
+        <p className="mb-2 font-semibold text-foreground">{header}</p>
+        <div className="space-y-1 text-muted-foreground">
+          <p>GMV: <span className="font-medium text-foreground">{fmtVnd(Number(point?.gmv ?? 0))}</span></p>
+          <p>Phí nền tảng: <span className="font-medium text-foreground">{fmtVnd(Number(point?.platformFee ?? 0))}</span></p>
+        </div>
+      </div>
+    );
+  };
+  const BookingTooltip = ({ active, payload }: { active?: boolean; payload?: ChartTooltipPayload[] }) => {
+    if (!active || !payload?.length) return null;
+    const point = payload[0]?.payload;
+    const total = Number(point?.total ?? 0);
+    const completed = Number(point?.completed ?? 0);
+    const completionRate = total > 0 ? `${((completed / total) * 100).toFixed(1).replace(".0", "")}%` : "—";
+    const header = `${point?.label ?? ""}${point?.start && point?.end ? ` · ${formatBucketRange(point.start, point.end)}` : ""}`;
+
+    return (
+      <div className="rounded-xl border bg-background p-3 text-xs shadow-lg">
+        <p className="mb-2 font-semibold text-foreground">{header}</p>
+        <div className="space-y-1 text-muted-foreground">
+          <p>Tổng booking: <span className="font-medium text-foreground">{formatCount(total)}</span></p>
+          <p>Đã hoàn thành: <span className="font-medium text-foreground">{formatCount(completed)}</span></p>
+          <p>Tỷ lệ hoàn thành: <span className="font-medium text-foreground">{completionRate}</span></p>
+        </div>
+      </div>
+    );
+  };
+  const cleanDashboardText = (value: string | null | undefined) => {
+    if (!value) return "";
+
+    const replacements: Array<[string, string]> = [
+      ["Thanh toÃ¡n thÃ nh cÃ´ng", "Thanh toán thành công"],
+      ["Booking má»›i", "Booking mới"],
+      ["BÃ¡o cÃ¡o má»›i", "Báo cáo mới"],
+      ["KhÃ³a há»c chá» duyá»‡t", "Khóa học chờ duyệt"],
+      ["KhÃ³a há»c má»›i", "Khóa học mới"],
+      ["YÃªu cáº§u rÃºt tiá»n", "Yêu cầu rút tiền"],
+      ["Giao dá»‹ch", "Giao dịch"],
+      ["Hoáº¡t Ä‘á»™ng gáº§n Ä‘Ã¢y", "Hoạt động gần đây"],
+      ["Xá»­ lÃ½", "Xử lý"],
+      ["â€¢", "•"],
+      ["Ä‘", "đ"],
+      ["upcoming", "sắp diễn ra"],
+      ["pending", "chờ xử lý"],
+      ["completed", "đã hoàn thành"],
+      ["success", "thành công"],
+      ["failed", "thất bại"],
+    ];
+
+    return replacements.reduce((text, [from, to]) => text.split(from).join(to), value);
+  };
+  const getRecentActivityTitle = (item: AdminRecentActivityItem) => {
+    if (item.type === "transaction") return "Thanh toán thành công";
+    if (item.type === "booking") return "Booking mới";
+    if (item.type === "report") return "Báo cáo mới";
+    if (item.type === "course" || item.type === "course_submitted") return "Khóa học chờ duyệt";
+    if (item.type === "withdrawal") return "Yêu cầu rút tiền";
+    return cleanDashboardText(item.title);
+  };
+
+  const dashboardKpis = overview ? [
+    {
+      icon: Users,
+      label: "Tổng người dùng",
+      value: formatCount(overview.totalUsers),
+      helper: `${formatCount(overview.totalLearners)} learner • ${formatCount(overview.totalMentors)} mentor`,
+      tone: "text-sky-600",
+      bg: "bg-sky-50",
+      scope: "Toàn hệ thống",
+    },
+    {
+      icon: TrendingUp,
+      label: "Mentor có khóa đang hoạt động",
+      value: formatCount(overview.activeMentors),
+      helper: "Có khóa đã duyệt hoặc từng có booking",
+      tone: "text-emerald-600",
+      bg: "bg-emerald-50",
+      scope: "Hiện tại",
+    },
+    {
+      icon: BookOpen,
+      label: "Khóa học đã duyệt",
+      value: formatCount(overview.approvedCourses),
+      helper: `${formatCount(overview.pendingCourses)} khóa chờ duyệt`,
+      tone: "text-cyan-600",
+      bg: "bg-cyan-50",
+      scope: "Hiện tại",
+    },
+    {
+      icon: BarChart3,
+      label: "Booking trong kỳ",
+      value: formatCount(overview.bookingsInRange),
+      helper: `${formatCount(overview.completedBookingsInRange)} đã hoàn thành`,
+      tone: "text-indigo-600",
+      bg: "bg-indigo-50",
+      scope: "Theo khoảng thời gian đã chọn",
+    },
+    {
+      icon: DollarSign,
+      label: "GMV trong kỳ",
+      value: formatCompactVnd(overview.gmvInRange),
+      helper: "GMV từ giao dịch thành công",
+      tone: "text-amber-600",
+      bg: "bg-amber-50",
+      scope: "Theo khoảng thời gian đã chọn",
+    },
+    {
+      icon: Flag,
+      label: "Report chờ xử lý",
+      value: formatCount(overview.pendingReports),
+      helper: overview.appealedReports > 0 ? `${formatCount(overview.appealedReports)} kháng cáo` : "Không tính report đã đóng",
+      tone: overview.pendingReports > 0 ? "text-rose-600" : "text-slate-600",
+      bg: overview.pendingReports > 0 ? "bg-rose-50" : "bg-slate-50",
+      scope: "Hiện tại",
+    },
+    {
+      icon: Wallet,
+      label: "Rút tiền chờ duyệt",
+      value: formatCount(overview.pendingWithdrawals),
+      helper: formatCompactVnd(overview.pendingWithdrawalAmount),
+      tone: overview.pendingWithdrawals > 0 ? "text-orange-600" : "text-slate-600",
+      bg: overview.pendingWithdrawals > 0 ? "bg-orange-50" : "bg-slate-50",
+      scope: "Hiện tại",
+    },
+  ] : [];
+
+  const actionItems = pendingActions ? [
+    {
+      label: "Khóa học chờ duyệt",
+      description: "Kiểm tra nội dung trước khi public",
+      count: pendingActions.pendingCourseCount,
+      link: "/admin/courses?status=pending",
+    },
+    ...(pendingActions.pendingMentorVerificationCount !== null ? [{
+      label: "Hồ sơ Mentor chờ xác minh",
+      description: "Duyệt hồ sơ và bằng chứng tin cậy",
+      count: pendingActions.pendingMentorVerificationCount,
+      link: "/admin/mentor-verifications?status=pending",
+    }] : []),
+    {
+      label: "Báo cáo chờ xử lý",
+      description: "Xử lý report mới từ learner",
+      count: pendingActions.pendingReportCount,
+      link: "/admin/reports?status=pending",
+    },
+    {
+      label: "Kháng cáo",
+      description: "Các case cần xem xét lại",
+      count: pendingActions.appealedReportCount,
+      link: "/admin/reports?status=appealed",
+    },
+    {
+      label: "Yêu cầu rút tiền",
+      description: "Đối soát payout đang pending",
+      count: pendingActions.pendingWithdrawalCount,
+      link: "/admin/withdrawals?status=pending",
+    },
+  ] : [];
+
+  const operationalAlerts = [
+    ...(overview?.pendingReports ? [{
+      label: `${formatCount(overview.pendingReports)} báo cáo đang chờ xử lý`,
+      link: "/admin/reports?status=pending",
+    }] : []),
+    ...(overview?.appealedReports ? [{
+      label: `${formatCount(overview.appealedReports)} kháng cáo cần review`,
+      link: "/admin/reports?status=appealed",
+    }] : []),
+    ...(overview?.pendingWithdrawals ? [{
+      label: `${formatCount(overview.pendingWithdrawals)} yêu cầu rút tiền cần đối soát`,
+      link: "/admin/withdrawals?status=pending",
+    }] : []),
+    ...(overview?.pendingCourses ? [{
+      label: `${formatCount(overview.pendingCourses)} khóa học chờ duyệt`,
+      link: "/admin/courses?status=pending",
+    }] : []),
+    ...((pendingActions?.pendingMentorVerificationCount ?? 0) > 0 ? [{
+      label: `${formatCount(pendingActions?.pendingMentorVerificationCount ?? 0)} hồ sơ Mentor chờ xác minh`,
+      link: "/admin/mentor-verifications?status=pending",
+    }] : []),
+  ];
 
   // ── Render ────────────────────────────────────────────────
   return (
     <>
       <div className="mx-auto max-w-7xl">
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-1">
-            <PageIcon className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold text-foreground">{currentMeta.title}</h1>
+        <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <PageIcon className="h-6 w-6 text-primary" />
+              <h1 className="text-2xl font-bold text-foreground">{currentMeta.title}</h1>
+            </div>
+            <p className="text-sm text-muted-foreground">{currentMeta.description}</p>
           </div>
-          <p className="text-sm text-muted-foreground">{currentMeta.description}</p>
+          {currentSection === "analytics" && (
+            <div className="flex items-center gap-2">
+              <span className="hidden text-xs font-medium text-muted-foreground sm:inline">Khoảng thời gian</span>
+              <Select value={dashboardRange} onValueChange={(value) => setDashboardRange(value as AdminDashboardRange)}>
+                <SelectTrigger className="h-10 w-[150px] rounded-xl bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {dashboardRangeOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
         </div>
 
         {currentSection === "analytics" && (
           <>
-        {/* Metrics */}
-        <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-5">
-          {[
-            { icon: Users, label: "Tổng người dùng", value: analytics?.users.toLocaleString("vi-VN"), color: "text-secondary" },
-            { icon: BookOpen, label: "Tổng khóa học", value: analytics?.courses.toLocaleString("vi-VN"), color: "text-primary" },
-            { icon: BarChart3, label: "Tổng booking", value: analytics?.bookings.toLocaleString("vi-VN"), color: "text-success" },
-            { icon: DollarSign, label: "Doanh thu", value: analytics ? (analytics.revenue >= 1_000_000 ? (analytics.revenue / 1_000_000).toFixed(1) + "M" : fmtVnd(analytics.revenue)) : undefined, color: "text-warning" },
-            { icon: TrendingUp, label: "Mentor hoạt động", value: analytics?.activeMentors.toLocaleString("vi-VN"), color: "text-accent-foreground" },
-          ].map((stat) => (
-            <div key={stat.label} className="rounded-2xl border bg-card p-5 shadow-card">
-              <div className="flex items-center gap-2 mb-2">
-                <stat.icon className={`h-5 w-5 ${stat.color}`} />
-                <span className="text-xs text-muted-foreground">{stat.label}</span>
+            {dashboardError ? (
+              <div className="rounded-2xl border border-destructive/20 bg-destructive/5 p-8 text-center shadow-card">
+                <AlertCircle className="mx-auto mb-3 h-10 w-10 text-destructive" />
+                <h2 className="text-lg font-semibold text-foreground">
+                  {dashboardError.message.includes("quyền") ? "Bạn không có quyền truy cập trang này." : "Không thể tải số liệu dashboard."}
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">{dashboardError.message}</p>
+                <Button
+                  variant="outline"
+                  onClick={() => refetchDashboardMetrics()}
+                  className="mt-5 rounded-xl"
+                  disabled={dashboardFetching}
+                >
+                  {dashboardFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Thử lại
+                </Button>
               </div>
-              {analyticsLoading ? (
-                <Skeleton className="h-8 w-20" />
-              ) : (
-                <p className="text-2xl font-bold text-foreground">{stat.value ?? "0"}</p>
-              )}
-            </div>
-          ))}
-        </div>
-          {/* Analytics section */}
-            <div className="grid gap-6 md:grid-cols-3 mb-6">
-              {[
-                { label: "Tổng doanh thu tháng", value: analytics ? (analytics.revenue >= 1_000_000 ? (analytics.revenue / 1_000_000).toFixed(1) + "M VNĐ" : fmtVnd(analytics.revenue)) : "—", change: "", icon: DollarSign },
-                { label: "Booking tháng này", value: analytics ? analytics.bookings.toLocaleString("vi-VN") : "—", change: "", icon: BarChart3 },
-                { label: "Người dùng", value: analytics ? analytics.users.toLocaleString("vi-VN") : "—", change: "", icon: Users },
-              ].map((kpi) => (
-                <div key={kpi.label} className="rounded-2xl border bg-card p-6 shadow-card">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-muted-foreground">{kpi.label}</span>
-                    <kpi.icon className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <div className="space-y-6">
+                {operationalAlerts.length > 0 && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-900">
+                    <div className="flex items-start gap-3">
+                      <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+                      <div>
+                        <p className="font-semibold">Cần chú ý hôm nay</p>
+                        <div className="mt-1 flex flex-wrap gap-2">
+                          {operationalAlerts.map((alert) => (
+                            <Link
+                              key={alert.link}
+                              to={alert.link}
+                              className="rounded-full bg-background/80 px-3 py-1 text-xs font-medium transition-colors hover:bg-background"
+                            >
+                              {alert.label}
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  {analyticsLoading ? (
-                    <Skeleton className="h-9 w-28" />
+                )}
+
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {dashboardLoading
+                    ? Array.from({ length: 8 }).map((_, index) => (
+                        <div key={index} className="rounded-2xl border bg-card p-5 shadow-sm">
+                          <Skeleton className="mb-4 h-10 w-10 rounded-xl" />
+                          <Skeleton className="mb-3 h-4 w-28" />
+                          <Skeleton className="h-8 w-24" />
+                        </div>
+                      ))
+                    : dashboardKpis.map((stat) => (
+                        <div key={stat.label} className="rounded-2xl border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+                          <div className="mb-4 flex items-start justify-between gap-3">
+                            <div className={cn("flex h-10 w-10 items-center justify-center rounded-xl", stat.bg)}>
+                              <stat.icon className={cn("h-5 w-5", stat.tone)} />
+                            </div>
+                            <span className="rounded-full bg-muted px-2.5 py-1 text-[11px] font-medium text-muted-foreground">{stat.scope}</span>
+                          </div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{stat.label}</p>
+                          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">{stat.value}</p>
+                          <p className="mt-1 min-h-4 text-xs text-muted-foreground">{stat.helper}</p>
+                        </div>
+                      ))}
+                </div>
+
+                <div className="rounded-2xl border bg-card p-6 shadow-sm">
+                  <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">Phễu truy cập & đặt lịch</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Theo dõi hành trình từ truy cập, tìm kiếm, xem khóa học đến đặt lịch và thanh toán.
+                      </p>
+                    </div>
+                    {dashboard && (
+                      <Badge variant="outline" className="w-fit rounded-full">
+                        {selectedRangeLabel}
+                      </Badge>
+                    )}
+                  </div>
+                  {dashboardLoading ? (
+                    <Skeleton className="h-40 rounded-2xl" />
+                  ) : trafficFunnel ? (
+                    <>
+                      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+                        {trafficFunnel.map((step, index) => {
+                          const stepConversion = index > 0 ? trafficConversionRates[index - 1] : null;
+
+                          return (
+                            <div key={step.key} className="rounded-2xl border bg-background p-4">
+                              <div className="mb-3 flex items-center justify-between gap-2">
+                                <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                                  {index + 1}
+                                </span>
+                                {index > 0 && <span className="text-xs text-muted-foreground">sau bước {index}</span>}
+                              </div>
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                {getFunnelLabel(step.key, step.label)}
+                              </p>
+                              <p className="mt-2 text-2xl font-bold text-foreground">{formatCount(step.count)}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">người dùng/visitor</p>
+                              <p className="mt-3 rounded-lg bg-muted/40 px-2 py-1 text-xs font-medium text-foreground">
+                                {stepConversion ? `${formatPercent(stepConversion.rate)} từ bước trước` : "Bước đầu"}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-4 grid gap-3 md:grid-cols-5">
+                        {trafficConversionRates.map((item) => (
+                          <div key={item.key} className="rounded-xl border bg-muted/20 p-3">
+                            <p className="text-xs font-medium text-muted-foreground">
+                              {getTrafficConversionLabel(item.key, `${item.from} → ${item.to}`)}
+                            </p>
+                            <p className={cn("mt-2 text-lg font-bold", item.rate === null ? "text-muted-foreground" : "text-primary")}>
+                              {formatPercent(item.rate)}
+                            </p>
+                            <p className="mt-1 text-[11px] text-muted-foreground">
+                              {formatCount(item.numerator)} / {formatCount(item.denominator)}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    </>
                   ) : (
-                    <p className="text-3xl font-bold text-foreground">{kpi.value}</p>
+                    <div className="rounded-2xl border border-dashed bg-muted/30 p-6 text-sm text-muted-foreground">
+                      <p className="font-medium text-foreground">Chưa có dữ liệu tracking.</p>
+                      <p className="mt-1">Phễu truy cập sẽ hiển thị khi hệ thống ghi nhận dữ liệu hành vi thật.</p>
+                    </div>
                   )}
                 </div>
-              ))}
-            </div>
 
-            <div className="grid gap-6 md:grid-cols-2">
-              <div className="rounded-2xl border bg-card p-6 shadow-card">
-                <h3 className="font-semibold text-foreground mb-4">Doanh thu theo tháng (triệu VNĐ)</h3>
-                {monthlyRevenue.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <AreaChart data={monthlyRevenue}>
-                      <defs>
-                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
-                      <Area type="monotone" dataKey="revenue" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorRevenue)" strokeWidth={2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : renderChartEmpty("Chưa có dữ liệu doanh thu")}
-              </div>
-
-              <div className="rounded-2xl border bg-card p-6 shadow-card">
-                <h3 className="font-semibold text-foreground mb-4">Bookings theo tháng</h3>
-                {monthlyRevenue.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <BarChart data={monthlyRevenue}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
-                      <Bar dataKey="bookings" fill="hsl(var(--secondary))" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                ) : renderChartEmpty("Chưa có dữ liệu booking")}
-              </div>
-
-              <div className="rounded-2xl border bg-card p-6 shadow-card">
-                <h3 className="font-semibold text-foreground mb-4">Phân bổ danh mục</h3>
-                {categoryData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <PieChart>
-                      <Pie data={categoryData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={4} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} fontSize={11}>
-                        {categoryData.map((_, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                <div className="rounded-2xl border bg-card p-6 shadow-sm">
+                  <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">Hiệu suất xử lý vận hành</h3>
+                      <p className="text-sm text-muted-foreground">
+                        Theo dõi tỷ lệ xử lý các hàng đợi quan trọng của Admin.
+                      </p>
+                    </div>
+                    {dashboard && (
+                      <Badge variant="outline" className="w-fit rounded-full">
+                        {selectedRangeLabel}
+                      </Badge>
+                    )}
+                  </div>
+                  {dashboardLoading ? (
+                    <div className="grid gap-3 md:grid-cols-3">
+                      {[1, 2, 3].map((item) => <Skeleton key={item} className="h-28 rounded-2xl" />)}
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        {operationalRates.map((item) => (
+                          <div key={item.key} className="rounded-2xl border bg-background p-4">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                              {getOperationalConversionLabel(item.key, item.label)}
+                            </p>
+                            <p className={cn("mt-3 text-2xl font-bold", item.rate === null ? "text-muted-foreground" : "text-foreground")}>
+                              {formatPercent(item.rate)}
+                            </p>
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {formatCount(item.numerator)} / {formatCount(item.denominator)}
+                            </p>
+                            <p className="mt-3 text-xs text-muted-foreground">
+                              {getOperationalConversionHelper(item.key, item.helper)}
+                            </p>
+                          </div>
                         ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                ) : renderChartEmpty("Chưa có dữ liệu danh mục")}
-              </div>
+                      </div>
+                    </>
+                  )}
+                </div>
 
-              <div className="rounded-2xl border bg-card p-6 shadow-card">
-                <h3 className="font-semibold text-foreground mb-4">Tăng trưởng người dùng</h3>
-                {monthlyRevenue.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={280}>
-                    <AreaChart data={monthlyRevenue}>
-                      <defs>
-                        <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="hsl(var(--secondary))" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="hsl(var(--secondary))" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                      <XAxis dataKey="month" stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "12px", fontSize: "12px" }} />
-                      <Area type="monotone" dataKey="users" stroke="hsl(var(--secondary))" fillOpacity={1} fill="url(#colorUsers)" strokeWidth={2} />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                ) : renderChartEmpty("Chưa có dữ liệu tăng trưởng")}
+                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.8fr)_minmax(320px,0.9fr)]">
+                  <div className="space-y-6">
+                    <div className="rounded-2xl border bg-card p-6 shadow-sm">
+                      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-foreground">GMV & phí nền tảng</h3>
+                            <Info
+                              className="h-4 w-4 text-muted-foreground"
+                              aria-label="GMV là tổng tiền học viên đã thanh toán thành công. Phí nền tảng là phần VET giữ lại từ các giao dịch thành công. Không bao gồm giao dịch pending, failed hoặc refunded."
+                            />
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            GMV từ giao dịch thành công trong kỳ.
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                          {overview && (
+                            <div className="rounded-xl bg-primary/5 px-4 py-2 text-right">
+                              <p className="text-xs text-muted-foreground">Phí nền tảng trong kỳ</p>
+                              <p className="font-semibold text-primary">{formatCompactVnd(overview.platformFeeInRange)}</p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {dashboardLoading ? (
+                        <Skeleton className="h-[280px] rounded-xl" />
+                      ) : (
+                        <div className="relative h-[340px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={revenueTimelineData} margin={{ top: 18, right: 28, left: 8, bottom: 20 }}>
+                              <defs>
+                                <linearGradient id="adminGmv" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.25} />
+                                  <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0.02} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <XAxis
+                                dataKey="label"
+                                stroke="hsl(var(--muted-foreground))"
+                                fontSize={12}
+                                height={44}
+                                interval={0}
+                                minTickGap={10}
+                                tickMargin={12}
+                                padding={{ left: 18, right: 18 }}
+                                tickFormatter={(value) => formatAxisLabel(String(value))}
+                              />
+                              <YAxis
+                                stroke="hsl(var(--muted-foreground))"
+                                fontSize={12}
+                                width={70}
+                                tickMargin={8}
+                                tickFormatter={(value) => formatAxisVnd(Number(value))}
+                              />
+                              <Tooltip content={<RevenueTooltip />} />
+                              <Legend formatter={renderLegendText} verticalAlign="bottom" height={34} iconType="circle" />
+                              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 4" />
+                              <Area type="monotone" dataKey="gmv" name="GMV" stroke="hsl(var(--primary))" fill="url(#adminGmv)" strokeWidth={2.5} dot={false} activeDot={hasRevenueSeriesData} />
+                              <Area type="monotone" dataKey="platformFee" name="Phí nền tảng" stroke="hsl(var(--muted-foreground))" fill="transparent" strokeWidth={2.25} dot={false} activeDot={hasRevenueSeriesData} />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                          {!hasRevenueSeriesData && (
+                            <div className="pointer-events-none absolute left-1/2 top-5 -translate-x-1/2 whitespace-nowrap rounded-full border bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+                              Chưa có dữ liệu giao dịch thành công trong giai đoạn này.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border bg-card p-6 shadow-sm">
+                      <div className="mb-5">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-lg font-semibold text-foreground">Booking theo thời gian</h3>
+                              <Info
+                                className="h-4 w-4 text-muted-foreground"
+                                aria-label="Tổng booking là số booking được tạo trong kỳ. Đã hoàn thành là booking có trạng thái completed."
+                              />
+                            </div>
+                            <p className="text-sm text-muted-foreground">Tổng booking và số booking đã hoàn thành trong {selectedRangeLabel}.</p>
+                          </div>
+                        </div>
+                      </div>
+                      {dashboardLoading ? (
+                        <Skeleton className="h-[280px] rounded-xl" />
+                      ) : (
+                        <div className="relative h-[320px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={bookingTimelineData} margin={{ top: 18, right: 28, left: 8, bottom: 20 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <XAxis
+                                dataKey="label"
+                                stroke="hsl(var(--muted-foreground))"
+                                fontSize={12}
+                                height={44}
+                                interval={0}
+                                minTickGap={10}
+                                tickMargin={12}
+                                padding={{ left: 18, right: 18 }}
+                                tickFormatter={(value) => formatAxisLabel(String(value))}
+                              />
+                              <YAxis
+                                stroke="hsl(var(--muted-foreground))"
+                                fontSize={12}
+                                width={48}
+                                tickMargin={8}
+                                allowDecimals={false}
+                              />
+                              <Tooltip content={<BookingTooltip />} />
+                              <Legend formatter={renderLegendText} verticalAlign="bottom" height={34} iconType="circle" />
+                              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 4" />
+                              <Bar dataKey="total" name="Tổng booking" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+                              <Bar dataKey="completed" name="Đã hoàn thành" fill="hsl(var(--muted-foreground))" radius={[8, 8, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                          {!hasBookingSeriesData && (
+                            <div className="pointer-events-none absolute left-1/2 top-5 -translate-x-1/2 whitespace-nowrap rounded-full border bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+                              Chưa có dữ liệu booking trong giai đoạn này.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                  </div>
+
+                  <div className="space-y-6">
+                    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-foreground">Việc cần xử lý</h3>
+                          <p className="text-sm text-muted-foreground">Các hàng đợi vận hành quan trọng.</p>
+                        </div>
+                        <ClipboardCheck className="h-5 w-5 text-primary" />
+                      </div>
+                      {dashboardLoading ? (
+                        <div className="space-y-3">
+                          {[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-16 rounded-xl" />)}
+                        </div>
+                      ) : actionItems.every((item) => item.count === 0) ? (
+                        <div className="rounded-xl border border-dashed bg-muted/30 p-6 text-center">
+                          <Check className="mx-auto mb-2 h-6 w-6 text-emerald-600" />
+                          <p className="font-medium text-foreground">Tất cả đã ổn.</p>
+                          <p className="mt-1 text-sm text-muted-foreground">Không có hàng đợi cần xử lý ngay.</p>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          {actionItems.map((item) => (
+                            <div key={item.label} className="rounded-xl border bg-background p-4">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="font-medium text-foreground">{item.label}</p>
+                                  <p className="mt-0.5 text-xs text-muted-foreground">{item.description}</p>
+                                </div>
+                                <Badge className={item.count > 0 ? "bg-primary/10 text-primary border-0" : "bg-muted text-muted-foreground border-0"}>
+                                  {formatCount(item.count)}
+                                </Badge>
+                              </div>
+                              {item.count > 0 && (
+                                <Button asChild variant="outline" size="sm" className="mt-3 h-8 rounded-lg">
+                                  <Link to={item.link}>
+                                    Xử lý
+                                    <ArrowUpRight className="ml-1 h-3.5 w-3.5" />
+                                  </Link>
+                                </Button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+                      <div className="mb-4 flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="text-lg font-semibold text-foreground">Hoạt động gần đây</h3>
+                          <p className="text-sm text-muted-foreground">Booking, thanh toán, báo cáo và kiểm duyệt.</p>
+                        </div>
+                        <Activity className="h-5 w-5 text-primary" />
+                      </div>
+                      {dashboardLoading ? (
+                        <div className="space-y-3">
+                          {[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-14 rounded-xl" />)}
+                        </div>
+                      ) : recentActivity.length ? (
+                        <div className="space-y-3">
+                          {recentActivity.map((item, index) => {
+                            const ActivityIcon =
+                              item.type === "transaction" ? DollarSign :
+                              item.type === "report" ? Flag :
+                              item.type === "withdrawal" ? Wallet :
+                              item.type === "course" || item.type === "course_submitted" ? BookOpen :
+                              item.type === "mentor_verification" ? UserCheck :
+                              BarChart3;
+
+                            return (
+                              <Link
+                                key={`${item.type}-${item.created_at}-${index}`}
+                                to={item.link}
+                                className="flex gap-3 rounded-xl border bg-background p-3 transition-colors hover:bg-muted/40"
+                              >
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                                  <ActivityIcon className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <p className="truncate text-sm font-medium text-foreground">{getRecentActivityTitle(item)}</p>
+                                  <p className="truncate text-xs text-muted-foreground">{cleanDashboardText(item.description)}</p>
+                                  <p className="mt-1 text-[11px] text-muted-foreground">{new Date(item.created_at).toLocaleString("vi-VN")}</p>
+                                </div>
+                              </Link>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="rounded-xl border border-dashed bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                          Chưa có hoạt động gần đây.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
+            )}
           </>)}
 
           {/* User management section */}
           {currentSection === "users" && (<>
+            <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+              {[
+                { label: "Tổng user", value: userMetrics.total, hint: "Toàn hệ thống" },
+                { label: "Learner", value: userMetrics.learners, hint: "Product role" },
+                { label: "Mentor", value: userMetrics.mentors, hint: "Product role" },
+                { label: "Admin", value: userMetrics.admins, hint: "System role" },
+                { label: "Đã khóa", value: userMetrics.blocked, hint: "Blocked" },
+              ].map((metric) => (
+                <div key={metric.label} className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
+                  <p className="text-xs font-medium text-muted-foreground">{metric.label}</p>
+                  <div className="mt-1 flex items-end justify-between gap-2">
+                    <p className="text-2xl font-bold text-foreground">{metric.value}</p>
+                    <span className="text-[11px] text-muted-foreground">{metric.hint}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mb-4 rounded-2xl border bg-card p-4 shadow-sm">
+              <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div className="relative w-full xl:max-w-md">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Tìm theo tên, email hoặc username..."
+                    className="h-10 rounded-xl pl-10"
+                    value={userSearch}
+                    onChange={(event) => setUserSearch(event.target.value)}
+                  />
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {userFilterOptions.map((option) => (
+                    <Button
+                      key={option.value}
+                      size="sm"
+                      variant={userFilter === option.value ? "default" : "outline"}
+                      className={cn("h-9 rounded-full px-4 text-xs", userFilter === option.value ? "gradient-primary border-0 text-primary-foreground" : "")}
+                      onClick={() => setUserFilter(option.value)}
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  {hasDemoUsers && (
+                    <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={hideDemoUsers}
+                        onChange={(event) => setHideDemoUsers(event.target.checked)}
+                        className="h-4 w-4 rounded border-border text-primary"
+                      />
+                      Ẩn dữ liệu demo
+                    </label>
+                  )}
+                  {(userSearch || userFilter !== "all" || hideDemoUsers) && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-full text-xs"
+                      onClick={() => {
+                        setUserSearch("");
+                        setUserFilter("all");
+                        setHideDemoUsers(false);
+                      }}
+                    >
+                      <X className="mr-1 h-3 w-3" />Xóa bộ lọc
+                    </Button>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={fetchUsers} disabled={userLoading} className="h-9 rounded-xl">
+                    {userLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Làm mới
+                  </Button>
+                  <Button variant="outline" onClick={exportUsersCsv} disabled={userLoading || filteredUsers.length === 0} className="h-9 rounded-xl">
+                    <Download className="mr-2 h-4 w-4" />
+                    Tải danh sách
+                  </Button>
+                </div>
+              </div>
+            </div>
+
+            {userLoading ? (
+              <div className="rounded-2xl border bg-card p-4 shadow-sm">
+                <div className="space-y-3">
+                  {[1, 2, 3, 4, 5].map((item) => (
+                    <Skeleton key={item} className="h-16 rounded-xl" />
+                  ))}
+                </div>
+              </div>
+            ) : userLoadError ? (
+              <div className="flex flex-col items-center rounded-2xl border border-destructive/20 bg-destructive/5 py-14 text-center">
+                <AlertCircle className="mb-3 h-10 w-10 text-destructive" />
+                <p className="font-semibold text-foreground">Không thể tải danh sách người dùng</p>
+                <p className="mt-1 text-sm text-muted-foreground">{userLoadError}</p>
+                <Button variant="outline" onClick={fetchUsers} className="mt-4 rounded-xl">Thử lại</Button>
+              </div>
+            ) : userList.length === 0 ? (
+              <div className="flex flex-col items-center rounded-2xl border bg-card py-16 text-center shadow-sm">
+                <Users className="mb-3 h-12 w-12 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Chưa có người dùng nào trong hệ thống.</p>
+              </div>
+            ) : filteredUsers.length === 0 ? (
+              <div className="flex flex-col items-center rounded-2xl border bg-card py-16 text-center shadow-sm">
+                <Search className="mb-3 h-12 w-12 text-muted-foreground" />
+                <p className="font-medium text-foreground">Không có người dùng phù hợp với bộ lọc.</p>
+                <p className="text-sm text-muted-foreground">Thử đổi từ khóa, role hoặc trạng thái.</p>
+              </div>
+            ) : (
+              <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
+                <div className="hidden overflow-x-auto lg:block">
+                  <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-muted/50">
+                      <TableRow>
+                        <TableHead className="min-w-[280px]">User</TableHead>
+                        <TableHead>Product role</TableHead>
+                        <TableHead>System role</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Created at</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedUsers.map((user) => (
+                        <TableRow
+                          key={user.user_id}
+                          className={cn("cursor-pointer transition-colors hover:bg-muted/40", user.is_blocked && "bg-muted/20")}
+                          onClick={() => setSelectedUser(user)}
+                        >
+                          <TableCell>
+                            <div className="flex min-w-0 items-center gap-3">
+                              {renderUserAvatar(user)}
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="truncate font-semibold text-foreground">{getUserName(user)}</p>
+                                  {user.user_id === currentAdminId && <Badge variant="outline" className="rounded-full text-[10px]">Bạn</Badge>}
+                                </div>
+                                <p className="truncate text-xs text-muted-foreground">{user.email || "Chưa có email"}</p>
+                                {user.username && <p className="truncate text-xs text-muted-foreground">@{user.username}</p>}
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>{renderProductRoleBadge(user)}</TableCell>
+                          <TableCell>{renderSystemRoleBadge(user)}</TableCell>
+                          <TableCell>{renderStatusBadge(user)}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground">{formatUserDateShort(user.created_at)}</TableCell>
+                          <TableCell>
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-8 rounded-lg px-2 text-xs"
+                                onClick={(event) => {
+                                  event.stopPropagation();
+                                  setSelectedUser(user);
+                                }}
+                              >
+                                <Eye className="mr-1 h-3 w-3" />Xem chi tiết
+                              </Button>
+                              {renderUserActions(user)}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                <div className="space-y-3 p-3 lg:hidden">
+                  {paginatedUsers.map((user) => (
+                    <div
+                      key={user.user_id}
+                      role="button"
+                      tabIndex={0}
+                      className="w-full rounded-2xl border bg-background p-4 text-left shadow-sm transition-colors hover:bg-muted/30"
+                      onClick={() => setSelectedUser(user)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          setSelectedUser(user);
+                        }
+                      }}
+                    >
+                      <div className="flex gap-3">
+                        {renderUserAvatar(user)}
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-semibold text-foreground">{getUserName(user)}</p>
+                          <p className="truncate text-xs text-muted-foreground">{user.email || "Chưa có email"}</p>
+                          {user.username && <p className="truncate text-xs text-muted-foreground">@{user.username}</p>}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {renderProductRoleBadge(user)}
+                        {renderSystemRoleBadge(user)}
+                        {renderStatusBadge(user)}
+                      </div>
+                      <div className="mt-3" onClick={(event) => event.stopPropagation()}>
+                        {renderUserActions(user, true)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex flex-col gap-3 border-t px-4 py-3 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
+                  <p>
+                    Hiển thị {userPageStart}–{userPageEnd} trong {filteredUsers.length} người dùng
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg"
+                      disabled={userPage <= 1}
+                      onClick={() => setUserPage((page) => Math.max(1, page - 1))}
+                    >
+                      <ChevronLeft className="mr-1 h-4 w-4" />Trước
+                    </Button>
+                    <span className="min-w-16 text-center text-xs font-medium text-foreground">
+                      {userPage}/{totalUserPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 rounded-lg"
+                      disabled={userPage >= totalUserPages}
+                      onClick={() => setUserPage((page) => Math.min(totalUserPages, page + 1))}
+                    >
+                      Sau<ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>)}
+          {false && currentSection === "users" && (<>
             <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
               <div className="relative w-full md:max-w-md">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1000,6 +1970,59 @@ export default function AdminDashboard() {
             </div>
           </>)}
       </div>
+
+      <Sheet open={!!selectedUser} onOpenChange={(open) => !open && setSelectedUser(null)}>
+        <SheetContent side="right" className="w-[92vw] overflow-y-auto sm:max-w-md">
+          {selectedUser && (
+            <div className="space-y-5">
+              <SheetHeader>
+                <SheetTitle>Chi tiết người dùng</SheetTitle>
+                <SheetDescription>
+                  Xem hồ sơ cơ bản, role sản phẩm, quyền hệ thống và thao tác quản trị an toàn.
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="rounded-2xl border bg-card p-4">
+                <div className="flex gap-3">
+                  {renderUserAvatar(selectedUser, "h-14 w-14")}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-lg font-bold text-foreground">{getUserName(selectedUser)}</p>
+                    <p className="truncate text-sm text-muted-foreground">{selectedUser.email || "Chưa có email"}</p>
+                    {selectedUser.username && <p className="truncate text-sm text-muted-foreground">@{selectedUser.username}</p>}
+                  </div>
+                </div>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {renderProductRoleBadge(selectedUser)}
+                  {renderSystemRoleBadge(selectedUser)}
+                  {renderStatusBadge(selectedUser)}
+                  {selectedUser.user_id === currentAdminId && <Badge variant="outline" className="rounded-full">Bạn</Badge>}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {renderDetailStat("Product role", getProductRole(selectedUser))}
+                {renderDetailStat("System role", isAdminUser(selectedUser) ? "Admin" : "User")}
+                {renderDetailStat("Trạng thái", selectedUser.is_blocked ? "Blocked" : "Active")}
+                {renderDetailStat("Ngày tạo", formatUserDate(selectedUser.created_at) || "Chưa có dữ liệu")}
+                {renderDetailStat("Số điện thoại", selectedUser.phone)}
+                {renderDetailStat("Booking gần đây", selectedUser.bookings_count)}
+                {renderDetailStat("Báo cáo đã gửi", selectedUser.reports_submitted_count)}
+                {renderDetailStat("Báo cáo về user", selectedUser.reports_against_count)}
+              </div>
+
+              <Separator />
+
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">Admin actions</p>
+                  <p className="text-xs text-muted-foreground">Các thao tác nhạy cảm vẫn được xác thực qua Edge Function.</p>
+                </div>
+                {renderUserActions(selectedUser, true)}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
 
       <AlertDialog open={!!userActionDialog} onOpenChange={(open) => !open && setUserActionDialog(null)}>
         <AlertDialogContent className="rounded-2xl">

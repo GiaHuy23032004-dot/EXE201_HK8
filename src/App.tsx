@@ -3,13 +3,14 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { AiChatAssistant } from "@/components/AiChatAssistant";
 import { AdminGuard } from "@/components/AdminGuard";
 import { MentorGuard } from "@/components/MentorGuard";
 import { AdminLayout } from "@/components/layout/AdminLayout";
+import { useAnalyticsTracker } from "@/hooks/useAnalyticsTracker";
 import Index from "./pages/Index";
 import AuthPage from "./pages/AuthPage";
 import ResetPasswordPage from "./pages/ResetPasswordPage";
@@ -98,6 +99,23 @@ function AppExtras() {
   return <AiChatAssistant />;
 }
 
+function RouteAnalyticsTracker() {
+  const location = useLocation();
+  const { trackEvent } = useAnalyticsTracker();
+  const routeKey = `${location.pathname}${location.search}`;
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/admin")) return;
+    void trackEvent("page_view", {
+      route: routeKey,
+      pageTitle: document.title,
+      source: "route_change",
+    });
+  }, [location.pathname, routeKey, trackEvent]);
+
+  return null;
+}
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
@@ -156,6 +174,7 @@ const App = () => (
             <Route path="/contact" element={<ContactPage />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <RouteAnalyticsTracker />
           <AppExtras />
         </BrowserRouter>
       </AuthProvider>

@@ -10,6 +10,24 @@ const corsHeaders = {
 const VERIFICATION_BUCKET = "mentor-verification";
 const URL_PATTERN = /^https?:\/\//i;
 const BADGE_TYPES = new Set(["vet_verified", "certificate_verified", "portfolio_verified", "trusted_mentor"]);
+const BADGE_PUBLIC_META: Record<string, { label: string; description: string }> = {
+  vet_verified: {
+    label: "Đã xác minh bởi VET",
+    description: "Hồ sơ mentor đã được VET kiểm tra.",
+  },
+  certificate_verified: {
+    label: "Chứng chỉ đã đối chiếu",
+    description: "Chứng chỉ hoặc bằng cấp đã được Admin đối chiếu.",
+  },
+  portfolio_verified: {
+    label: "Portfolio đã kiểm tra",
+    description: "Portfolio hoặc sản phẩm cá nhân đã được Admin kiểm tra.",
+  },
+  trusted_mentor: {
+    label: "Mentor uy tín",
+    description: "Mentor có lịch sử hoạt động đáng tin cậy trên VET.",
+  },
+};
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -266,9 +284,11 @@ const recordBadgeEvent = async (
   eventType: "granted" | "suspended" | "revoked" | "restored",
   reason: string | null,
   adminUserId: string,
+  badgeId: string | null = null,
 ) => {
   const { error } = await client.from("mentor_badge_events").insert({
     mentor_id: mentorId,
+    badge_id: badgeId,
     badge_type: badgeType,
     event_type: eventType,
     reason,
@@ -289,11 +309,15 @@ const setBadgeStatus = async (
 ) => {
   if (!BADGE_TYPES.has(badgeType)) throw new Error("Loại huy hiệu không hợp lệ.");
 
+  const publicMeta = BADGE_PUBLIC_META[badgeType] ?? { label: badgeType, description: badgeType };
+
   const payload = {
     mentor_id: mentorId,
     badge_type: badgeType,
     status,
     public_visible: status === "active",
+    public_label: publicMeta.label,
+    public_description: publicMeta.description,
     reason,
     granted_by: adminUserId,
     granted_at: new Date().toISOString(),
@@ -302,9 +326,11 @@ const setBadgeStatus = async (
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await client
+  const { data, error } = await client
     .from("mentor_trust_badges")
-    .upsert(payload, { onConflict: "mentor_id,badge_type" });
+    .upsert(payload, { onConflict: "mentor_id,badge_type" })
+    .select("id")
+    .maybeSingle();
 
   if (error) throw error;
   await recordBadgeEvent(
@@ -314,6 +340,7 @@ const setBadgeStatus = async (
     eventType ?? (status === "active" ? "granted" : status === "suspended" ? "suspended" : "revoked"),
     reason,
     adminUserId,
+    data?.id ?? null,
   );
 };
 
@@ -379,9 +406,24 @@ serve(async (req) => {
       return json({ request: detail });
     }
 
-    if (action === "review_evidence") {
+    if (action === "get_badge_history") {
+      const { data, error } = await adminClient
+        .from("mentor_badge_events")
+        .select("*")
+        .eq("mentor_id", mentorId)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return json({ events: data ?? [] });
+    }
+
+    if (action === "review_evidence" || action === "approve_item" || action === "reject_item") {
       if (!proofId) return json({ error: "Missing proofId" }, 400);
-      const reviewStatus = normalizeStatus(normalizeText(body.reviewStatus)) || "";
+      const reviewStatus =
+        action === "approve_item"
+          ? "approved"
+          : action === "reject_item"
+            ? "rejected"
+            : normalizeStatus(normalizeText(body.reviewStatus)) || "";
       if (!["approved", "rejected", "revision_requested", "pending"].includes(reviewStatus)) {
         return json({ error: "Trạng thái bằng chứng không hợp lệ." }, 400);
       }

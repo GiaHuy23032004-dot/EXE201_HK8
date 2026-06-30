@@ -11,6 +11,8 @@ export interface Promotion {
   status: PromotionStatus;
   starts_at: string | null;
   expires_at: string | null;
+  fee?: number | null;
+  days?: number | null;
   paid_amount: number;
   rejection_reason: string | null;
   payment_ref: string | null;
@@ -28,6 +30,29 @@ export interface Promotion {
 }
 
 const RATE_PER_DAY = 15_000; // VND per day
+type PromotionRow = Partial<Promotion> & {
+  id: string;
+  course_id: string;
+  mentor_id: string;
+  status: PromotionStatus;
+  created_at: string;
+  fee?: number | null;
+};
+
+const normalizePromotions = (rows: unknown): Promotion[] =>
+  ((rows ?? []) as PromotionRow[]).map((row) => ({
+    ...row,
+    starts_at: row.starts_at ?? null,
+    expires_at: row.expires_at ?? null,
+    paid_amount: row.paid_amount ?? row.fee ?? 0,
+    rejection_reason: row.rejection_reason ?? null,
+    payment_ref: row.payment_ref ?? null,
+  }));
+
+const rpc = supabase.rpc as unknown as (
+  fn: string,
+  args?: Record<string, unknown>,
+) => ReturnType<typeof supabase.rpc>;
 
 export const PROMOTION_PACKAGES = [
   { days: 3,  label: "3 ngày",  price: 3 * RATE_PER_DAY },
@@ -40,10 +65,11 @@ export const PROMOTION_PACKAGES = [
 
 /** Fetch all promotions for the current mentor */
 export function useMentorPromotions() {
-  const { user } = useAuth();
+  const { session } = useAuth();
+  const userId = session?.user.id;
   return useQuery({
-    queryKey: ["mentor-promotions", user?.id],
-    enabled: !!user?.id,
+    queryKey: ["mentor-promotions", userId],
+    enabled: !!userId,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("promoted_listings")
@@ -51,11 +77,11 @@ export function useMentorPromotions() {
           *,
           course:courses(title, price, thumbnail_url)
         `)
-        .eq("mentor_id", user!.id)
+        .eq("mentor_id", userId!)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as Promotion[];
+      return normalizePromotions(data);
     },
   });
 }
@@ -63,7 +89,8 @@ export function useMentorPromotions() {
 /** Request a promotion for a course (deducts balance via RPC) */
 export function useRequestPromotion() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { session } = useAuth();
+  const userId = session?.user.id;
 
   return useMutation({
     mutationFn: async ({
@@ -73,7 +100,7 @@ export function useRequestPromotion() {
       course_id: string;
       days: number;
     }) => {
-      const { data, error } = await supabase.rpc("request_course_promotion", {
+      const { data, error } = await rpc("request_course_promotion", {
         p_course_id: course_id,
         p_days: days,
       });
@@ -81,8 +108,8 @@ export function useRequestPromotion() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mentor-promotions", user?.id] });
-      queryClient.invalidateQueries({ queryKey: ["mentor-wallet", user?.id] });
+      queryClient.invalidateQueries({ queryKey: ["mentor-promotions", userId] });
+      queryClient.invalidateQueries({ queryKey: ["mentor-wallet", userId] });
     },
   });
 }
@@ -104,7 +131,7 @@ export function useAdminPromotions() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as Promotion[];
+      return normalizePromotions(data);
     },
   });
 }
@@ -114,7 +141,7 @@ export function useApprovePromotion() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (promotionId: string) => {
-      const { data, error } = await supabase.rpc("admin_approve_promotion", {
+      const { data, error } = await rpc("admin_approve_promotion", {
         p_promotion_id: promotionId,
       });
       if (error) throw error;
@@ -138,7 +165,7 @@ export function useRejectPromotion() {
       reason: string;
     }) => {
       // Refund balance to mentor wallet
-      const { error: refundError } = await supabase.rpc("admin_refund_promotion", {
+      const { error: refundError } = await rpc("admin_refund_promotion", {
         p_promotion_id: promotionId,
       });
       if (refundError) throw refundError;
@@ -149,7 +176,7 @@ export function useRejectPromotion() {
         .update({
           status: "rejected",
           rejection_reason: reason,
-        })
+        } as never)
         .eq("id", promotionId);
       if (error) throw error;
     },

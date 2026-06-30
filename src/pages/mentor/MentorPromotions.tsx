@@ -66,8 +66,8 @@ function RequestPromotionDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const { toast } = useToast();
-  const { user } = useAuth();
-  const { data: courses = [], isLoading: loadingCourses } = useMentorCourses(user?.id);
+  const { session } = useAuth();
+  const { data: courses = [], isLoading: loadingCourses } = useMentorCourses(session?.user.id);
   const { data: wallet } = useMentorWallet();
   const requestPromotion = useRequestPromotion();
 

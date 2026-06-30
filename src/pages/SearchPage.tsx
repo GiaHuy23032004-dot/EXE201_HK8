@@ -16,6 +16,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { usePublicMentorTrustBadgeMap } from "@/hooks/usePublicMentorVerification";
 import { COURSE_CATEGORIES, getCourseCategoryShortLabel, normalizeCourseCategory } from "@/constants/courseCategories";
 import { useToast } from "@/hooks/use-toast";
+import { useAnalyticsTracker } from "@/hooks/useAnalyticsTracker";
 import { COURSE_COMPARE_GOALS, DEFAULT_COMPARE_GOAL } from "@/utils/courseCompareRubrics";
 import type { CourseData } from "@/components/marketplace/CourseCard";
 
@@ -271,8 +272,15 @@ function EmptyState({ query, onClearFilters }: { query: string; onClearFilters: 
 }
 
 function CourseListCard({ course, onCompare, selected }: { course: CourseData; onCompare: (id: string) => void; selected: boolean }) {
+  const { trackEvent } = useAnalyticsTracker();
+
   return (
     <Link to={`/course/${course.id}`}
+      onClick={() => void trackEvent("course_detail_click", {
+        courseId: course.id,
+        source: "search_list",
+        metadata: { title: course.title, category: course.category, format: course.format },
+      })}
       className="group flex overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm transition-all duration-200 hover:shadow-md hover:border-cyan-300"
     >
       <div className="relative w-44 shrink-0 overflow-hidden sm:w-52">
@@ -315,6 +323,8 @@ function CourseListCard({ course, onCompare, selected }: { course: CourseData; o
 
 // ── CourseSuggestionPanel ──────────────────────────────────────────────────────
 function CourseSuggestionPanel({ result }: { result: CourseSuggestionResult }) {
+  const { trackEvent } = useAnalyticsTracker();
+
   return (
     <div className="container pt-5">
       <Card className="overflow-hidden rounded-2xl border-primary/15 bg-gradient-to-br from-primary/5 via-background to-cyan-50/60 shadow-sm">
@@ -353,7 +363,16 @@ function CourseSuggestionPanel({ result }: { result: CourseSuggestionResult }) {
                       <p className="mt-1 text-xs text-muted-foreground">{item.course.mentorName} · {formatVnd(item.course.price)}</p>
                       <p className="mt-2 text-sm text-muted-foreground line-clamp-2">{item.reason}</p>
                       <div className="mt-3 flex flex-wrap gap-2">
-                        <Link to={`/course/${item.course_id}`}><Button size="sm" className="rounded-xl gradient-primary border-0 text-primary-foreground">Xem chi tiết</Button></Link>
+                        <Link
+                          to={`/course/${item.course_id}`}
+                          onClick={() => void trackEvent("course_detail_click", {
+                            courseId: item.course_id,
+                            source: "course_suggestion",
+                            metadata: { matchScore: item.match_score, title: item.course.title },
+                          })}
+                        >
+                          <Button size="sm" className="rounded-xl gradient-primary border-0 text-primary-foreground">Xem chi tiết</Button>
+                        </Link>
                         <Link to={`/booking/${item.course_id}`}><Button size="sm" variant="outline" className="rounded-xl">Đặt lịch</Button></Link>
                       </div>
                     </div>
@@ -447,6 +466,7 @@ function CourseCompareResultPanel({ result }: { result: CourseCompareResult }) {
 // ─── Main SearchPage ─────────────────────────────────────────────────────────
 export default function SearchPage() {
   const { toast } = useToast();
+  const { trackEvent } = useAnalyticsTracker();
   const [query, setQuery] = useState("");
   const [locationQuery, setLocationQuery] = useState("");
   const [showFilters, setShowFilters] = useState(false);
@@ -499,6 +519,17 @@ export default function SearchPage() {
   const clearFilters = () => { setFormat("all"); setPriceRange([0, 1000000]); setSelectedCategory(null); setQuery(""); };
 
   const handleCourseSuggestions = () => {
+    void trackEvent("search_submit", {
+      source: "search_page",
+      metadata: {
+        query,
+        selectedCategory,
+        format,
+        minPrice: priceRange[0],
+        maxPrice: priceRange[1],
+        locationQuery,
+      },
+    });
     setCourseSuggestionLoading(true);
     try {
       const result = buildCourseSuggestions(mappedSuggestionCourses, query, selectedCategory, format, priceRange[1], locationQuery);
@@ -541,6 +572,14 @@ export default function SearchPage() {
                   placeholder="Bạn muốn học gì? Ví dụ: Tôi muốn học tiếng Anh giao tiếp online buổi tối dưới 400k"
                   className="flex-1 bg-transparent text-sm text-slate-800 outline-none placeholder:text-slate-400"
                   value={query} onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      void trackEvent("search_submit", {
+                        source: "search_enter",
+                        metadata: { query, selectedCategory, format, minPrice: priceRange[0], maxPrice: priceRange[1], locationQuery },
+                      });
+                    }
+                  }}
                 />
                 {courseSuggestionLoading && <Loader2 className="h-4 w-4 animate-spin text-cyan-500 shrink-0" />}
                 {query && !courseSuggestionLoading && (
@@ -622,7 +661,19 @@ export default function SearchPage() {
                 </div>
                 <div className="flex items-end gap-2">
                   <Button onClick={clearFilters} variant="outline" size="sm" className="rounded-xl border-slate-200">Xóa bộ lọc</Button>
-                  <Button onClick={() => setShowFilters(false)} size="sm" className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 border-0 text-white">Áp dụng</Button>
+                  <Button
+                    onClick={() => {
+                      void trackEvent("search_submit", {
+                        source: "filter_apply",
+                        metadata: { query, selectedCategory, format, minPrice: priceRange[0], maxPrice: priceRange[1], locationQuery },
+                      });
+                      setShowFilters(false);
+                    }}
+                    size="sm"
+                    className="rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 border-0 text-white"
+                  >
+                    Áp dụng
+                  </Button>
                 </div>
               </div>
             </motion.div>

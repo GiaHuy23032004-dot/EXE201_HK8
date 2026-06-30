@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
+import { useAnalyticsTracker } from "@/hooks/useAnalyticsTracker";
 import { useQueryClient } from "@tanstack/react-query";
 import { ReportModal } from "@/components/reports/ReportModal";
 import {
@@ -49,6 +50,7 @@ type LearnerReportTarget = {
 export default function LearnerDashboard() {
   const { user, session } = useAuth();
   const { toast } = useToast();
+  const { trackEvent } = useAnalyticsTracker();
   const qc = useQueryClient();
   const userId = session?.user?.id;
 
@@ -99,6 +101,14 @@ export default function LearnerDashboard() {
         learner_id: userId,
         rating: reviewRating,
         comment: reviewComment.trim() || undefined,
+      });
+      void trackEvent("review_submitted", {
+        courseId: reviewTarget.courseId,
+        bookingId: reviewTarget.bookingId,
+        source: "learner_dashboard",
+        metadata: {
+          rating: reviewRating,
+        },
       });
       qc.invalidateQueries({ queryKey: ["learner-reviews", userId] });
       qc.invalidateQueries({ queryKey: ["reviews", reviewTarget.courseId] });

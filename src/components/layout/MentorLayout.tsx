@@ -11,15 +11,24 @@ import {
   Plus,
   LogOut,
   Menu,
-  X,
   ChevronRight,
+  ChevronDown,
   Mic2,
   Megaphone,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 import logoImg from "@/assets/logo.png";
 
 const navItems = [
@@ -41,8 +50,11 @@ export function MentorLayout({ children }: MentorLayoutProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { toast } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  const displayName = user?.name || "Mentor";
+  const email = user?.email || "";
   const initials = user?.name
     ?.split(" ")
     .map((w) => w[0])
@@ -52,14 +64,65 @@ export function MentorLayout({ children }: MentorLayoutProps) {
 
   const handleLogout = async () => {
     await logout();
-    navigate("/auth");
+    toast({ title: "Đã đăng xuất" });
+    navigate("/auth", { replace: true });
   };
+
+  const UserDropdown = ({ compact = false }: { compact?: boolean }) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className={cn(
+            "h-10 gap-2 rounded-xl px-2 text-foreground hover:bg-muted/70",
+            !compact && "border border-border/60 bg-background/80 shadow-sm",
+          )}
+        >
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={user?.avatar} />
+            <AvatarFallback className="bg-primary text-xs font-semibold text-primary-foreground">
+              {initials || "M"}
+            </AvatarFallback>
+          </Avatar>
+          <span className={cn("max-w-40 truncate text-sm font-semibold", compact ? "hidden" : "hidden sm:inline")}>
+            {displayName}
+          </span>
+          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-64 rounded-xl shadow-lg">
+        <DropdownMenuLabel>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-foreground">{displayName}</p>
+            {email && <p className="truncate text-xs font-normal text-muted-foreground">{email}</p>}
+          </div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => navigate("/mentor/profile")} className="cursor-pointer">
+          <UserCheck className="mr-2 h-4 w-4" />
+          Hồ sơ & xác minh
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => navigate("/mentor/settings")} className="cursor-pointer">
+          <Settings className="mr-2 h-4 w-4" />
+          Cài đặt
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={handleLogout}
+          className="cursor-pointer text-destructive focus:text-destructive"
+        >
+          <LogOut className="mr-2 h-4 w-4" />
+          Đăng xuất
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   const SidebarContent = () => (
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 border-b border-border/60 px-5">
-        <Link to="/" className="flex items-center gap-2">
+        <Link to="/mentor/dashboard" className="flex items-center gap-2" onClick={() => setSidebarOpen(false)}>
           <img src={logoImg} alt="VET" className="h-8 w-auto" />
         </Link>
         <div className="ml-auto flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1">
@@ -108,36 +171,6 @@ export function MentorLayout({ children }: MentorLayoutProps) {
         })}
       </nav>
 
-      {/* User footer */}
-      <div className="border-t border-border/60 p-4">
-        <div className="mb-3 flex items-center gap-3 rounded-xl bg-muted/60 p-3">
-          <Avatar className="h-9 w-9 shrink-0">
-            <AvatarImage src={user?.avatar} />
-            <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-              {initials}
-            </AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-foreground">{user?.name}</p>
-            <p className="truncate text-[11px] text-muted-foreground">{user?.email}</p>
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <Link to="/" className="flex-1">
-            <Button variant="outline" size="sm" className="w-full rounded-lg text-xs">
-              Về trang chủ
-            </Button>
-          </Link>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="rounded-lg text-destructive hover:bg-destructive/10 hover:text-destructive px-3"
-          >
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
     </div>
   );
 
@@ -168,6 +201,11 @@ export function MentorLayout({ children }: MentorLayoutProps) {
 
       {/* Main content */}
       <div className="flex min-w-0 flex-1 flex-col">
+        {/* Desktop top bar */}
+        <header className="sticky top-0 z-30 hidden h-14 items-center justify-end border-b border-border/60 bg-background/95 px-6 backdrop-blur-sm lg:flex">
+          <UserDropdown />
+        </header>
+
         {/* Mobile top bar */}
         <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border/60 bg-background/95 px-4 backdrop-blur-sm lg:hidden">
           <Button
@@ -180,12 +218,7 @@ export function MentorLayout({ children }: MentorLayoutProps) {
           </Button>
           <img src={logoImg} alt="VET" className="h-7 w-auto" />
           <div className="ml-auto">
-            <Avatar className="h-8 w-8">
-              <AvatarImage src={user?.avatar} />
-              <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                {initials}
-              </AvatarFallback>
-            </Avatar>
+            <UserDropdown compact />
           </div>
         </header>
 
