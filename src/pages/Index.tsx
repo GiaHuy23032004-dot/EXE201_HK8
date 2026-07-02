@@ -10,21 +10,23 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight, TrendingUp, Sparkles, Brain, Zap,
   Globe, Dumbbell, Coffee, Mic2, MapPin, Monitor,
-  Users, type LucideIcon,
+  Users, Music2, ChefHat, type LucideIcon,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { usePublicMentorTrustBadgeMap, type PublicMentorTrustBadge } from "@/hooks/usePublicMentorVerification";
-import { COURSE_CATEGORIES, type CourseCategorySlug } from "@/constants/courseCategories";
+import { COURSE_CATEGORIES, GENERAL_CATEGORIES, VOCATIONAL_CATEGORIES, type CourseCategorySlug } from "@/constants/courseCategories";
 
 const CATEGORY_ICON_BY_SLUG: Record<CourseCategorySlug, LucideIcon> = {
-  "mind-sports": Brain,
-  "career-english": Globe,
-  "modern-sports": Dumbbell,
+  "music-arts":       Music2,
+  "mind-sports":      Brain,
+  "career-english":   Globe,
+  "modern-sports":    Dumbbell,
   "barista-beverage": Coffee,
   "content-speaking": Mic2,
-  "ai-productivity": Sparkles,
+  "ai-productivity":  Sparkles,
+  "lifestyle":        ChefHat,
 };
 
 const categoryIcons = COURSE_CATEGORIES.map((cat) => ({
@@ -141,30 +143,60 @@ export default function HomePage() {
       {/* ── Hero ── */}
       <SearchHero />
 
-      {/* ── Danh mục phổ biến ── */}
+      {/* ── Danh mục phổ biến — 2 nhóm ── */}
       <section className="bg-white py-10">
         <div className="container">
-          <div className="mb-5 flex items-center justify-between">
-            <h2 className="text-xl font-bold text-foreground">Danh mục phổ biến</h2>
-            <Link
-              to="/search"
-              className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-            >
+          <div className="mb-6 flex items-center justify-between">
+            <h2 className="text-xl font-bold text-foreground">Danh mục khóa học</h2>
+            <Link to="/search" className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
               Xem tất cả <ArrowRight className="h-4 w-4" />
             </Link>
           </div>
-          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6">
-            {categoryIcons.map((cat, i) => (
-              <motion.div
-                key={cat.slug}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.05 }}
-              >
-                <CategoryChip {...cat} />
-              </motion.div>
-            ))}
+
+          {/* Khóa học phổ thông */}
+          <div className="mb-6">
+            <div className="mb-3 flex items-center gap-2">
+              <span className="rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700">
+                🎯 Khóa học phổ thông
+              </span>
+              <span className="text-xs text-muted-foreground">Âm nhạc, thể thao, sở thích cá nhân</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              {GENERAL_CATEGORIES.map((cat, i) => (
+                <motion.div
+                  key={cat.slug}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <CategoryChip {...cat} icon={CATEGORY_ICON_BY_SLUG[cat.slug]} />
+                </motion.div>
+              ))}
+            </div>
+          </div>
+
+          {/* Khóa học dạy nghề */}
+          <div>
+            <div className="mb-3 flex items-center gap-2">
+              <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
+                💼 Khóa học dạy nghề
+              </span>
+              <span className="text-xs text-muted-foreground">Kỹ năng nghề nghiệp, tăng thu nhập</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+              {VOCATIONAL_CATEGORIES.map((cat, i) => (
+                <motion.div
+                  key={cat.slug}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <CategoryChip {...cat} icon={CATEGORY_ICON_BY_SLUG[cat.slug]} />
+                </motion.div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
