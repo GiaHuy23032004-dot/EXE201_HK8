@@ -613,12 +613,15 @@ export default function SearchPage() {
             </Button>
           </div>
 
-          {/* Row 2: Category chips */}
+          {/* Row 2: Category chips — chỉ hiện 2 category có khóa học thực */}
           <div className="mt-2.5 flex gap-2 overflow-x-auto pb-0.5 scrollbar-hide">
             <button onClick={() => setSelectedCategory(null)}
               className={`whitespace-nowrap shrink-0 rounded-full px-3.5 py-1 text-xs font-medium transition-all ${!selectedCategory ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:text-cyan-600"}`}
             >Tất cả</button>
-            {COURSE_CATEGORIES.map((cat) => (
+            {[
+              { slug: "modern-sports", label: "Thể thao & Sức khỏe" },
+              { slug: "career-english", label: "Tiếng Anh & Học tập" },
+            ].map((cat) => (
               <button key={cat.slug} onClick={() => setSelectedCategory(selectedCategory === cat.slug ? null : cat.slug)}
                 className={`whitespace-nowrap shrink-0 rounded-full px-3.5 py-1 text-xs font-medium transition-all ${selectedCategory === cat.slug ? "bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-sm" : "border border-slate-200 bg-white text-slate-600 hover:border-cyan-300 hover:text-cyan-600"}`}
               >{cat.label}</button>
