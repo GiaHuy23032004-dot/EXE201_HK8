@@ -162,7 +162,7 @@ export default function HomePage() {
               <span className="text-xs text-muted-foreground">Thể thao, ngôn ngữ và phát triển cá nhân</span>
             </div>
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 max-w-sm">
-              {GENERAL_CATEGORIES.filter((cat) => cat.slug === "modern-sports" || cat.slug === "career-english").map((cat, i) => (
+              {COURSE_CATEGORIES.filter((cat) => cat.slug === "modern-sports" || cat.slug === "career-english").map((cat, i) => (
                 <motion.div
                   key={cat.slug}
                   initial={{ opacity: 0, y: 16 }}
