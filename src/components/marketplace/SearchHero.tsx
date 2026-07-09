@@ -5,15 +5,15 @@ import { Button } from "@/components/ui/button";
 import { motion, AnimatePresence } from "framer-motion";
 
 const aiSuggestions = [
-  "Cờ vua chiến thuật cho người mới",
-  "Tiếng Anh công việc cho nhân viên văn phòng",
-  "Pickleball cơ bản gần Quận 1",
-  "Pha chế cà phê tại nhà",
-  "Kỹ năng MC và thuyết trình",
-  "AI tăng năng suất làm việc",
+  "Pickleball cơ bản gần TP.HCM",
+  "Học Pickleball từ người mới bắt đầu",
+  "Luyện thi IELTS Listening cơ bản",
+  "Khóa học IELTS cho người mới",
+  "Pickleball buổi chiều tối TP.HCM",
+  "Luyện kỹ năng nghe IELTS",
 ];
 
-const popularTags = ["Cờ vua", "Tiếng Anh công việc", "Pickleball", "Barista", "AI công việc"];
+const popularTags = ["Pickleball", "IELTS", "Thể thao", "Tiếng Anh"];
 
 export function SearchHero() {
   const [query, setQuery] = useState("");
@@ -40,7 +40,7 @@ export function SearchHero() {
     setShowSuggestions(true);
     if (!aiText) {
       setAiTyping(true);
-      const text = "🤖 Gợi ý: Bạn có thể thử tìm \"Tiếng Anh công việc\" hoặc \"AI tăng năng suất\"";
+      const text = "🤖 Gợi ý: Bạn có thể thử tìm \"Pickleball cơ bản\" hoặc \"IELTS Listening\"";
       let i = 0;
       const timer = setInterval(() => {
         setAiText(text.slice(0, i + 1));
@@ -91,7 +91,7 @@ export function SearchHero() {
 
           {/* Subtitle */}
           <p className="mb-8 text-sm text-muted-foreground md:text-base max-w-lg mx-auto">
-            Kết nối với hàng nghìn mentor chất lượng trong 6 nhóm kỹ năng thực tế: tư duy chiến thuật, tiếng Anh, thể thao, đồ uống, thuyết trình và AI.
+            Kết nối với mentor chất lượng trong các môn thể thao và kỹ năng ngôn ngữ. Học Pickleball, IELTS và nhiều hơn nữa.
           </p>
 
           {/* Search bar */}
