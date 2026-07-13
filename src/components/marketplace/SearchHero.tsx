@@ -9,11 +9,11 @@ const aiSuggestions = [
   "Học Pickleball từ người mới bắt đầu",
   "Luyện thi IELTS Listening cơ bản",
   "Khóa học IELTS cho người mới",
-  "Pickleball buổi chiều tối TP.HCM",
-  "Luyện kỹ năng nghe IELTS",
+  "Học nghề Barber chuyên nghiệp",
+  "Đào tạo Barber tại TP.HCM",
 ];
 
-const popularTags = ["Pickleball", "IELTS", "Thể thao", "Tiếng Anh"];
+const popularTags = ["Pickleball", "IELTS", "Barber", "Tiếng Anh"];
 
 export function SearchHero() {
   const [query, setQuery] = useState("");

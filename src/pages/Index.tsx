@@ -176,17 +176,26 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* Khóa học dạy nghề — sắp ra mắt */}
+          {/* Khóa học dạy nghề — Barber */}
           <div>
             <div className="mb-3 flex items-center gap-2">
               <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
                 💼 Khóa học dạy nghề
               </span>
-              <span className="text-xs text-muted-foreground">Đang cập nhật thêm khóa học mới</span>
+              <span className="text-xs text-muted-foreground">Kỹ năng nghề nghiệp, tăng thu nhập</span>
             </div>
-            <div className="rounded-2xl border border-dashed border-blue-200 bg-blue-50/40 px-6 py-8 text-center max-w-sm">
-              <p className="text-sm font-medium text-blue-600">Sắp ra mắt</p>
-              <p className="mt-1 text-xs text-blue-400">Các khóa học dạy nghề đang được chuẩn bị</p>
+            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-2 max-w-sm">
+              {COURSE_CATEGORIES.filter((cat) => cat.slug === "barista-beverage").map((cat, i) => (
+                <motion.div
+                  key={cat.slug}
+                  initial={{ opacity: 0, y: 16 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: i * 0.05 }}
+                >
+                  <CategoryChip {...cat} icon={CATEGORY_ICON_BY_SLUG[cat.slug]} />
+                </motion.div>
+              ))}
             </div>
           </div>
         </div>
