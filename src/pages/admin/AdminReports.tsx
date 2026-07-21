@@ -16,10 +16,12 @@ import {
   Loader2,
   Lock,
   Mail,
+  MessageSquare,
   Search,
   Send,
   ShieldCheck,
   User,
+  Wallet,
   X,
 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -49,6 +51,7 @@ type ReportStatus = "pending" | "resolved" | "dismissed" | "appealed";
 type ReportType = "course" | "mentor" | "comment" | "payment";
 type ReportFilter = "all" | ReportStatus | "auto_hidden";
 type PenaltyAction = "dismiss" | "strike_1" | "strike_2" | "strike_3";
+type ReportDialogMode = "detail" | "process";
 
 type ProfileRef = {
   user_id: string;
@@ -130,6 +133,7 @@ type ReporterHistory = {
 };
 
 const reportFilters: ReportFilter[] = ["all", "pending", "appealed", "resolved", "dismissed", "auto_hidden"];
+const PAGE_SIZE = 10;
 
 const filterLabels: Record<ReportFilter, string> = {
   all: "Tất cả",
@@ -211,6 +215,17 @@ const isActiveStrike = (strike: MentorStrike) =>
   !strike.expires_at || new Date(strike.expires_at).getTime() > Date.now();
 const isAutoHiddenReport = (report: ReportRow) =>
   Boolean(report.auto_hidden || (report.course?.is_hidden && report.course.hidden_reason === "Auto-hidden due to high report volume") || (report.course_pending_report_count ?? 0) >= 5);
+const DEMO_PREFIX_PATTERN = /^\s*\[(?:DEMO[^\]]*)\]\s*/i;
+const cleanDemoTitle = (title: string) => title.replace(DEMO_PREFIX_PATTERN, "").trim() || title;
+const isDemoReport = (report: Pick<ReportRow, "title">) => DEMO_PREFIX_PATTERN.test(report.title);
+const getPersonLabel = (profile: ProfileRef | null, fallback = "Không có") =>
+  profile?.name || profile?.email || fallback;
+const getReportTypeIcon = (type: ReportType) => {
+  if (type === "course") return BookOpen;
+  if (type === "payment") return Wallet;
+  if (type === "comment") return MessageSquare;
+  return User;
+};
 
 function StatusBadge({ status }: { status: ReportStatus }) {
   return <Badge className={statusClasses[status]}>{filterLabels[status]}</Badge>;
@@ -219,7 +234,7 @@ function StatusBadge({ status }: { status: ReportStatus }) {
 function generateEmailContent(report: ReportRow, penalty: PenaltyAction) {
   const mentorName = report.reported_user?.name || "Mentor";
   const courseLine = report.course ? `Khóa học liên quan: ${report.course.title}.` : "Nội dung liên quan không gắn với một khóa học cụ thể.";
-  const opening = `Xin chào ${mentorName},\n\nVET đã xem xét báo cáo "${report.title}". ${courseLine}\n`;
+  const opening = `Xin chào ${mentorName},\n\nVET đã xem xét báo cáo "${cleanDemoTitle(report.title)}". ${courseLine}\n`;
 
   const bodyByPenalty: Record<PenaltyAction, string> = {
     dismiss:
@@ -241,7 +256,9 @@ export default function AdminReports() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ReportFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedReport, setSelectedReport] = useState<ReportRow | null>(null);
+  const [dialogMode, setDialogMode] = useState<ReportDialogMode>("detail");
   const [detailLoadingId, setDetailLoadingId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [penaltyAction, setPenaltyAction] = useState<PenaltyAction | null>(null);
@@ -322,6 +339,19 @@ export default function AdminReports() {
     });
   }, [filter, reports, search]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredReports.length / PAGE_SIZE));
+  const safeCurrentPage = Math.min(currentPage, totalPages);
+  const pageStart = filteredReports.length === 0 ? 0 : (safeCurrentPage - 1) * PAGE_SIZE + 1;
+  const pageEnd = Math.min(safeCurrentPage * PAGE_SIZE, filteredReports.length);
+  const paginatedReports = useMemo(
+    () => filteredReports.slice((safeCurrentPage - 1) * PAGE_SIZE, safeCurrentPage * PAGE_SIZE),
+    [filteredReports, safeCurrentPage],
+  );
+
   const imageAttachments = selectedReport?.attachments.filter(isImageAttachment) ?? [];
   const currentLightbox = lightboxIndex !== null ? imageAttachments[lightboxIndex] : null;
   const reportAlreadyClosed = selectedReport?.status === "resolved" || selectedReport?.status === "dismissed";
@@ -346,11 +376,12 @@ export default function AdminReports() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [imageAttachments.length, lightboxIndex]);
 
-  const openDetail = async (reportId: string) => {
+  const openDetail = async (reportId: string, mode: ReportDialogMode = "detail") => {
     setDetailLoadingId(reportId);
     try {
       const data = await invokeReportAction({ action: "get_report_detail", reportId });
       const report = data.report as ReportRow;
+      setDialogMode(mode);
       setSelectedReport(report);
       setPenaltyAction(null);
       setVerdict(report.admin_verdict ?? "");
@@ -504,38 +535,54 @@ export default function AdminReports() {
 
   return (
     <div className="mx-auto max-w-7xl space-y-6">
-      <div>
+      <div className="space-y-1">
         <div className="flex items-center gap-2">
           <Flag className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold text-foreground">Báo cáo</h1>
         </div>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="max-w-3xl text-sm text-muted-foreground">
           Điều tra báo cáo, xem bằng chứng và áp dụng hình thức xử lý theo hệ thống 3 gậy.
         </p>
       </div>
 
       <div className="rounded-2xl border bg-card p-4 shadow-card">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full lg:max-w-md">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+          {reportFilters.map((item) => (
+            <button
+              key={item}
+              type="button"
+              className={`rounded-2xl border px-3 py-3 text-left transition hover:border-primary/30 hover:bg-primary/5 ${
+                filter === item ? "border-primary/40 bg-primary/10 text-primary shadow-sm" : "bg-background text-foreground"
+              }`}
+              onClick={() => setFilter(item)}
+            >
+              <p className="text-2xl font-bold leading-none">{counts[item]}</p>
+              <p className="mt-1 truncate text-xs font-medium text-muted-foreground">{filterLabels[item]}</p>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="relative w-full lg:max-w-xl">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              className="pl-10"
-              placeholder="Tìm theo tiêu đề, người báo cáo, khóa học, lý do..."
+              className="h-11 rounded-xl pl-10"
+              placeholder="Tìm theo tiêu đề, lý do, reporter, target hoặc khóa học..."
               value={search}
               onChange={(event) => setSearch(event.target.value)}
             />
           </div>
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 lg:justify-end">
             {reportFilters.map((item) => (
               <Button
                 key={item}
                 size="sm"
                 variant={filter === item ? "default" : "outline"}
-                className={`rounded-xl ${filter === item ? "gradient-primary border-0 text-primary-foreground" : ""}`}
+                className={`rounded-full px-3 ${filter === item ? "gradient-primary border-0 text-primary-foreground" : "bg-background"}`}
                 onClick={() => setFilter(item)}
               >
-                {filterLabels[item]} ({counts[item]})
+                {filterLabels[item]}
               </Button>
             ))}
           </div>
@@ -566,50 +613,100 @@ export default function AdminReports() {
           <p className="mt-1 text-sm text-muted-foreground">Thử đổi từ khóa tìm kiếm hoặc bộ lọc.</p>
         </div>
       ) : (
-        <div className="space-y-3">
-          {filteredReports.map((report) => (
-            <div key={report.id} className="rounded-2xl border bg-card p-4 shadow-card">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-start">
-                <div className="rounded-xl bg-destructive/10 p-3 text-destructive">
-                  {report.type === "course" ? <BookOpen className="h-5 w-5" /> : report.type === "payment" ? <FileText className="h-5 w-5" /> : <Flag className="h-5 w-5" />}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="mb-2 flex min-w-0 flex-wrap items-center gap-2">
-                    <h2 className={`font-semibold text-foreground ${safeInlineClasses}`}>{report.title}</h2>
-                    <StatusBadge status={report.status} />
-                    <Badge variant="outline">{typeLabels[report.type]}</Badge>
-                    {isAutoHiddenReport(report) && <Badge className="border-0 bg-orange-100 text-orange-700">Hệ thống tự động ẩn</Badge>}
-                    {report.attachments.length > 0 && <Badge variant="outline">{report.attachments.length} bằng chứng</Badge>}
-                  </div>
-                  <p className={`text-sm text-muted-foreground ${safeTextClasses}`}>Lý do: {report.reason}</p>
-                  <p className={`mt-1 text-xs text-muted-foreground ${safeTextClasses}`}>
-                    Người báo cáo: {report.reporter?.name || report.reporter?.email || "Không rõ"} ·
-                    {" "}Bị báo cáo: {report.reported_user?.name || report.reported_user?.email || "Không có"} ·
-                    {" "}Khóa học: {report.course?.title || "Không gắn khóa học"}
-                  </p>
-                  {report.detail && <p className={`mt-2 line-clamp-2 text-sm text-muted-foreground ${safeTextClasses}`}>{report.detail}</p>}
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Tạo lúc: {formatDate(report.created_at)}
-                    {report.course_id && <> · Pending reports khóa học: {report.course_pending_report_count ?? 0}</>}
-                  </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 lg:justify-end">
-                  <Button variant="outline" className="rounded-xl" onClick={() => void openDetail(report.id)}>
-                    {detailLoadingId === report.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
-                    Xem chi tiết
-                  </Button>
-                  {(report.status === "pending" || report.status === "appealed") && (
-                    <Button className="gradient-primary rounded-xl border-0 text-primary-foreground" onClick={() => void openDetail(report.id)}>
-                      <Gavel className="mr-2 h-4 w-4" />
-                      Xử lý
-                    </Button>
-                  )}
-                </div>
-              </div>
+        <div className="overflow-hidden rounded-2xl border bg-card shadow-card">
+          <div className="border-b bg-muted/20 px-4 py-3">
+            <div className="grid gap-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground lg:grid-cols-[minmax(0,1fr)_220px_150px_220px]">
+              <span>Báo cáo</span>
+              <span className="hidden lg:block">Trạng thái</span>
+              <span className="hidden lg:block">Thời gian</span>
+              <span className="hidden text-right lg:block">Hành động</span>
             </div>
-          ))}
+          </div>
+
+          <div className="divide-y">
+            {paginatedReports.map((report) => {
+              const TypeIcon = getReportTypeIcon(report.type);
+              const title = cleanDemoTitle(report.title);
+              const processingAllowed = report.status === "pending" || report.status === "appealed";
+
+              return (
+                <article key={report.id} className="grid gap-4 px-4 py-4 transition hover:bg-muted/20 lg:grid-cols-[minmax(0,1fr)_220px_150px_220px] lg:items-center">
+                  <div className="flex min-w-0 gap-3">
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                      <TypeIcon className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <h2 className={`truncate text-sm font-semibold text-foreground ${safeInlineClasses}`}>{title}</h2>
+                        {isDemoReport(report) && <Badge variant="outline" className="shrink-0 rounded-full bg-muted/60 text-[10px]">Demo</Badge>}
+                      </div>
+                      <p className="mt-1 truncate text-sm text-muted-foreground">Lý do: {report.reason}</p>
+                      <p className="mt-1 truncate text-xs text-muted-foreground">
+                        Người báo cáo: {getPersonLabel(report.reporter, "Không rõ")} · Bị báo cáo: {getPersonLabel(report.reported_user)} · Khóa học: {report.course?.title || "Không gắn khóa học"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <StatusBadge status={report.status} />
+                    <Badge variant="outline" className="rounded-full">{typeLabels[report.type]}</Badge>
+                    {isAutoHiddenReport(report) && <Badge className="border-0 bg-orange-100 text-orange-700">Hệ thống tự động ẩn</Badge>}
+                    {report.course_id && (
+                      <Badge variant="outline" className="rounded-full">
+                        {report.course_pending_report_count ?? 0} report cùng khóa
+                      </Badge>
+                    )}
+                    {report.attachments.length > 0 && <Badge variant="outline" className="rounded-full">{report.attachments.length} bằng chứng</Badge>}
+                  </div>
+
+                  <div className="text-sm text-muted-foreground">
+                    <p>{formatShortDate(report.created_at)}</p>
+                    <p className="text-xs">{new Date(report.created_at).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2 lg:justify-end">
+                    <Button variant="outline" size="sm" className="rounded-xl" onClick={() => void openDetail(report.id, "detail")}>
+                      {detailLoadingId === report.id ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Eye className="mr-2 h-4 w-4" />}
+                      {processingAllowed ? "Xem chi tiết" : "Xem kết quả"}
+                    </Button>
+                    {processingAllowed && (
+                      <Button size="sm" className="gradient-primary rounded-xl border-0 text-primary-foreground" onClick={() => void openDetail(report.id, "process")}>
+                        <Gavel className="mr-2 h-4 w-4" />
+                        Xử lý
+                      </Button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+
+          <div className="flex flex-col gap-3 border-t bg-muted/10 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <span>Hiển thị {pageStart}–{pageEnd} / {filteredReports.length} báo cáo</span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                disabled={safeCurrentPage <= 1}
+                onClick={() => setCurrentPage((page) => Math.max(page - 1, 1))}
+              >
+                Trước
+              </Button>
+              <span className="min-w-16 text-center text-xs">
+                {safeCurrentPage}/{totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-xl"
+                disabled={safeCurrentPage >= totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(page + 1, totalPages))}
+              >
+                Sau
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -619,21 +716,23 @@ export default function AdminReports() {
             <>
               <DialogHeader className="min-w-0 border-b px-6 py-5">
                 <DialogTitle className={`flex min-w-0 flex-wrap items-center gap-2 text-xl ${safeInlineClasses}`}>
-                  Xử lý báo cáo – Quy trình kiểm duyệt
+                  {dialogMode === "process" ? "Xử lý báo cáo – Quy trình kiểm duyệt" : "Chi tiết báo cáo"}
                   <StatusBadge status={selectedReport.status} />
+                  {isDemoReport(selectedReport) && <Badge variant="outline" className="rounded-full bg-muted/60 text-xs">Demo</Badge>}
                   {isAutoHiddenReport(selectedReport) && <Badge className="border-0 bg-orange-100 text-orange-700">Hệ thống tự động ẩn</Badge>}
                 </DialogTitle>
               </DialogHeader>
 
               <div className="max-h-[calc(90vh-88px)] overflow-y-auto overflow-x-hidden px-6 py-5">
-              <div className="grid min-w-0 grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+              <div className={`grid min-w-0 grid-cols-1 gap-6 ${dialogMode === "process" ? "xl:grid-cols-[minmax(0,1fr)_420px]" : ""}`}>
                 <div className="min-w-0 space-y-5 overflow-hidden">
-                  <StepTitle step="2" title="Thẩm định" />
+                  <StepTitle step={dialogMode === "process" ? "2" : "1"} title={dialogMode === "process" ? "Thẩm định" : "Tổng quan báo cáo"} />
                   <section className="min-w-0 overflow-hidden rounded-2xl border bg-card p-5 shadow-card">
                     <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_280px]">
                       <div className="min-w-0">
                         <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
-                          <h2 className={`text-lg font-semibold text-foreground ${safeInlineClasses}`}>{selectedReport.title}</h2>
+                          <h2 className={`text-lg font-semibold text-foreground ${safeInlineClasses}`}>{cleanDemoTitle(selectedReport.title)}</h2>
+                          {isDemoReport(selectedReport) && <Badge variant="outline" className="rounded-full bg-muted/60 text-xs">Demo</Badge>}
                           <Badge variant="outline">{typeLabels[selectedReport.type]}</Badge>
                         </div>
                         <p className={`text-sm font-medium text-foreground ${safeTextClasses}`}>Lý do: {selectedReport.reason}</p>
@@ -652,6 +751,9 @@ export default function AdminReports() {
                           </Button>
                         )}
                         <p className="mt-3 text-xs text-muted-foreground">Tạo lúc: {formatDate(selectedReport.created_at)}</p>
+                        {selectedReport.resolved_at && (
+                          <p className="mt-1 text-xs text-muted-foreground">Xử lý lúc: {formatDate(selectedReport.resolved_at)}</p>
+                        )}
 
                         <div className="mt-4 flex min-w-0 flex-wrap gap-3">
                           {selectedReport.course && (
@@ -675,6 +777,11 @@ export default function AdminReports() {
                             Lịch sử báo cáo của người tố cáo
                           </Button>
                         </div>
+                        {isAutoHiddenReport(selectedReport) && (
+                          <div className={`mt-4 rounded-xl border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800 ${safeTextClasses}`}>
+                            Tự động ẩn là biện pháp bảo vệ tạm thời khi một nội dung có nhiều báo cáo đang chờ xử lý. Đây chưa phải hình phạt cho mentor.
+                          </div>
+                        )}
                       </div>
 
                       <MentorViolationProgress summary={selectedReport.mentor_violation_summary} strikes={selectedReport.mentor_strikes ?? []} />
@@ -764,6 +871,7 @@ export default function AdminReports() {
                   )}
                 </div>
 
+                {dialogMode === "process" && (
                 <aside className="min-w-0 space-y-5">
                   <StepTitle step="3" title="Phán quyết" />
                   {reportAlreadyClosed && (
@@ -853,6 +961,7 @@ export default function AdminReports() {
                     </Button>
                   </section>
                 </aside>
+                )}
               </div>
               </div>
             </>
@@ -905,7 +1014,8 @@ export default function AdminReports() {
                 {reporterHistory.reports.map((report) => (
                   <div key={report.id} className="min-w-0 overflow-hidden rounded-xl border p-3">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <p className={`font-medium text-foreground ${safeTextClasses}`}>{report.title}</p>
+                      <p className={`font-medium text-foreground ${safeTextClasses}`}>{cleanDemoTitle(report.title)}</p>
+                      {isDemoReport(report) && <Badge variant="outline" className="rounded-full bg-muted/60 text-[10px]">Demo</Badge>}
                       <StatusBadge status={report.status} />
                       {isAutoHiddenReport(report) && <Badge className="border-0 bg-orange-100 text-orange-700">Tự động ẩn</Badge>}
                     </div>

@@ -64,35 +64,6 @@ async function fetchPublicTrustBadges(mentorIds: string[]) {
     badgeMap.set(badge.mentor_id, [...(badgeMap.get(badge.mentor_id) ?? []), badge]);
   });
 
-  // Backward compatibility for approved mentors created before trust badges existed.
-  const mentorsWithoutVetBadge = mentorIds.filter((mentorId) =>
-    !(badgeMap.get(mentorId) ?? []).some((badge) => badge.badge_type === "vet_verified"),
-  );
-
-  if (mentorsWithoutVetBadge.length > 0) {
-    const { data: approvedRows, error: approvedError } = await supabase
-      .from("mentor_verifications")
-      .select("mentor_id")
-      .eq("status", "approved")
-      .in("mentor_id", mentorsWithoutVetBadge);
-
-    if (approvedError) throw approvedError;
-
-    (approvedRows ?? []).forEach((row) => {
-      if (!row.mentor_id) return;
-      badgeMap.set(row.mentor_id, [
-        ...(badgeMap.get(row.mentor_id) ?? []),
-        {
-          id: `legacy-vet-verified-${row.mentor_id}`,
-          mentor_id: row.mentor_id,
-          badge_type: "vet_verified",
-          status: "active",
-          public_visible: true,
-        },
-      ]);
-    });
-  }
-
   return badgeMap;
 }
 

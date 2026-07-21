@@ -33,6 +33,7 @@ type ReportAction =
   | "add_mentor_strike"
   | "hide_related_course"
   | "get_reporter_history"
+  | "get_related_reports"
   | "apply_penalty"
   | "get_mentor_violation_summary"
   | "auto_hide_risky_courses";
@@ -277,6 +278,38 @@ const getReporterHistory = async (client: any, reporterId: string) => {
   };
 
   return { summary, reports: rows };
+};
+
+const getRelatedReports = async (client: any, detail: any) => {
+  const related = new Map<string, any>();
+
+  if (detail.course_id) {
+    const { data, error } = await client
+      .from("reports")
+      .select("*")
+      .eq("course_id", detail.course_id)
+      .neq("id", detail.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) throw error;
+    (data ?? []).forEach((report: any) => related.set(report.id, report));
+  }
+
+  if (detail.reported_user_id) {
+    const { data, error } = await client
+      .from("reports")
+      .select("*")
+      .eq("reported_user_id", detail.reported_user_id)
+      .neq("id", detail.id)
+      .order("created_at", { ascending: false })
+      .limit(20);
+
+    if (error) throw error;
+    (data ?? []).forEach((report: any) => related.set(report.id, report));
+  }
+
+  return enrichReports(client, Array.from(related.values()).slice(0, 20));
 };
 
 const resolveMentorTarget = (detail: any) => {
@@ -623,6 +656,10 @@ serve(async (req) => {
 
     if (action === "get_report_detail") {
       return json({ report: detail });
+    }
+
+    if (action === "get_related_reports") {
+      return json({ reports: await getRelatedReports(adminClient, detail) });
     }
 
     const now = new Date().toISOString();

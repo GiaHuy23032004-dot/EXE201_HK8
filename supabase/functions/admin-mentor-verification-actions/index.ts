@@ -46,8 +46,12 @@ const normalizeText = (value: unknown) => (typeof value === "string" ? value.tri
 const isActiveStrike = (strike: { expires_at: string | null }) =>
   !strike.expires_at || new Date(strike.expires_at).getTime() > Date.now();
 
-const normalizeStatus = (status: string | null | undefined) =>
-  status === "revision_required" ? "revision_requested" : status;
+const normalizeStatus = (status: string | null | undefined) => {
+  if (!status || status === "unverified" || status === "draft" || status === "not_submitted") {
+    return "not_submitted";
+  }
+  return status === "revision_required" ? "revision_requested" : status;
+};
 
 const resolveProofFileUrl = async (client: any, proof: any) => {
   const path = proof.file_path || proof.metadata?.file_url;
@@ -130,7 +134,7 @@ const enrichVerificationRows = async (client: any, rows: any[]) => {
     return {
       ...row,
       status: normalizeStatus(row.status),
-      profile: profileMap.get(row.mentor_id) ?? null,
+      profile: row.profile ?? profileMap.get(row.mentor_id) ?? null,
       evidence_count: proofs.length,
       approved_proof_count: proofs.filter((proof: any) => normalizeStatus(proof.status || proof.review_status) === "approved").length,
       proofs,
@@ -139,6 +143,56 @@ const enrichVerificationRows = async (client: any, rows: any[]) => {
       mentor_strikes: strikes,
     };
   });
+};
+
+const listMentorVerificationRequests = async (client: any, status: string) => {
+  const { data: mentorProfiles, error: profileError } = await client
+    .from("profiles")
+    .select("user_id, name, email, phone, avatar_url, bio, real_name, mentor_headline, teaching_fields, experience_years, city, portfolio_url, role, is_blocked, created_at")
+    .eq("role", "mentor")
+    .order("created_at", { ascending: false });
+  if (profileError) throw profileError;
+
+  const mentorIds = (mentorProfiles ?? []).map((profile: any) => profile.user_id).filter(Boolean);
+  if (mentorIds.length === 0) return [];
+
+  const { data: verificationRows, error: verificationError } = await client
+    .from("mentor_verifications")
+    .select("*")
+    .in("mentor_id", mentorIds)
+    .order("submitted_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false });
+  if (verificationError) throw verificationError;
+
+  const verificationByMentor = new Map<string, any>();
+  (verificationRows ?? []).forEach((row: any) => {
+    if (!row.mentor_id || verificationByMentor.has(row.mentor_id)) return;
+    verificationByMentor.set(row.mentor_id, row);
+  });
+
+  const rows = (mentorProfiles ?? []).map((profile: any) => {
+    const verification = verificationByMentor.get(profile.user_id);
+    if (verification) return { ...verification, status: normalizeStatus(verification.status), profile };
+
+    return {
+      id: `not-submitted-${profile.user_id}`,
+      mentor_id: profile.user_id,
+      status: "not_submitted",
+      submitted_at: null,
+      reviewed_at: null,
+      reviewed_by: null,
+      admin_note: null,
+      created_at: profile.created_at,
+      profile,
+    };
+  });
+
+  const enrichedRows = await enrichVerificationRows(client, rows);
+  const normalizedFilter = normalizeStatus(status);
+  if (status && status !== "all") {
+    return enrichedRows.filter((row) => normalizeStatus(row.status) === normalizedFilter);
+  }
+  return enrichedRows;
 };
 
 const countByCourseId = async (client: any, table: string, courseIds: string[]) => {
@@ -160,7 +214,6 @@ const getDetail = async (client: any, mentorId: string) => {
     .eq("mentor_id", mentorId)
     .maybeSingle();
   if (verificationError) throw verificationError;
-  if (!verification) return null;
 
   const [
     profileMap,
@@ -225,11 +278,24 @@ const getDetail = async (client: any, mentorId: string) => {
 
   const ratingTotal = courses.reduce((sum: number, course: any) => sum + Number(course.rating || 0) * Number(course.review_count || 0), 0);
   const reviewTotal = courses.reduce((sum: number, course: any) => sum + Number(course.review_count || 0), 0);
+  const profile = profileMap.get(mentorId) ?? null;
+  if (!verification && !profile) return null;
+
+  const baseVerification = verification ?? {
+    id: `not-submitted-${mentorId}`,
+    mentor_id: mentorId,
+    status: "not_submitted",
+    submitted_at: null,
+    reviewed_at: null,
+    reviewed_by: null,
+    admin_note: null,
+    created_at: profile?.created_at ?? new Date(0).toISOString(),
+  };
 
   return {
-    ...verification,
-    status: normalizeStatus(verification.status),
-    profile: profileMap.get(mentorId) ?? null,
+    ...baseVerification,
+    status: normalizeStatus(baseVerification.status),
+    profile,
     proofs,
     verification_items: itemsResult.data ?? [],
     trust_badges: badgesByMentor.get(mentorId) ?? [],
@@ -387,15 +453,7 @@ serve(async (req) => {
 
     if (action === "list_requests") {
       const status = normalizeText(body.status);
-      let query = adminClient
-        .from("mentor_verifications")
-        .select("*")
-        .order("submitted_at", { ascending: false, nullsFirst: false })
-        .order("created_at", { ascending: false });
-      if (status && status !== "all") query = query.eq("status", status);
-      const { data, error } = await query;
-      if (error) throw error;
-      return json({ requests: await enrichVerificationRows(adminClient, data ?? []) });
+      return json({ requests: await listMentorVerificationRequests(adminClient, status || "all") });
     }
 
     if (!mentorId) return json({ error: "Missing mentorId" }, 400);
@@ -486,6 +544,9 @@ serve(async (req) => {
     if (action === "approve_verification") {
       const detail = await getDetail(adminClient, mentorId);
       if (!detail) return json({ error: "Verification request not found" }, 404);
+      if (normalizeStatus(detail.status) === "not_submitted") {
+        return json({ error: "Mentor chưa gửi hồ sơ xác minh." }, 400);
+      }
       const requirements = validateApprovalRequirements(detail);
       if (!requirements.profileComplete || !requirements.hasEnoughProofs || !requirements.hasDistinctTypes || !requirements.hasApprovedProofs) {
         return json({ error: "Mentor chưa đủ điều kiện xác minh.", requirements }, 400);
@@ -501,12 +562,18 @@ serve(async (req) => {
         })
         .eq("mentor_id", mentorId);
       if (error) throw error;
-      await setBadgeStatus(adminClient, mentorId, "vet_verified", "active", "Hồ sơ xác minh được Admin duyệt.", currentUser.id);
+      await setBadgeStatus(adminClient, mentorId, "vet_verified", "active", "Verification approved", currentUser.id);
       return json({ success: true, request: await getDetail(adminClient, mentorId) });
     }
 
     if (action === "reject_verification" || action === "request_revision" || action === "revoke_verification") {
       if (!reason) return json({ error: "Vui lòng nhập lý do xử lý." }, 400);
+      const detail = await getDetail(adminClient, mentorId);
+      if (!detail) return json({ error: "Verification request not found" }, 404);
+      if (normalizeStatus(detail.status) === "not_submitted") {
+        return json({ error: "Mentor chưa gửi hồ sơ xác minh." }, 400);
+      }
+
       const nextStatus = action === "reject_verification"
         ? "rejected"
         : action === "request_revision"

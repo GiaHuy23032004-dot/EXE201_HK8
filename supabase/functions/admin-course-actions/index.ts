@@ -26,7 +26,9 @@ type CourseAction =
   | "reject_course"
   | "hide_course"
   | "unhide_course"
-  | "delete_course_if_safe";
+  | "delete_course_if_safe"
+  | "get_course_metrics"
+  | "get_related_reports";
 
 const countByCourseId = async (client: any, table: string, courseIds: string[]) => {
   const map = new Map<string, number>();
@@ -47,18 +49,40 @@ const countByCourseId = async (client: any, table: string, courseIds: string[]) 
   return map;
 };
 
+const countCompletedBookingsByCourseId = async (client: any, courseIds: string[]) => {
+  const map = new Map<string, number>();
+  if (courseIds.length === 0) return map;
+
+  const { data, error } = await client
+    .from("bookings")
+    .select("course_id")
+    .in("course_id", courseIds)
+    .eq("status", "completed");
+
+  if (error) throw error;
+
+  (data ?? []).forEach((row: { course_id: string | null }) => {
+    if (!row.course_id) return;
+    map.set(row.course_id, (map.get(row.course_id) ?? 0) + 1);
+  });
+
+  return map;
+};
+
 const getRelatedCounts = async (client: any, courseIds: string[]) => {
-  const [bookings, reviews, transactions, reports] = await Promise.all([
+  const [bookings, completedBookings, reviews, transactions, reports] = await Promise.all([
     countByCourseId(client, "bookings", courseIds),
+    countCompletedBookingsByCourseId(client, courseIds),
     countByCourseId(client, "reviews", courseIds),
     countByCourseId(client, "transactions", courseIds),
     countByCourseId(client, "reports", courseIds),
   ]);
 
-  const counts = new Map<string, { bookings: number; reviews: number; transactions: number; reports: number }>();
+  const counts = new Map<string, { bookings: number; completed_bookings: number; reviews: number; transactions: number; reports: number }>();
   courseIds.forEach((courseId) => {
     counts.set(courseId, {
       bookings: bookings.get(courseId) ?? 0,
+      completed_bookings: completedBookings.get(courseId) ?? 0,
       reviews: reviews.get(courseId) ?? 0,
       transactions: transactions.get(courseId) ?? 0,
       reports: reports.get(courseId) ?? 0,
@@ -84,16 +108,29 @@ const enrichCourses = async (client: any, courses: any[]) => {
   const mentorById = new Map((mentors ?? []).map((mentor: any) => [mentor.user_id, mentor]));
 
   return courses.map((course) => {
-    const related = counts.get(course.id) ?? { bookings: 0, reviews: 0, transactions: 0, reports: 0 };
+    const related = counts.get(course.id) ?? { bookings: 0, completed_bookings: 0, reviews: 0, transactions: 0, reports: 0 };
     const relatedTotal = related.bookings + related.reviews + related.transactions + related.reports;
 
     return {
       ...course,
       mentor: mentorById.get(course.mentor_id) ?? null,
       counts: related,
+      completed_bookings_count: related.completed_bookings,
       can_delete: relatedTotal === 0,
     };
   });
+};
+
+const getCourseReports = async (client: any, courseId: string) => {
+  const { data, error } = await client
+    .from("reports")
+    .select("id, title, reason, status, created_at, admin_verdict")
+    .eq("course_id", courseId)
+    .order("created_at", { ascending: false })
+    .limit(10);
+
+  if (error) throw error;
+  return data ?? [];
 };
 
 const getCourseDetail = async (client: any, courseId: string) => {
@@ -106,7 +143,7 @@ const getCourseDetail = async (client: any, courseId: string) => {
   if (courseError) throw courseError;
   if (!course) return null;
 
-  const [enrichedCourses, schedulesResult] = await Promise.all([
+  const [enrichedCourses, schedulesResult, reports] = await Promise.all([
     enrichCourses(client, [course]),
     client
       .from("course_schedules")
@@ -114,6 +151,7 @@ const getCourseDetail = async (client: any, courseId: string) => {
       .eq("course_id", courseId)
       .order("day_of_week", { ascending: true })
       .order("start_time", { ascending: true }),
+    getCourseReports(client, courseId),
   ]);
 
   if (schedulesResult.error) throw schedulesResult.error;
@@ -121,7 +159,20 @@ const getCourseDetail = async (client: any, courseId: string) => {
   return {
     ...enrichedCourses[0],
     course_schedules: schedulesResult.data ?? [],
+    related_reports: reports,
   };
+};
+
+const getCourseOrFail = async (client: any, courseId: string) => {
+  const { data, error } = await client
+    .from("courses")
+    .select("id, status, is_hidden")
+    .eq("id", courseId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error("Course not found");
+  return data;
 };
 
 serve(async (req) => {
@@ -187,9 +238,23 @@ serve(async (req) => {
       return json({ course: detail });
     }
 
+    if (action === "get_related_reports") {
+      return json({ reports: await getCourseReports(adminClient, courseId) });
+    }
+
+    if (action === "get_course_metrics") {
+      const counts = await getRelatedCounts(adminClient, [courseId]);
+      return json({ counts: counts.get(courseId) ?? { bookings: 0, completed_bookings: 0, reviews: 0, transactions: 0, reports: 0 } });
+    }
+
     const now = new Date().toISOString();
 
     if (action === "approve_course") {
+      const course = await getCourseOrFail(adminClient, courseId);
+      if (!["pending", "rejected"].includes(String(course.status))) {
+        return json({ error: "Chỉ có thể duyệt khóa học đang chờ duyệt hoặc đã bị từ chối." }, 400);
+      }
+
       const { error } = await adminClient
         .from("courses")
         .update({
@@ -212,6 +277,11 @@ serve(async (req) => {
     if (action === "reject_course") {
       if (!reason) return json({ error: "Vui lòng nhập lý do từ chối." }, 400);
 
+      const course = await getCourseOrFail(adminClient, courseId);
+      if (!["pending", "approved"].includes(String(course.status))) {
+        return json({ error: "Chỉ có thể từ chối khóa học đang chờ duyệt hoặc đã duyệt." }, 400);
+      }
+
       const { error } = await adminClient
         .from("courses")
         .update({
@@ -228,11 +298,17 @@ serve(async (req) => {
     }
 
     if (action === "hide_course") {
+      if (!reason) return json({ error: "Vui lòng nhập lý do tạm ẩn khóa học." }, 400);
+      const course = await getCourseOrFail(adminClient, courseId);
+      if (course.status !== "approved" || course.is_hidden === true) {
+        return json({ error: "Chỉ có thể tạm ẩn khóa học đã duyệt và đang hiển thị." }, 400);
+      }
+
       const { error } = await adminClient
         .from("courses")
         .update({
           is_hidden: true,
-          hidden_reason: reason || "Admin tạm ẩn khóa học.",
+          hidden_reason: reason,
           hidden_at: now,
           hidden_by: currentUser.id,
         })
@@ -243,6 +319,11 @@ serve(async (req) => {
     }
 
     if (action === "unhide_course") {
+      const course = await getCourseOrFail(adminClient, courseId);
+      if (course.is_hidden !== true) {
+        return json({ error: "Khóa học này chưa bị tạm ẩn." }, 400);
+      }
+
       const { error } = await adminClient
         .from("courses")
         .update({

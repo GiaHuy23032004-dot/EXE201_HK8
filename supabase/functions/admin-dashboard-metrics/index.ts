@@ -8,6 +8,7 @@ const corsHeaders = {
 };
 
 type DashboardRange = "30d" | "1y";
+type DashboardViewMode = "month" | "year";
 type Granularity = "week" | "month";
 
 type SerializedError = Record<string, unknown> & {
@@ -39,6 +40,10 @@ type Bucket = {
   platformFee: number;
   total: number;
   completed: number;
+  refund: number;
+  payoutPaid: number;
+  payoutPending: number;
+  payoutRejected: number;
 };
 
 type AnalyticsEventRow = {
@@ -49,6 +54,7 @@ type AnalyticsEventRow = {
 };
 
 const VALID_RANGES: DashboardRange[] = ["30d", "1y"];
+const VALID_MODES: DashboardViewMode[] = ["month", "year"];
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -150,18 +156,85 @@ const assertNoSupabaseError = (label: string, error: unknown) => {
 const normalizeRange = (value: unknown): DashboardRange =>
   VALID_RANGES.includes(value as DashboardRange) ? (value as DashboardRange) : "30d";
 
-const getRangeConfig = (range: DashboardRange, now: Date) => {
-  const tomorrow = addDays(startOfDay(now), 1);
+const toSafeYear = (value: unknown, now: Date) => {
+  const year = Number(value);
+  if (!Number.isFinite(year)) return now.getFullYear();
+  return Math.min(Math.max(Math.trunc(year), 2000), now.getFullYear());
+};
 
-  if (range === "30d") {
-    return { start: addDays(tomorrow, -30), end: tomorrow, granularity: "week" as Granularity };
+const toSafeMonth = (value: unknown, year: number, now: Date) => {
+  const month = Number(value);
+  const normalized = Number.isFinite(month) ? Math.min(Math.max(Math.trunc(month), 1), 12) : now.getMonth() + 1;
+  if (year === now.getFullYear()) return Math.min(normalized, now.getMonth() + 1);
+  return normalized;
+};
+
+const formatPeriodLabel = (mode: DashboardViewMode, month: number | undefined, year: number) =>
+  mode === "year" ? `Năm ${year}` : `Tháng ${String(month ?? 1).padStart(2, "0")}/${year}`;
+
+const getPeriodConfig = (body: Record<string, unknown>, now: Date) => {
+  const bodyMode = body.mode;
+  if (VALID_MODES.includes(bodyMode as DashboardViewMode)) {
+    const mode = bodyMode as DashboardViewMode;
+    const year = toSafeYear(body.year, now);
+    const month = mode === "month" ? toSafeMonth(body.month, year, now) : undefined;
+
+    if (mode === "year") {
+      const start = new Date(year, 0, 1);
+      const end = new Date(year + 1, 0, 1);
+      return {
+        mode,
+        range: "1y" as DashboardRange,
+        month,
+        year,
+        start,
+        end,
+        granularity: "month" as Granularity,
+        label: formatPeriodLabel(mode, month, year),
+      };
+    }
+
+    const start = new Date(year, (month ?? 1) - 1, 1);
+    const end = new Date(year, month ?? 1, 1);
+    return {
+      mode,
+      range: "30d" as DashboardRange,
+      month,
+      year,
+      start,
+      end,
+      granularity: "week" as Granularity,
+      label: formatPeriodLabel(mode, month, year),
+    };
   }
 
-  const currentMonthStart = new Date(now.getFullYear(), 0, 1);
+  const legacyRange = normalizeRange(body.range);
+  const mode: DashboardViewMode = legacyRange === "1y" ? "year" : "month";
+  const year = now.getFullYear();
+  const month = mode === "month" ? now.getMonth() + 1 : undefined;
+
+  if (mode === "year") {
+    return {
+      mode,
+      range: legacyRange,
+      month,
+      year,
+      start: new Date(year, 0, 1),
+      end: new Date(year + 1, 0, 1),
+      granularity: "month" as Granularity,
+      label: formatPeriodLabel(mode, month, year),
+    };
+  }
+
   return {
-    start: currentMonthStart,
-    end: addMonths(currentMonthStart, 12),
-    granularity: "month" as Granularity,
+    mode,
+    range: legacyRange,
+    month,
+    year,
+    start: new Date(year, now.getMonth(), 1),
+    end: new Date(year, now.getMonth() + 1, 1),
+    granularity: "week" as Granularity,
+    label: formatPeriodLabel(mode, month, year),
   };
 };
 
@@ -172,16 +245,19 @@ const buildBuckets = (start: Date, end: Date, granularity: Granularity): Bucket[
     let index = 1;
     for (let cursor = startOfDay(start); cursor < end; cursor = addDays(cursor, 7)) {
       const next = addDays(cursor, 7) < end ? addDays(cursor, 7) : end;
-      const daysInBucket = Math.max(1, Math.round((next.getTime() - cursor.getTime()) / 86_400_000));
       buckets.push({
         bucketKey: `${getDateKey(cursor)}_${getDateKey(addDays(next, -1))}`,
-        label: daysInBucket < 7 ? "Tuần hiện tại" : `Tuần ${index}`,
+        label: `Tuần ${index}`,
         start: cursor,
         end: next,
         gmv: 0,
         platformFee: 0,
         total: 0,
         completed: 0,
+        refund: 0,
+        payoutPaid: 0,
+        payoutPending: 0,
+        payoutRejected: 0,
       });
       index += 1;
     }
@@ -199,6 +275,10 @@ const buildBuckets = (start: Date, end: Date, granularity: Granularity): Bucket[
       platformFee: 0,
       total: 0,
       completed: 0,
+      refund: 0,
+      payoutPaid: 0,
+      payoutPending: 0,
+      payoutRejected: 0,
     });
   }
 
@@ -336,9 +416,9 @@ serve(async (req) => {
       body = {};
     }
 
-    const range = normalizeRange(body.range);
     const now = new Date();
-    const { start: rangeStart, end: rangeEnd, granularity } = getRangeConfig(range, now);
+    const periodConfig = getPeriodConfig(body, now);
+    const { mode, range, month, year, start: rangeStart, end: rangeEnd, granularity, label: periodLabel } = periodConfig;
     const buckets = buildBuckets(rangeStart, rangeEnd, granularity);
 
     stage = "metrics_query";
@@ -592,6 +672,23 @@ serve(async (req) => {
       bucket.platformFee += hasTransactionsPlatformFee ? toNumber(transaction.platform_fee) : 0;
     });
 
+    allTransactionsInRange.forEach((transaction) => {
+      if (String(transaction.status ?? "") !== "refunded") return;
+      const bucket = findBucket(buckets, transaction.created_at);
+      if (!bucket) return;
+      bucket.refund += toNumber(transaction.amount);
+    });
+
+    withdrawalsCreatedInRange.forEach((request) => {
+      const bucket = findBucket(buckets, request.created_at);
+      if (!bucket) return;
+      const amount = toNumber(request.amount);
+      const status = String(request.status ?? "");
+      if (status === "paid") bucket.payoutPaid += amount;
+      if (status === "pending") bucket.payoutPending += amount;
+      if (status === "rejected" || status === "canceled" || status === "cancelled") bucket.payoutRejected += amount;
+    });
+
     chartBookings.forEach((booking) => {
       const bucket = findBucket(buckets, booking.created_at);
       if (!bucket) return;
@@ -812,6 +909,28 @@ serve(async (req) => {
       completed: bucket.completed,
     }));
 
+    const ledgerCashFlow = buckets.map((bucket) => ({
+      bucketKey: bucket.bucketKey,
+      label: bucket.label,
+      start: toIso(bucket.start),
+      end: toIso(bucket.end),
+      inflow: bucket.gmv,
+      platformFee: bucket.platformFee,
+      mentorNet: Math.max(0, bucket.gmv - bucket.platformFee),
+      refund: bucket.refund,
+    }));
+
+    const payoutStatus = buckets.map((bucket) => ({
+      bucketKey: bucket.bucketKey,
+      label: bucket.label,
+      start: toIso(bucket.start),
+      end: toIso(bucket.end),
+      paid: bucket.payoutPaid,
+      pending: bucket.payoutPending,
+      rejected: bucket.payoutRejected,
+      refund: bucket.refund,
+    }));
+
     const debug = {
       successfulTransactionsInRange: successfulTransactionsInRange.length,
       bookingsInRange: chartBookings.length,
@@ -830,6 +949,14 @@ serve(async (req) => {
     return json({
       success: true,
       range,
+      mode,
+      selectedPeriod: {
+        ...(mode === "month" ? { month } : {}),
+        year,
+        label: periodLabel,
+        start: toIso(rangeStart),
+        end: toIso(rangeEnd),
+      },
       granularity,
       overview: {
         totalUsers,
@@ -857,6 +984,8 @@ serve(async (req) => {
       charts: {
         revenue,
         bookings,
+        ledgerCashFlow,
+        payoutStatus,
       },
       operationalRates,
       conversions: {

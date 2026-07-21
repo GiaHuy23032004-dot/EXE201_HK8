@@ -27,7 +27,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, Legend, ReferenceLine } from "recharts";
 import { useAuth } from "@/contexts/AuthContext";
-import { useAdminDashboardMetrics, type AdminDashboardRange, type AdminRecentActivityItem } from "@/hooks/admin/useAdminDashboardMetrics";
+import { useAdminDashboardMetrics, type AdminDashboardViewMode, type AdminRecentActivityItem } from "@/hooks/admin/useAdminDashboardMetrics";
 import { cn } from "@/lib/utils";
 
 type AdminSection = "analytics" | "users" | "mentors" | "courses" | "reports" | "promoted" | "payouts" | "ledger";
@@ -87,11 +87,6 @@ const adminSectionMeta: Record<AdminSection, { title: string; description: strin
   },
 };
 
-const dashboardRangeOptions: Array<{ value: AdminDashboardRange; label: string }> = [
-  { value: "30d", label: "30 ngày" },
-  { value: "1y", label: "1 năm" },
-];
-
 type UserRecord = {
   user_id: string;
   name: string | null;
@@ -145,17 +140,26 @@ export default function AdminDashboard() {
   const { session } = useAuth();
   const location = useLocation();
   const fmtVnd = (n: number) => n.toLocaleString("vi-VN") + "đ";
+  const today = new Date();
+  const currentMonth = today.getMonth() + 1;
+  const currentYear = today.getFullYear();
   const currentSection = adminRouteSections[location.pathname] ?? "analytics";
   const currentMeta = adminSectionMeta[currentSection];
   const PageIcon = currentMeta.icon;
-  const [dashboardRange, setDashboardRange] = useState<AdminDashboardRange>("30d");
+  const [dashboardViewMode, setDashboardViewMode] = useState<AdminDashboardViewMode>("month");
+  const [selectedMonth, setSelectedMonth] = useState(currentMonth);
+  const [selectedYear, setSelectedYear] = useState(currentYear);
   const {
     data: dashboardMetrics,
     isLoading: dashboardLoading,
     error: dashboardError,
     refetch: refetchDashboardMetrics,
     isFetching: dashboardFetching,
-  } = useAdminDashboardMetrics(dashboardRange, currentSection === "analytics");
+  } = useAdminDashboardMetrics({
+    mode: dashboardViewMode,
+    month: dashboardViewMode === "month" ? selectedMonth : undefined,
+    year: selectedYear,
+  }, currentSection === "analytics");
 
   // ── UI state ──────────────────────────────────────────────
   const [userList, setUserList] = useState<UserRecord[]>([]);
@@ -304,20 +308,18 @@ export default function AdminDashboard() {
 
   const confirmPayoutMutation = useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase.rpc("admin_process_withdrawal_request", {
-        withdrawal_request_id: id,
-        new_status: "paid",
-        admin_note: null,
-        processed_reference: null,
-      });
-      if (error) throw error;
+      throw new Error(`Vui lòng xử lý yêu cầu ${id} tại trang /admin/withdrawals để nhập mã tham chiếu chuyển khoản.`);
     },
     onSuccess: () => {
       refetchPayouts();
       toast({ title: "Đã xác nhận chuyển khoản" });
       setActivePayout(null);
     },
-    onError: () => toast({ title: "Lỗi xác nhận payout", variant: "destructive" }),
+    onError: (error) => toast({
+      title: "Không thể xử lý tại dashboard cũ",
+      description: error instanceof Error ? error.message : "Hãy mở trang Rút tiền để xử lý.",
+      variant: "destructive",
+    }),
   });
 
   // ── User management (via Edge Function) ──────────────────
@@ -727,12 +729,56 @@ export default function AdminDashboard() {
   const overview = dashboard?.overview;
   const revenueChartData = dashboard?.charts?.revenue ?? [];
   const bookingChartData = dashboard?.charts?.bookings ?? [];
+  const periodLabel = dashboard?.selectedPeriod?.label ?? (
+    dashboardViewMode === "year"
+      ? `Năm ${selectedYear}`
+      : `Tháng ${String(selectedMonth).padStart(2, "0")}/${selectedYear}`
+  );
+  const isCurrentPeriod = dashboardViewMode === "year"
+    ? selectedYear >= currentYear
+    : selectedYear > currentYear || (selectedYear === currentYear && selectedMonth >= currentMonth);
+  const handlePreviousPeriod = () => {
+    if (dashboardViewMode === "year") {
+      setSelectedYear((year) => year - 1);
+      return;
+    }
+
+    setSelectedMonth((month) => {
+      if (month > 1) return month - 1;
+      setSelectedYear((year) => year - 1);
+      return 12;
+    });
+  };
+  const handleNextPeriod = () => {
+    if (isCurrentPeriod) return;
+    if (dashboardViewMode === "year") {
+      setSelectedYear((year) => Math.min(year + 1, currentYear));
+      return;
+    }
+
+    setSelectedMonth((month) => {
+      if (selectedYear === currentYear && month >= currentMonth) return month;
+      if (month < 12) return month + 1;
+      setSelectedYear((year) => Math.min(year + 1, currentYear));
+      return 1;
+    });
+  };
+  const handleCurrentPeriod = () => {
+    setSelectedYear(currentYear);
+    if (dashboardViewMode === "month") {
+      setSelectedMonth(currentMonth);
+    }
+  };
+  const handleViewModeChange = (mode: AdminDashboardViewMode) => {
+    setDashboardViewMode(mode);
+    if (mode === "month") {
+      setSelectedMonth((month) => selectedYear === currentYear ? Math.min(month, currentMonth) : month);
+    }
+  };
   const buildFallbackTimeline = () => {
-    if (dashboardRange === "1y") {
-      const now = new Date();
-      const currentMonthStart = new Date(now.getFullYear(), 0, 1);
+    if (dashboardViewMode === "year") {
       return Array.from({ length: 12 }, (_, index) => {
-        const start = new Date(currentMonthStart.getFullYear(), index, 1);
+        const start = new Date(selectedYear, index, 1);
         const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
         return {
           bucketKey: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}`,
@@ -743,21 +789,19 @@ export default function AdminDashboard() {
       });
     }
 
-    const today = new Date();
-    const tomorrow = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1);
-    const firstDay = new Date(tomorrow.getFullYear(), tomorrow.getMonth(), tomorrow.getDate() - 30);
+    const firstDay = new Date(selectedYear, selectedMonth - 1, 1);
+    const periodEnd = new Date(selectedYear, selectedMonth, 1);
 
     const buckets = [];
-    for (let index = 0; index < 5; index += 1) {
+    for (let index = 0; index < 6; index += 1) {
       const start = new Date(firstDay.getFullYear(), firstDay.getMonth(), firstDay.getDate() + index * 7);
-      if (start >= tomorrow) break;
+      if (start >= periodEnd) break;
       const rawEnd = new Date(start.getFullYear(), start.getMonth(), start.getDate() + 7);
-      const end = rawEnd < tomorrow ? rawEnd : tomorrow;
-      const daysInBucket = Math.max(1, Math.round((end.getTime() - start.getTime()) / 86_400_000));
+      const end = rawEnd < periodEnd ? rawEnd : periodEnd;
       const endLabelDate = new Date(end.getFullYear(), end.getMonth(), end.getDate() - 1);
       buckets.push({
         bucketKey: `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}_${endLabelDate.getFullYear()}-${String(endLabelDate.getMonth() + 1).padStart(2, "0")}-${String(endLabelDate.getDate()).padStart(2, "0")}`,
-        label: daysInBucket < 7 ? "Tuần hiện tại" : `Tuần ${index + 1}`,
+        label: `Tuần ${index + 1}`,
         start: start.toISOString(),
         end: end.toISOString(),
       });
@@ -772,6 +816,12 @@ export default function AdminDashboard() {
   const bookingTimelineData = bookingChartData.length > 0
     ? bookingChartData
     : fallbackTimeline.map((bucket) => ({ ...bucket, total: 0, completed: 0 }));
+  const ledgerCashFlowData = dashboard?.charts?.ledgerCashFlow?.length
+    ? dashboard.charts.ledgerCashFlow
+    : fallbackTimeline.map((bucket) => ({ ...bucket, inflow: 0, platformFee: 0, mentorNet: 0, refund: 0 }));
+  const payoutStatusData = dashboard?.charts?.payoutStatus?.length
+    ? dashboard.charts.payoutStatus
+    : fallbackTimeline.map((bucket) => ({ ...bucket, paid: 0, pending: 0, rejected: 0, refund: 0 }));
   const revenueTotal = revenueChartData.reduce(
     (sum, item) => sum + Number(item.gmv || 0) + Number(item.platformFee || 0),
     0,
@@ -782,12 +832,26 @@ export default function AdminDashboard() {
   );
   const hasRevenueSeriesData = revenueTotal > 0;
   const hasBookingSeriesData = bookingTotal > 0;
+  const hasLedgerCashFlowData = ledgerCashFlowData.some((item) =>
+    Number(item.inflow || 0) > 0 ||
+    Number(item.platformFee || 0) > 0 ||
+    Number(item.mentorNet || 0) > 0 ||
+    Number(item.refund || 0) > 0
+  );
+  const hasPayoutStatusData = payoutStatusData.some((item) =>
+    Number(item.paid || 0) > 0 ||
+    Number(item.pending || 0) > 0 ||
+    Number(item.rejected || 0) > 0 ||
+    Number(item.refund || 0) > 0
+  );
+  const hasRefundSeriesData = ledgerCashFlowData.some((item) => Number(item.refund || 0) > 0);
+  const hasRejectedPayoutData = payoutStatusData.some((item) => Number(item.rejected || 0) > 0);
   const operationalRates = dashboard?.operationalRates ?? [];
   const trafficFunnel = dashboard?.trafficFunnel ?? null;
   const trafficConversionRates = dashboard?.conversionRates ?? [];
   const pendingActions = dashboard?.pendingActions;
   const recentActivity = dashboard?.recentActivity ?? [];
-  const selectedRangeLabel = dashboardRangeOptions.find((option) => option.value === (dashboard?.range ?? dashboardRange))?.label ?? "30 ngày";
+  const selectedRangeLabel = periodLabel;
   const chartGranularityLabel = dashboard?.granularity === "week" ? "tuần" : "tháng";
   const formatDateShort = (value: string) => {
     const date = new Date(value);
@@ -813,6 +877,12 @@ export default function AdminDashboard() {
       platformFee?: number;
       total?: number;
       completed?: number;
+      inflow?: number;
+      mentorNet?: number;
+      refund?: number;
+      paid?: number;
+      pending?: number;
+      rejected?: number;
     };
   };
   const renderLegendText = (value: unknown) => (
@@ -849,6 +919,46 @@ export default function AdminDashboard() {
           <p>Tổng booking: <span className="font-medium text-foreground">{formatCount(total)}</span></p>
           <p>Đã hoàn thành: <span className="font-medium text-foreground">{formatCount(completed)}</span></p>
           <p>Tỷ lệ hoàn thành: <span className="font-medium text-foreground">{completionRate}</span></p>
+        </div>
+      </div>
+    );
+  };
+  const LedgerCashFlowTooltip = ({ active, payload }: { active?: boolean; payload?: ChartTooltipPayload[] }) => {
+    if (!active || !payload?.length) return null;
+    const point = payload[0]?.payload;
+    const header = `${point?.label ?? ""}${point?.start && point?.end ? ` · ${formatBucketRange(point.start, point.end)}` : ""}`;
+
+    return (
+      <div className="rounded-xl border bg-background p-3 text-xs shadow-lg">
+        <p className="mb-2 font-semibold text-foreground">{header}</p>
+        <div className="space-y-1 text-muted-foreground">
+          <p>Tiền vào: <span className="font-medium text-foreground">{fmtVnd(Number(point?.inflow ?? 0))}</span></p>
+          <p>Phí nền tảng: <span className="font-medium text-foreground">{fmtVnd(Number(point?.platformFee ?? 0))}</span></p>
+          <p>Net mentor: <span className="font-medium text-foreground">{fmtVnd(Number(point?.mentorNet ?? 0))}</span></p>
+          {Number(point?.refund ?? 0) > 0 && (
+            <p>Hoàn tiền: <span className="font-medium text-rose-600">{fmtVnd(Number(point?.refund ?? 0))}</span></p>
+          )}
+        </div>
+      </div>
+    );
+  };
+  const PayoutStatusTooltip = ({ active, payload }: { active?: boolean; payload?: ChartTooltipPayload[] }) => {
+    if (!active || !payload?.length) return null;
+    const point = payload[0]?.payload;
+    const header = `${point?.label ?? ""}${point?.start && point?.end ? ` · ${formatBucketRange(point.start, point.end)}` : ""}`;
+
+    return (
+      <div className="rounded-xl border bg-background p-3 text-xs shadow-lg">
+        <p className="mb-2 font-semibold text-foreground">{header}</p>
+        <div className="space-y-1 text-muted-foreground">
+          <p>Đã chi: <span className="font-medium text-emerald-700">{fmtVnd(Number(point?.paid ?? 0))}</span></p>
+          <p>Đang chờ chi: <span className="font-medium text-amber-700">{fmtVnd(Number(point?.pending ?? 0))}</span></p>
+          {Number(point?.rejected ?? 0) > 0 && (
+            <p>Từ chối: <span className="font-medium text-slate-700">{fmtVnd(Number(point?.rejected ?? 0))}</span></p>
+          )}
+          {Number(point?.refund ?? 0) > 0 && (
+            <p>Hoàn tiền: <span className="font-medium text-rose-600">{fmtVnd(Number(point?.refund ?? 0))}</span></p>
+          )}
         </div>
       </div>
     );
@@ -1021,20 +1131,75 @@ export default function AdminDashboard() {
             <p className="text-sm text-muted-foreground">{currentMeta.description}</p>
           </div>
           {currentSection === "analytics" && (
-            <div className="flex items-center gap-2">
-              <span className="hidden text-xs font-medium text-muted-foreground sm:inline">Khoảng thời gian</span>
-              <Select value={dashboardRange} onValueChange={(value) => setDashboardRange(value as AdminDashboardRange)}>
-                <SelectTrigger className="h-10 w-[150px] rounded-xl bg-background">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {dashboardRangeOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="flex flex-col gap-2 rounded-2xl border bg-card p-2 shadow-sm lg:flex-row lg:items-center">
+              <div className="flex items-center gap-1 rounded-xl bg-muted p-1">
+                {([
+                  { value: "month", label: "1 tháng" },
+                  { value: "year", label: "1 năm" },
+                ] as const).map((option) => (
+                  <Button
+                    key={option.value}
+                    type="button"
+                    size="sm"
+                    variant={dashboardViewMode === option.value ? "default" : "ghost"}
+                    className="h-8 rounded-lg px-3 text-xs"
+                    onClick={() => handleViewModeChange(option.value)}
+                  >
+                    {option.label}
+                  </Button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="px-1 text-xs font-medium text-muted-foreground">Chế độ xem</span>
+                {dashboardViewMode === "month" && (
+                  <Select value={String(selectedMonth)} onValueChange={(value) => setSelectedMonth(Number(value))}>
+                    <SelectTrigger className="h-9 w-[128px] rounded-xl bg-background">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
+                        <SelectItem
+                          key={month}
+                          value={String(month)}
+                          disabled={selectedYear === currentYear && month > currentMonth}
+                        >
+                          Tháng {String(month).padStart(2, "0")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Input
+                  type="number"
+                  value={selectedYear}
+                  max={currentYear}
+                  min={2000}
+                  onChange={(event) => {
+                    const nextYear = Number(event.target.value);
+                    if (!Number.isFinite(nextYear)) return;
+                    const clampedYear = Math.min(Math.max(nextYear, 2000), currentYear);
+                    setSelectedYear(clampedYear);
+                    if (clampedYear === currentYear && selectedMonth > currentMonth) {
+                      setSelectedMonth(currentMonth);
+                    }
+                  }}
+                  className="h-9 w-[96px] rounded-xl bg-background text-sm"
+                  aria-label="Năm"
+                />
+                <Button type="button" variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={handlePreviousPeriod} aria-label="Kỳ trước">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="outline" size="icon" className="h-9 w-9 rounded-xl" onClick={handleNextPeriod} disabled={isCurrentPeriod} aria-label="Kỳ sau">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl px-3 text-xs" onClick={handleCurrentPeriod}>
+                  Hiện tại
+                </Button>
+                <span className="w-full px-1 text-xs text-muted-foreground sm:w-auto">
+                  Dữ liệu trong {periodLabel}
+                </span>
+              </div>
             </div>
           )}
         </div>
@@ -1214,8 +1379,8 @@ export default function AdminDashboard() {
                   )}
                 </div>
 
-                <div className="grid gap-6 xl:grid-cols-[minmax(0,1.8fr)_minmax(320px,0.9fr)]">
-                  <div className="space-y-6">
+                <div className="grid grid-cols-1 items-stretch gap-6 2xl:grid-cols-[minmax(0,1fr)_360px]">
+                  <div className="min-w-0 space-y-6">
                     <div className="rounded-2xl border bg-card p-6 shadow-sm">
                       <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                         <div>
@@ -1342,10 +1507,147 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
+                    <div className="flex min-h-[380px] flex-col rounded-2xl border bg-card p-6 shadow-sm">
+                      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-foreground">Dòng tiền vận hành</h3>
+                            <Info
+                              className="h-4 w-4 text-muted-foreground"
+                              aria-label="Tiền vào là tổng giao dịch thành công. Phí nền tảng là platform_fee của giao dịch thành công. Net mentor bằng tiền vào trừ phí nền tảng. Hoàn tiền chỉ tính giao dịch refunded."
+                            />
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Theo dõi tiền vào, phí nền tảng và phần doanh thu thuộc mentor trong kỳ.
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="w-fit rounded-full">
+                          Gộp theo {chartGranularityLabel}
+                        </Badge>
+                      </div>
+
+                      {dashboardLoading ? (
+                        <Skeleton className="h-[320px] rounded-xl" />
+                      ) : (
+                        <div className="relative h-[320px] shrink-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={ledgerCashFlowData} margin={{ top: 18, right: 28, left: 8, bottom: 20 }}>
+                              <defs>
+                                <linearGradient id="ledgerInflow" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#2563eb" stopOpacity={0.14} />
+                                  <stop offset="95%" stopColor="#2563eb" stopOpacity={0.01} />
+                                </linearGradient>
+                                <linearGradient id="ledgerMentorNet" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#0f766e" stopOpacity={0.09} />
+                                  <stop offset="95%" stopColor="#0f766e" stopOpacity={0.01} />
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <XAxis
+                                dataKey="label"
+                                stroke="hsl(var(--muted-foreground))"
+                                fontSize={12}
+                                height={44}
+                                interval={0}
+                                minTickGap={10}
+                                tickMargin={12}
+                                padding={{ left: 18, right: 18 }}
+                                tickFormatter={(value) => formatAxisLabel(String(value))}
+                              />
+                              <YAxis
+                                stroke="hsl(var(--muted-foreground))"
+                                fontSize={12}
+                                width={70}
+                                tickMargin={8}
+                                tickFormatter={(value) => formatAxisVnd(Number(value))}
+                              />
+                              <Tooltip content={<LedgerCashFlowTooltip />} />
+                              <Legend formatter={renderLegendText} verticalAlign="bottom" height={34} iconType="circle" />
+                              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 4" />
+                              <Area type="monotone" dataKey="inflow" name="Tiền vào" stroke="#2563eb" fill="url(#ledgerInflow)" strokeWidth={2.4} dot={false} activeDot={hasLedgerCashFlowData} />
+                              <Area type="monotone" dataKey="mentorNet" name="Net mentor" stroke="#0f766e" fill="url(#ledgerMentorNet)" strokeWidth={2.1} dot={false} activeDot={hasLedgerCashFlowData} />
+                              <Area type="monotone" dataKey="platformFee" name="Phí nền tảng" stroke="#64748b" fill="transparent" strokeWidth={1.9} dot={false} activeDot={hasLedgerCashFlowData} />
+                              {hasRefundSeriesData && (
+                                <Area type="monotone" dataKey="refund" name="Hoàn tiền" stroke="#9f1239" fill="transparent" strokeWidth={1.8} strokeDasharray="5 4" dot={false} />
+                              )}
+                            </AreaChart>
+                          </ResponsiveContainer>
+                          {!hasLedgerCashFlowData && (
+                            <div className="pointer-events-none absolute left-1/2 top-5 -translate-x-1/2 whitespace-nowrap rounded-full border bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+                              Chưa có dữ liệu dòng tiền trong giai đoạn này.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex min-h-[380px] flex-col rounded-2xl border bg-card p-6 shadow-sm">
+                      <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-lg font-semibold text-foreground">Trạng thái chi trả mentor</h3>
+                            <Info
+                              className="h-4 w-4 text-muted-foreground"
+                              aria-label="Đã chi là withdrawal_requests paid. Đang chờ chi là pending. Từ chối là rejected hoặc canceled. Hoàn tiền lấy từ giao dịch refunded."
+                            />
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Theo dõi tiền đã chi, đang chờ chi và hoàn tiền để kiểm soát áp lực vận hành.
+                          </p>
+                        </div>
+                      </div>
+
+                      {dashboardLoading ? (
+                        <Skeleton className="h-[320px] rounded-xl" />
+                      ) : (
+                        <div className="relative h-[320px] shrink-0">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={payoutStatusData} margin={{ top: 18, right: 20, left: 8, bottom: 20 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <XAxis
+                                dataKey="label"
+                                stroke="hsl(var(--muted-foreground))"
+                                fontSize={12}
+                                height={44}
+                                interval={0}
+                                minTickGap={8}
+                                tickMargin={12}
+                                padding={{ left: 14, right: 14 }}
+                                tickFormatter={(value) => formatAxisLabel(String(value))}
+                              />
+                              <YAxis
+                                stroke="hsl(var(--muted-foreground))"
+                                fontSize={12}
+                                width={66}
+                                tickMargin={8}
+                                tickFormatter={(value) => formatAxisVnd(Number(value))}
+                              />
+                              <Tooltip content={<PayoutStatusTooltip />} />
+                              <Legend formatter={renderLegendText} verticalAlign="bottom" height={46} iconType="circle" />
+                              <ReferenceLine y={0} stroke="hsl(var(--border))" strokeDasharray="4 4" />
+                              <Bar dataKey="paid" name="Đã chi" stackId="payout" fill="#0f766e" fillOpacity={0.9} radius={[8, 8, 0, 0]} />
+                              <Bar dataKey="pending" name="Đang chờ chi" stackId="payout" fill="#64748b" fillOpacity={0.82} radius={[8, 8, 0, 0]} />
+                              {hasRejectedPayoutData && (
+                                <Bar dataKey="rejected" name="Từ chối" stackId="payout" fill="#334155" fillOpacity={0.8} radius={[8, 8, 0, 0]} />
+                              )}
+                              {hasRefundSeriesData && (
+                                <Bar dataKey="refund" name="Hoàn tiền" stackId="payout" fill="#9f1239" fillOpacity={0.72} radius={[8, 8, 0, 0]} />
+                              )}
+                            </BarChart>
+                          </ResponsiveContainer>
+                          {!hasPayoutStatusData && (
+                            <div className="pointer-events-none absolute left-1/2 top-5 -translate-x-1/2 whitespace-nowrap rounded-full border bg-background/90 px-3 py-1 text-xs text-muted-foreground shadow-sm">
+                              Chưa có dữ liệu chi trả trong giai đoạn này.
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
                   </div>
 
-                  <div className="space-y-6">
-                    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+                  <div className="flex min-w-0 flex-col gap-6">
+                    <div className="shrink-0 rounded-2xl border bg-card p-5 shadow-sm">
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
                           <h3 className="text-lg font-semibold text-foreground">Việc cần xử lý</h3>
@@ -1390,7 +1692,7 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
-                    <div className="rounded-2xl border bg-card p-5 shadow-sm">
+                    <div className="flex min-h-[380px] flex-1 flex-col rounded-2xl border bg-card p-5 shadow-sm">
                       <div className="mb-4 flex items-center justify-between gap-3">
                         <div>
                           <h3 className="text-lg font-semibold text-foreground">Hoạt động gần đây</h3>
@@ -1438,6 +1740,7 @@ export default function AdminDashboard() {
                       )}
                     </div>
                   </div>
+
                 </div>
               </div>
             )}

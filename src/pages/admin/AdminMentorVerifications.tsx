@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   BadgeCheck,
@@ -12,7 +12,6 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
-  Star,
   Trophy,
   UserCheck,
   XCircle,
@@ -24,7 +23,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Separator } from "@/components/ui/separator";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -54,6 +52,7 @@ type NoteDialogState =
 
 const filters: Array<{ value: VerificationStatus; label: string }> = [
   { value: "all", label: "Tất cả" },
+  { value: "not_submitted", label: "Chưa gửi" },
   { value: "pending", label: "Chờ duyệt" },
   { value: "approved", label: "Đã duyệt" },
   { value: "revision_requested", label: "Cần bổ sung" },
@@ -63,14 +62,15 @@ const filters: Array<{ value: VerificationStatus; label: string }> = [
 
 const statusLabels: Record<string, string> = {
   all: "Tất cả",
+  not_submitted: "Chưa gửi",
   pending: "Chờ duyệt",
   approved: "Đã duyệt",
   revision_requested: "Cần bổ sung",
   revision_required: "Cần bổ sung",
   rejected: "Từ chối",
   revoked: "Đã thu hồi",
-  draft: "Đang bổ sung",
-  unverified: "Chưa xác minh",
+  draft: "Chưa gửi",
+  unverified: "Chưa gửi",
 };
 
 const proofStatusLabels: Record<string, string> = {
@@ -112,12 +112,17 @@ const badgeMeta: Record<TrustBadgeType, { label: string; description: string; ic
 };
 
 const safeText = "min-w-0 max-w-full whitespace-pre-wrap break-words [overflow-wrap:anywhere] [word-break:break-word]";
+const PAGE_SIZE = 10;
 
 const formatDate = (value?: string | null) => (value ? new Date(value).toLocaleString("vi-VN") : "Chưa có");
 const formatShortDate = (value?: string | null) => (value ? new Date(value).toLocaleDateString("vi-VN") : "Chưa có");
 const normalizeStatus = (status?: string | null) => (status === "revision_required" ? "revision_requested" : status || "pending");
+const normalizeVerificationStatus = (status?: string | null) => {
+  if (!status || status === "not_submitted" || status === "unverified" || status === "draft") return "not_submitted";
+  return normalizeStatus(status);
+};
 const getInitials = (name?: string | null) => (name || "VT").slice(0, 2).toUpperCase();
-const activeBadges = (badges?: TrustBadge[]) => (badges ?? []).filter((badge) => badge.status === "active");
+const activeBadges = (badges?: TrustBadge[]) => (badges ?? []).filter((badge) => badge.status === "active" && badge.public_visible !== false);
 const isActiveStrike = (strike: { expires_at: string | null }) => !strike.expires_at || new Date(strike.expires_at).getTime() > Date.now();
 
 function buildChecklist(profile: ProfileRef | null) {
@@ -146,7 +151,7 @@ function getApprovalRequirements(request: VerificationRequest) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const normalized = normalizeStatus(status);
+  const normalized = normalizeVerificationStatus(status);
   const tone =
     normalized === "approved"
       ? "border-emerald-200 bg-emerald-50 text-emerald-700"
@@ -184,6 +189,7 @@ export default function AdminMentorVerifications() {
   const [noteDialog, setNoteDialog] = useState<NoteDialogState | null>(null);
   const [noteValue, setNoteValue] = useState("");
   const [bioExpanded, setBioExpanded] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { invokeAction, refreshVerificationQueries } = useAdminMentorVerificationApi();
   const listQuery = useAdminMentorVerificationRequests("all");
@@ -192,22 +198,32 @@ export default function AdminMentorVerifications() {
   const selected = detailQuery.data ?? null;
 
   const metrics = useMemo(() => {
-    const countStatus = (status: string) => allRequests.filter((request) => normalizeStatus(request.status) === status).length;
+    const countStatus = (status: string) => allRequests.filter((request) => normalizeVerificationStatus(request.status) === status).length;
     return {
+      notSubmitted: countStatus("not_submitted"),
       pending: countStatus("pending"),
       approved: countStatus("approved"),
       revision: countStatus("revision_requested"),
       rejected: countStatus("rejected"),
       revoked: countStatus("revoked"),
-      trustedBadgeMentors: allRequests.filter((request) => activeBadges(request.trust_badges).some((badge) => badge.badge_type === "trusted_mentor")).length,
-      activeStrikeMentors: allRequests.filter((request) => (request.active_strike_count ?? 0) > 0).length,
+      vetVerifiedMentors: allRequests.filter((request) => activeBadges(request.trust_badges).some((badge) => badge.badge_type === "vet_verified")).length,
     };
   }, [allRequests]);
+
+  const metricCards: Array<{ label: string; value: number; filter?: VerificationStatus }> = useMemo(() => [
+    { label: "Chưa gửi", value: metrics.notSubmitted, filter: "not_submitted" },
+    { label: "Chờ duyệt", value: metrics.pending, filter: "pending" },
+    { label: "Đã duyệt", value: metrics.approved, filter: "approved" },
+    { label: "Cần bổ sung", value: metrics.revision, filter: "revision_requested" },
+    { label: "Từ chối", value: metrics.rejected, filter: "rejected" },
+    { label: "Đã thu hồi", value: metrics.revoked, filter: "revoked" },
+    { label: "Đã xác minh bởi VET", value: metrics.vetVerifiedMentors },
+  ], [metrics]);
 
   const filteredRequests = useMemo(() => {
     const term = search.trim().toLowerCase();
     return allRequests.filter((request) => {
-      if (filter !== "all" && normalizeStatus(request.status) !== filter) return false;
+      if (filter !== "all" && normalizeVerificationStatus(request.status) !== filter) return false;
       if (!term) return true;
 
       return [
@@ -223,6 +239,30 @@ export default function AdminMentorVerifications() {
         .some((value) => String(value).toLowerCase().includes(term));
     });
   }, [allRequests, filter, search]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRequests.length / PAGE_SIZE));
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
+
+  const paginatedRequests = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRequests.slice(start, start + PAGE_SIZE);
+  }, [currentPage, filteredRequests]);
+
+  const pageStart = filteredRequests.length === 0 ? 0 : (currentPage - 1) * PAGE_SIZE + 1;
+  const pageEnd = Math.min(currentPage * PAGE_SIZE, filteredRequests.length);
+  const pageNumbers = useMemo(() => {
+    const maxVisiblePages = 5;
+    const start = Math.max(1, Math.min(currentPage - 2, Math.max(1, totalPages - maxVisiblePages + 1)));
+    const length = Math.min(maxVisiblePages, totalPages);
+    return Array.from({ length }, (_, index) => start + index);
+  }, [currentPage, totalPages]);
 
   const runAction = async (body: Record<string, unknown>, successTitle: string) => {
     setActionLoading(String(body.action));
@@ -332,37 +372,39 @@ export default function AdminMentorVerifications() {
   };
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6">
+    <div className="mx-auto max-w-7xl space-y-5">
       <div>
         <div className="flex items-center gap-2">
           <UserCheck className="h-6 w-6 text-primary" />
           <h1 className="text-2xl font-bold text-foreground">Xác minh Mentor</h1>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Duyệt hồ sơ uy tín, bằng chứng và huy hiệu hiển thị cho học viên.
+          Duyệt hồ sơ, bằng chứng và badge hiển thị cho học viên.
         </p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-7">
-        {[
-          ["Chờ duyệt", metrics.pending],
-          ["Đã duyệt", metrics.approved],
-          ["Cần bổ sung", metrics.revision],
-          ["Từ chối", metrics.rejected],
-          ["Đã thu hồi", metrics.revoked],
-          ["Mentor có badge uy tín", metrics.trustedBadgeMentors],
-          ["Mentor có strike hiệu lực", metrics.activeStrikeMentors],
-        ].map(([label, value]) => (
-          <div key={label} className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
-            <p className="text-xs font-medium text-muted-foreground">{label}</p>
-            <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
-          </div>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+        {metricCards.map((card) => (
+          <button
+            key={card.label}
+            type="button"
+            disabled={!card.filter}
+            className={cn(
+              "rounded-2xl border bg-card px-4 py-3 text-left shadow-sm transition hover:border-primary/30 hover:bg-primary/5",
+              card.filter && filter === card.filter ? "border-primary/40 bg-primary/10 shadow-primary/10" : "",
+              !card.filter ? "cursor-default hover:border-border hover:bg-card" : "",
+            )}
+            onClick={() => card.filter && setFilter(card.filter)}
+          >
+            <p className="truncate text-xs font-medium text-muted-foreground">{card.label}</p>
+            <p className="mt-1 text-2xl font-bold leading-none text-foreground">{card.value}</p>
+          </button>
         ))}
       </div>
 
       <Card className="rounded-2xl shadow-sm">
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <CardContent className="p-3.5">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
             <div className="relative w-full lg:max-w-md">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -372,13 +414,13 @@ export default function AdminMentorVerifications() {
                 onChange={(event) => setSearch(event.target.value)}
               />
             </div>
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-1.5">
               {filters.map((item) => (
                 <Button
                   key={item.value}
                   variant={filter === item.value ? "default" : "outline"}
                   size="sm"
-                  className={cn("h-9 rounded-full px-4 text-xs", filter === item.value ? "gradient-primary border-0 text-primary-foreground" : "")}
+                  className={cn("h-8 rounded-full px-3 text-xs", filter === item.value ? "border-primary bg-primary/10 text-primary hover:bg-primary/15" : "bg-background")}
                   onClick={() => setFilter(item.value)}
                 >
                   {item.label}
@@ -412,25 +454,25 @@ export default function AdminMentorVerifications() {
         <div className="overflow-hidden rounded-2xl border bg-card shadow-sm">
           <div className="overflow-x-auto">
             <Table>
-              <TableHeader className="bg-muted/50">
+              <TableHeader className="bg-muted/40">
                 <TableRow>
                   <TableHead className="min-w-[260px]">Mentor</TableHead>
                   <TableHead>Trạng thái xác minh</TableHead>
                   <TableHead>Bằng chứng đã gửi</TableHead>
                   <TableHead>Badge hiện tại</TableHead>
-                  <TableHead>Strike active</TableHead>
                   <TableHead>Ngày gửi</TableHead>
                   <TableHead className="text-right">Hành động</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRequests.map((request) => {
+                {paginatedRequests.map((request) => {
                   const requirements = getApprovalRequirements(request);
+                  const verificationStatus = normalizeVerificationStatus(request.status);
                   return (
-                    <TableRow key={request.id} className="cursor-pointer hover:bg-muted/40" onClick={() => openDetail(request.mentor_id)}>
+                    <TableRow key={request.id} className="cursor-pointer transition-colors hover:bg-primary/5" onClick={() => openDetail(request.mentor_id)}>
                       <TableCell>
                         <div className="flex min-w-0 items-center gap-3">
-                          <Avatar className="h-11 w-11 rounded-xl">
+                          <Avatar className="h-10 w-10 rounded-xl">
                             <AvatarImage src={request.profile?.avatar_url || undefined} />
                             <AvatarFallback className="rounded-xl">{getInitials(request.profile?.name)}</AvatarFallback>
                           </Avatar>
@@ -442,32 +484,27 @@ export default function AdminMentorVerifications() {
                       </TableCell>
                       <TableCell><StatusBadge status={request.status} /></TableCell>
                       <TableCell>
-                        <div className="text-sm font-semibold">{request.evidence_count ?? request.proofs?.length ?? 0}</div>
+                        <div className="text-base font-semibold leading-none text-foreground">{request.evidence_count ?? request.proofs?.length ?? 0}</div>
                         <p className="text-xs text-muted-foreground">{request.approved_proof_count ?? 0} đã duyệt</p>
                       </TableCell>
                       <TableCell>
                         <div className="flex max-w-[220px] flex-wrap gap-1">
                           {activeBadges(request.trust_badges).length > 0
                             ? activeBadges(request.trust_badges).map((badge) => (
-                                <Badge key={`${request.mentor_id}-${badge.badge_type}`} variant="outline" className="rounded-full text-[11px]">
+                                <Badge key={`${request.mentor_id}-${badge.badge_type}`} variant="outline" className="rounded-full border-emerald-200 bg-emerald-50 text-[11px] text-emerald-700">
                                   {badgeMeta[badge.badge_type as TrustBadgeType]?.label ?? badge.badge_type}
                                 </Badge>
                               ))
                             : <span className="text-xs text-muted-foreground">Chưa có badge</span>}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className={cn("rounded-full", request.active_strike_count > 0 ? "border-rose-200 bg-rose-50 text-rose-700" : "")}>
-                          {request.active_strike_count ?? 0}
-                        </Badge>
-                      </TableCell>
                       <TableCell className="text-sm text-muted-foreground">{formatShortDate(request.submitted_at)}</TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-2" onClick={(event) => event.stopPropagation()}>
                           <Button size="sm" variant="outline" className="rounded-xl" onClick={() => openDetail(request.mentor_id)}>
-                            <Eye className="mr-1 h-4 w-4" />Xem chi tiết
+                            <Eye className="mr-1 h-4 w-4" />{verificationStatus === "not_submitted" ? "Xem hồ sơ" : "Xem chi tiết"}
                           </Button>
-                          {normalizeStatus(request.status) === "pending" && requirements.canApprove && (
+                          {verificationStatus === "pending" && requirements.canApprove && (
                             <Button size="sm" className="gradient-primary rounded-xl border-0 text-primary-foreground" disabled={!!actionLoading} onClick={() => void approveVerification(request)}>
                               <BadgeCheck className="mr-1 h-4 w-4" />Duyệt nhanh
                             </Button>
@@ -479,6 +516,42 @@ export default function AdminMentorVerifications() {
                 })}
               </TableBody>
             </Table>
+          </div>
+          <div className="flex flex-col gap-3 border-t bg-muted/20 px-4 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <span>
+              Hiển thị {pageStart}–{pageEnd} / {filteredRequests.length} mentor
+            </span>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-xl"
+                disabled={currentPage <= 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+              >
+                Trước
+              </Button>
+              {pageNumbers.map((page) => (
+                <Button
+                  key={page}
+                  size="sm"
+                  variant={page === currentPage ? "default" : "outline"}
+                  className={cn("h-8 min-w-8 rounded-xl px-2", page === currentPage ? "bg-primary/10 text-primary hover:bg-primary/15" : "")}
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </Button>
+              ))}
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8 rounded-xl"
+                disabled={currentPage >= totalPages}
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+              >
+                Sau
+              </Button>
+            </div>
           </div>
         </div>
       )}
@@ -884,7 +957,7 @@ function PublicPreview({ request }: { request: VerificationRequest }) {
 }
 
 function DecisionPanel({ request, actionLoading, onApprove, onDecision }: { request: VerificationRequest; actionLoading: string | null; onApprove: () => void; onDecision: (action: DecisionAction) => void }) {
-  const status = normalizeStatus(request.status);
+  const status = normalizeVerificationStatus(request.status);
   const requirements = getApprovalRequirements(request);
 
   return (
@@ -894,6 +967,8 @@ function DecisionPanel({ request, actionLoading, onApprove, onDecision }: { requ
           <h3 className="font-semibold text-foreground">Quyết định xác minh</h3>
           <StatusBadge status={status} />
         </div>
+
+        {status === "not_submitted" && <StatusMessage text="Mentor chưa gửi hồ sơ xác minh. Admin có thể xem hồ sơ hiện tại nhưng chưa có yêu cầu cần duyệt." />}
 
         {status === "pending" && (
           <>

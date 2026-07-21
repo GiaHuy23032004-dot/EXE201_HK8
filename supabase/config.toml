@@ -42,6 +42,12 @@ verify_jwt = false
 [functions.admin-dashboard-metrics]
 verify_jwt = false
 
+[functions.admin-withdrawal-actions]
+verify_jwt = false
+
+[functions.admin-ledger-actions]
+verify_jwt = false
+
 [functions.track-event]
 verify_jwt = false
 

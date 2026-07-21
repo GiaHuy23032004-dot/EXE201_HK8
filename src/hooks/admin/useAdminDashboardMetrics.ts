@@ -3,6 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 export type AdminDashboardRange = "30d" | "1y";
+export type AdminDashboardViewMode = "month" | "year";
+
+export type AdminDashboardPeriodParams = {
+  mode: AdminDashboardViewMode;
+  month?: number;
+  year: number;
+};
 
 export type AdminDashboardOverview = {
   totalUsers: number;
@@ -44,6 +51,28 @@ export type AdminMonthlyBookingPoint = {
   end: string;
   total: number;
   completed: number;
+};
+
+export type AdminLedgerCashFlowPoint = {
+  bucketKey: string;
+  label: string;
+  start: string;
+  end: string;
+  inflow: number;
+  platformFee: number;
+  mentorNet: number;
+  refund: number;
+};
+
+export type AdminPayoutStatusPoint = {
+  bucketKey: string;
+  label: string;
+  start: string;
+  end: string;
+  paid: number;
+  pending: number;
+  rejected: number;
+  refund: number;
 };
 
 export type AdminConversionMetric = {
@@ -96,12 +125,22 @@ export type AdminDashboardMetricWarning = {
 
 export type AdminDashboardMetrics = {
   success: true;
-  range: AdminDashboardRange;
+  range?: AdminDashboardRange;
+  mode?: AdminDashboardViewMode;
+  selectedPeriod?: {
+    month?: number;
+    year: number;
+    label: string;
+    start: string;
+    end: string;
+  };
   granularity: "week" | "month";
   overview: AdminDashboardOverview;
   charts: {
     revenue: AdminMonthlyRevenuePoint[];
     bookings: AdminMonthlyBookingPoint[];
+    ledgerCashFlow?: AdminLedgerCashFlowPoint[];
+    payoutStatus?: AdminPayoutStatusPoint[];
   };
   operationalRates: AdminConversionMetric[];
   conversions: {
@@ -155,12 +194,27 @@ const readPayloadMessage = (payload: AdminDashboardErrorPayload | null) => {
   return null;
 };
 
-export function useAdminDashboardMetrics(range: AdminDashboardRange = "30d", enabled = true) {
+const getDefaultPeriod = (): AdminDashboardPeriodParams => {
+  const now = new Date();
+  return {
+    mode: "month",
+    month: now.getMonth() + 1,
+    year: now.getFullYear(),
+  };
+};
+
+export function useAdminDashboardMetrics(period: AdminDashboardPeriodParams = getDefaultPeriod(), enabled = true) {
   const { session } = useAuth();
   const accessToken = session?.access_token;
+  const normalizedPeriod = {
+    mode: period.mode,
+    month: period.mode === "month" ? period.month : undefined,
+    year: period.year,
+    range: period.mode === "year" ? "1y" as const : "30d" as const,
+  };
 
   return useQuery({
-    queryKey: ["admin-dashboard-metrics", session?.user?.id, range],
+    queryKey: ["admin-dashboard-metrics", session?.user?.id, normalizedPeriod],
     enabled: enabled && Boolean(accessToken),
     queryFn: async () => {
       const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
@@ -174,7 +228,7 @@ export function useAdminDashboardMetrics(range: AdminDashboardRange = "30d", ena
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        body: { range },
+        body: normalizedPeriod,
       });
 
       if (import.meta.env.DEV) {

@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-export type VerificationStatus = "all" | "pending" | "approved" | "revision_requested" | "rejected" | "revoked";
+export type VerificationStatus = "all" | "not_submitted" | "pending" | "approved" | "revision_requested" | "rejected" | "revoked";
 export type ProofStatus = "pending" | "approved" | "revision_requested" | "rejected";
 export type DecisionAction = "request_revision" | "reject_verification" | "revoke_verification";
 export type BadgeAction = "grant_badge" | "suspend_badge" | "restore_badge" | "revoke_badge";

@@ -50,7 +50,7 @@ const adminNavItems = [
   { label: "Reports", path: "/admin/reports", icon: Flag, matches: ["/admin/reports"] },
   { label: "Promotions", path: "/admin/promotions", icon: Megaphone, matches: ["/admin/promotions"] },
   { label: "Withdrawals", path: "/admin/withdrawals", icon: Wallet, matches: ["/admin/withdrawals"] },
-  { label: "Ledger", path: "/admin/ledger", icon: BookText, matches: ["/admin/ledger"] },
+  { label: "Sổ cái", path: "/admin/ledger", icon: BookText, matches: ["/admin/ledger"] },
   { label: "Gói VET Plus", path: "/admin/subscriptions", icon: CreditCard, matches: ["/admin/subscriptions"] },
   { label: "Settings", path: "/admin/settings", icon: Settings, matches: ["/admin/settings"] },
 ];
